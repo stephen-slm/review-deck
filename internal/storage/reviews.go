@@ -3,7 +3,7 @@ package storage
 import (
 	"fmt"
 
-	gh "pull-request-reviewing/internal/github"
+	gh "review-deck/internal/github"
 )
 
 // GetReviewsForPR returns all reviews for a given pull request.

@@ -1,7 +1,7 @@
 package services
 
 import (
-	"pull-request-reviewing/internal/storage"
+	"review-deck/internal/storage"
 )
 
 // SettingsService manages application settings.

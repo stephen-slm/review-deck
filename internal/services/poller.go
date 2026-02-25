@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	gh "pull-request-reviewing/internal/github"
-	"pull-request-reviewing/internal/storage"
+	gh "review-deck/internal/github"
+	"review-deck/internal/storage"
 )
 
 // Event names emitted to the frontend via Wails.

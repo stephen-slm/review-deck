@@ -1,4 +1,4 @@
-module pull-request-reviewing
+module review-deck
 
 go 1.25
 

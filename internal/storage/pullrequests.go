@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	gh "pull-request-reviewing/internal/github"
+	gh "review-deck/internal/github"
 )
 
 // UpsertPullRequest stores or updates a pull request and its related data.

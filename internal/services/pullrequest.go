@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	gh "pull-request-reviewing/internal/github"
-	"pull-request-reviewing/internal/storage"
+	gh "review-deck/internal/github"
+	"review-deck/internal/storage"
 
 	"github.com/shurcooL/githubv4"
 )

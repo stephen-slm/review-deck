@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	team "pull-request-reviewing/internal/teams"
+	team "review-deck/internal/teams"
 
 	"github.com/google/go-github/v80/github"
 	"golang.org/x/sync/errgroup"

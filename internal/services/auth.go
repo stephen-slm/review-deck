@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	gh "pull-request-reviewing/internal/github"
-	"pull-request-reviewing/internal/storage"
+	gh "review-deck/internal/github"
+	"review-deck/internal/storage"
 )
 
 // ClientConsumer is any service that needs a GitHub client.

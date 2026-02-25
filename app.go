@@ -9,10 +9,10 @@ import (
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"pull-request-reviewing/internal/config"
-	gh "pull-request-reviewing/internal/github"
-	"pull-request-reviewing/internal/services"
-	"pull-request-reviewing/internal/storage"
+	"review-deck/internal/config"
+	gh "review-deck/internal/github"
+	"review-deck/internal/services"
+	"review-deck/internal/storage"
 )
 
 // App struct holds the application lifecycle and services.
