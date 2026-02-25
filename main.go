@@ -1,20 +1,57 @@
 package main
 
 import (
-	"fmt"
+	"embed"
+	"log"
+
+	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/options"
+	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/mac"
 )
 
-//TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.</p>
-func main() {
-	//TIP <p>Press <shortcut actionId="ShowIntentionActions"/> when your caret is at the underlined text
-	// to see how GoLand suggests fixing the warning.</p><p>Alternatively, if available, click the lightbulb to view possible fixes.</p>
-	s := "gopher"
-	fmt.Printf("Hello and welcome, %s!\n", s)
+//go:embed all:frontend/dist
+var assets embed.FS
 
-	for i := 1; i <= 5; i++ {
-		//TIP <p>To start your debugging session, right-click your code in the editor and select the Debug option.</p> <p>We have set one <icon src="AllIcons.Debugger.Db_set_breakpoint"/> breakpoint
-		// for you, but you can always add more by pressing <shortcut actionId="ToggleLineBreakpoint"/>.</p>
-		fmt.Println("i =", 100/i)
+func main() {
+	app := NewApp()
+
+	err := wails.Run(&options.App{
+		Title:     "Review Deck",
+		Width:     1440,
+		Height:    900,
+		MinWidth:  1024,
+		MinHeight: 700,
+		AssetServer: &assetserver.Options{
+			Assets: assets,
+		},
+		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 11, A: 1},
+		OnStartup:        app.startup,
+		OnShutdown:       app.shutdown,
+		OnDomReady:       app.domReady,
+		Mac: &mac.Options{
+			TitleBar: &mac.TitleBar{
+				TitlebarAppearsTransparent: true,
+				HideTitle:                  false,
+				HideTitleBar:               false,
+				FullSizeContent:            true,
+				UseToolbar:                 true,
+			},
+			WebviewIsTransparent: true,
+			WindowIsTranslucent:  false,
+			About: &mac.AboutInfo{
+				Title:   "Review Deck",
+				Message: "Pull Request Review Tracker v0.1.0",
+			},
+		},
+		Bind: []interface{}{
+			app.authService,
+			app.prService,
+			app.settingsService,
+		},
+	})
+
+	if err != nil {
+		log.Fatal("Error:", err.Error())
 	}
 }

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "review-deck",
+  "outputfilename": "review-deck",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "info": {
+    "companyName": "Review Deck",
+    "productName": "Review Deck",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright 2026",
+    "comments": "Pull Request Review Tracker"
+  }
+}
