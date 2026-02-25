@@ -52,7 +52,14 @@ type prSearchNode struct {
 
 		Commits struct {
 			TotalCount int
-		}
+			Nodes      []struct {
+				Commit struct {
+					StatusCheckRollup *struct {
+						State githubv4.StatusState
+					}
+				}
+			}
+		} `graphql:"commits(last: 1)"`
 
 		Assignees struct {
 			Nodes []struct {
@@ -94,10 +101,6 @@ type prSearchNode struct {
 				SubmittedAt time.Time
 			}
 		} `graphql:"reviews(first: 50)"`
-
-		StatusCheckRollup *struct {
-			State githubv4.StatusState
-		} `graphql:"commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"`
 	} `graphql:"... on PullRequest"`
 }
 
@@ -177,6 +180,14 @@ func convertSearchNode(node prSearchNode) PullRequest {
 			Body:         r.Body,
 			SubmittedAt:  r.SubmittedAt,
 		})
+	}
+
+	// Extract CI status from the last commit's StatusCheckRollup.
+	if len(pr.Commits.Nodes) > 0 {
+		rollup := pr.Commits.Nodes[0].Commit.StatusCheckRollup
+		if rollup != nil {
+			result.ChecksStatus = string(rollup.State)
+		}
 	}
 
 	return result

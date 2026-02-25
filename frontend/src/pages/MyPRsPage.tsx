@@ -84,6 +84,7 @@ export function MyPRsPage() {
         isLoading={isLoadingMyPRs}
         emptyMessage="No open pull requests found."
         showMerge
+        showAssignReviewer
         onRefresh={refresh}
       />
     </div>

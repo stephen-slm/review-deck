@@ -5,6 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
+
+	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"pull-request-reviewing/internal/config"
 	gh "pull-request-reviewing/internal/github"
@@ -22,6 +25,7 @@ type App struct {
 	authService     *services.AuthService
 	prService       *services.PullRequestService
 	settingsService *services.SettingsService
+	poller          *services.Poller
 }
 
 // NewApp creates a new App. Initializes the database and services
@@ -45,15 +49,18 @@ func NewApp() *App {
 	authService := services.NewAuthService(db)
 	prService := services.NewPullRequestService(db)
 	settingsService := services.NewSettingsService(db)
+	poller := services.NewPoller(db, 5*time.Minute)
 
-	// Register prService as a consumer so login/logout propagates the client.
+	// Register consumers so login/logout propagates the client.
 	authService.RegisterConsumer(prService)
+	authService.RegisterConsumer(poller)
 
 	app := &App{
 		db:              db,
 		authService:     authService,
 		prService:       prService,
 		settingsService: settingsService,
+		poller:          poller,
 	}
 
 	// If we have a stored token, initialize the GitHub client.
@@ -63,7 +70,6 @@ func NewApp() *App {
 		if err == nil {
 			app.ghClient = client
 			authService.SetClient(client)
-			prService.SetClient(client)
 		}
 	}
 
@@ -77,11 +83,27 @@ func (a *App) startup(ctx context.Context) {
 
 // domReady is called after the frontend DOM has been loaded.
 func (a *App) domReady(ctx context.Context) {
-	// Future: emit initial state events to frontend
+	// Start the background poller if we have an authenticated client.
+	if a.authService.IsAuthenticated() {
+		a.poller.Start(ctx, wailsRuntime.EventsEmit)
+	}
+}
+
+// StartPoller starts the background polling loop. Called from frontend after login.
+func (a *App) StartPoller() {
+	if a.ctx != nil && a.authService.IsAuthenticated() {
+		a.poller.Start(a.ctx, wailsRuntime.EventsEmit)
+	}
+}
+
+// StopPoller stops the background polling loop. Called from frontend on logout.
+func (a *App) StopPoller() {
+	a.poller.Stop()
 }
 
 // shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
+	a.poller.Stop()
 	if a.db != nil {
 		a.db.Close()
 	}

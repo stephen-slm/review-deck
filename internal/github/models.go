@@ -4,6 +4,7 @@ import "time"
 
 // User represents a GitHub user.
 type User struct {
+	NodeID    string `json:"nodeId"`
 	Login     string `json:"login"`
 	Name      string `json:"name"`
 	AvatarURL string `json:"avatarUrl"`

@@ -45,6 +45,7 @@ func main() {
 			},
 		},
 		Bind: []interface{}{
+			app,
 			app.authService,
 			app.prService,
 			app.settingsService,

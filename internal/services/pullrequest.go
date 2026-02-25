@@ -172,3 +172,12 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 
 	return s.client.RequestReviews(context.Background(), prNodeID, userIDs, teamIDs)
 }
+
+// SearchOrgMembers returns org members matching a search query.
+func (s *PullRequestService) SearchOrgMembers(org string, query string) ([]gh.User, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+
+	return s.client.SearchOrgMembers(context.Background(), org, query)
+}

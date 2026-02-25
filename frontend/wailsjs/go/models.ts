@@ -82,6 +82,7 @@ export namespace github {
 	    }
 	}
 	export class User {
+	    nodeId: string;
 	    login: string;
 	    name: string;
 	    avatarUrl: string;
@@ -92,6 +93,7 @@ export namespace github {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.nodeId = source["nodeId"];
 	        this.login = source["login"];
 	        this.name = source["name"];
 	        this.avatarUrl = source["avatarUrl"];

@@ -28,6 +28,48 @@ func (c *Client) GetViewer(ctx context.Context) (*ViewerInfo, error) {
 	}, nil
 }
 
+// SearchOrgMembers returns org members whose login matches a prefix query.
+func (c *Client) SearchOrgMembers(ctx context.Context, org string, query string) ([]User, error) {
+	// GitHub GraphQL doesn't have a direct org member search, so we use the
+	// REST-style search via GraphQL search type: USER with org qualifier.
+	var q struct {
+		Search struct {
+			Nodes []struct {
+				User struct {
+					Login     string
+					Name      string
+					AvatarURL string `graphql:"avatarUrl"`
+					ID        string `graphql:"id"`
+				} `graphql:"... on User"`
+			}
+		} `graphql:"search(query: $query, type: USER, first: 10)"`
+	}
+
+	searchQuery := query + " org:" + org + " type:user"
+	variables := map[string]interface{}{
+		"query": githubv4.String(searchQuery),
+	}
+
+	err := c.graphql.Query(ctx, &q, variables)
+	if err != nil {
+		return nil, err
+	}
+
+	var users []User
+	for _, n := range q.Search.Nodes {
+		if n.User.Login == "" {
+			continue
+		}
+		users = append(users, User{
+			NodeID:    n.User.ID,
+			Login:     n.User.Login,
+			Name:      n.User.Name,
+			AvatarURL: n.User.AvatarURL,
+		})
+	}
+	return users, nil
+}
+
 // GetViewerTeams returns the teams the authenticated user belongs to for a given org.
 func (c *Client) GetViewerTeams(ctx context.Context, org string) ([]Team, error) {
 	var query struct {

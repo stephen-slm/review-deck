@@ -105,13 +105,12 @@ export const usePRStore = create<PRState>((set, get) => ({
   fetchAll: async (orgs: string[]) => {
     const state = get();
     state.clearError();
+    // Serialize requests to avoid GitHub secondary rate limits.
     for (const org of orgs) {
-      await Promise.allSettled([
-        state.fetchMyPRs(org),
-        state.fetchMyRecentMerged(org),
-        state.fetchReviewRequests(org),
-        state.fetchReviewedByMe(org),
-      ]);
+      await state.fetchMyPRs(org);
+      await state.fetchReviewRequests(org);
+      await state.fetchReviewedByMe(org);
+      await state.fetchMyRecentMerged(org);
     }
   },
 

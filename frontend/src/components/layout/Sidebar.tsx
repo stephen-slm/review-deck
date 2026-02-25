@@ -9,17 +9,44 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
+import { usePRStore } from "@/stores/prStore";
 
-const navItems = [
+interface NavItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe";
+}
+
+const navItems: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/my-prs", label: "My PRs", icon: GitPullRequest },
-  { to: "/review-requests", label: "Review Requests", icon: Eye },
-  { to: "/reviewed", label: "Reviewed by Me", icon: CheckCircle },
+  { to: "/my-prs", label: "My PRs", icon: GitPullRequest, badgeKey: "myPRs" },
+  {
+    to: "/review-requests",
+    label: "Review Requests",
+    icon: Eye,
+    badgeKey: "reviewRequests",
+  },
+  {
+    to: "/reviewed",
+    label: "Reviewed by Me",
+    icon: CheckCircle,
+    badgeKey: "reviewedByMe",
+  },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
+  const myPRs = usePRStore((s) => s.myPRs);
+  const reviewRequests = usePRStore((s) => s.reviewRequests);
+  const reviewedByMe = usePRStore((s) => s.reviewedByMe);
+
+  const badgeCounts: Record<string, number> = {
+    myPRs: myPRs.length,
+    reviewRequests: reviewRequests.length,
+    reviewedByMe: reviewedByMe.length,
+  };
 
   useEffect(() => {
     checkAuth();
@@ -31,23 +58,38 @@ export function Sidebar() {
         <h1 className="text-lg font-semibold text-foreground">Review Deck</h1>
       </div>
       <nav className="flex-1 space-y-1 p-2">
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={({ isActive }) =>
-              cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-accent text-accent-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )
-            }
-          >
-            <item.icon className="h-4 w-4" />
-            {item.label}
-          </NavLink>
-        ))}
+        {navItems.map((item) => {
+          const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )
+              }
+            >
+              <item.icon className="h-4 w-4" />
+              <span className="flex-1">{item.label}</span>
+              {isAuthenticated && count > 0 && (
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
+                    item.badgeKey === "reviewRequests"
+                      ? "bg-yellow-500/20 text-yellow-500"
+                      : "bg-secondary text-secondary-foreground"
+                  )}
+                >
+                  {count}
+                </span>
+              )}
+            </NavLink>
+          );
+        })}
       </nav>
       <div className="border-t border-border p-3">
         {isAuthenticated && user ? (

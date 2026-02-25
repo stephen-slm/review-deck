@@ -34,6 +34,10 @@ export function RequestReviews(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['RequestReviews'](arg1, arg2, arg3);
 }
 
+export function SearchOrgMembers(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['SearchOrgMembers'](arg1, arg2);
+}
+
 export function SetClient(arg1) {
   return window['go']['services']['PullRequestService']['SetClient'](arg1);
 }

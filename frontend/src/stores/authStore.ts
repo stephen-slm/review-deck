@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { Login, Logout, IsAuthenticated, GetUser } from "../../wailsjs/go/services/AuthService";
+import { StartPoller, StopPoller } from "../../wailsjs/go/main/App";
 import { github } from "../../wailsjs/go/models";
 
 interface AuthState {
@@ -40,6 +41,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const user = await Login(token);
       set({ isAuthenticated: true, user, isLoading: false, error: null });
+      // Start background polling after successful login.
+      StartPoller().catch(console.error);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       set({ isAuthenticated: false, user: null, isLoading: false, error: message });
@@ -49,6 +52,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: async () => {
     try {
+      StopPoller().catch(console.error);
       await Logout();
     } finally {
       set({ isAuthenticated: false, user: null, error: null });

@@ -17,6 +17,7 @@ import { PRSizeBadge } from "./PRSizeBadge";
 import { ReviewStatusBadge } from "./ReviewStatusBadge";
 import { ChecksStatusIcon } from "./ChecksStatusIcon";
 import { MergeButton } from "./MergeButton";
+import { ReviewerAssign } from "./ReviewerAssign";
 
 interface PRTableProps {
   data: github.PullRequest[];
@@ -24,6 +25,7 @@ interface PRTableProps {
   emptyMessage?: string;
   showAuthor?: boolean;
   showMerge?: boolean;
+  showAssignReviewer?: boolean;
   onRefresh?: () => void;
 }
 
@@ -35,6 +37,7 @@ export function PRTable({
   emptyMessage = "No pull requests found.",
   showAuthor = false,
   showMerge = false,
+  showAssignReviewer = false,
   onRefresh,
 }: PRTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -164,6 +167,15 @@ export function PRTable({
         header: "",
         cell: (info) => (
           <div className="flex items-center gap-0.5">
+            {showAssignReviewer && info.row.original.state === "OPEN" && (
+              <ReviewerAssign
+                prNodeId={info.row.original.nodeId}
+                currentReviewers={(info.row.original.reviewRequests || []).map(
+                  (rr) => rr.reviewer
+                )}
+                onAssigned={onRefresh}
+              />
+            )}
             {showMerge && (
               <MergeButton
                 prNodeId={info.row.original.nodeId}
@@ -182,10 +194,10 @@ export function PRTable({
             </button>
           </div>
         ),
-        size: showMerge ? 70 : 40,
+        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + 40,
       }),
     ];
-  }, [showAuthor, showMerge, onRefresh]);
+  }, [showAuthor, showMerge, showAssignReviewer, onRefresh]);
 
   const table = useReactTable({
     data,
