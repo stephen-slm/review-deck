@@ -48,3 +48,23 @@ func (s *SettingsService) GetTrackedTeams(org string) ([]storage.TrackedTeam, er
 func (s *SettingsService) SetTeamEnabled(org, slug string, enabled bool) error {
 	return s.db.SetTeamEnabled(org, slug, enabled)
 }
+
+// GetReviewPriorities returns all review priority entries for an org.
+func (s *SettingsService) GetReviewPriorities(org string) ([]storage.ReviewPriority, error) {
+	return s.db.GetReviewPriorities(org)
+}
+
+// AddReviewPriority adds a user or team to the priority list.
+func (s *SettingsService) AddReviewPriority(org, name, typeName string) error {
+	return s.db.AddReviewPriority(org, name, typeName)
+}
+
+// RemoveReviewPriority removes a user or team from the priority list.
+func (s *SettingsService) RemoveReviewPriority(org, name, typeName string) error {
+	return s.db.RemoveReviewPriority(org, name, typeName)
+}
+
+// UpdateReviewPriorityOrder updates the priority value for a priority entry.
+func (s *SettingsService) UpdateReviewPriorityOrder(org, name, typeName string, priority int) error {
+	return s.db.UpdateReviewPriorityOrder(org, name, typeName, priority)
+}

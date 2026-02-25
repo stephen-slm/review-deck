@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2 } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -42,6 +42,8 @@ interface PRTableProps {
   serverPageInfo?: ServerPageInfo;
   /** Called when the user navigates past the currently loaded data and more server pages exist. */
   onLoadMore?: () => void;
+  /** Set of priority user/team names. Matching rows get a visual indicator. */
+  priorityNames?: Set<string>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -57,6 +59,7 @@ export function PRTable({
   defaultPageSize = 10,
   serverPageInfo,
   onLoadMore,
+  priorityNames,
 }: PRTableProps) {
   const navigate = useNavigate();
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -318,27 +321,39 @@ export function PRTable({
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row) => (
-                <tr
-                  key={row.id}
-                  onClick={() => navigate(`/pr/${row.original.nodeId}`)}
-                  className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30"
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-3 py-2"
-                      onClick={
-                        cell.column.id === "actions"
-                          ? (e) => e.stopPropagation()
-                          : undefined
-                      }
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))
+              table.getRowModel().rows.map((row) => {
+                const pr = row.original;
+                const isPriority = priorityNames && priorityNames.size > 0 && (
+                  priorityNames.has(pr.author) ||
+                  (pr.reviewRequests || []).some((rr) => priorityNames.has(rr.reviewer))
+                );
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={() => navigate(`/pr/${pr.nodeId}`)}
+                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isPriority ? "border-l-2 border-l-yellow-500 bg-yellow-500/5" : ""}`}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className="px-3 py-2"
+                        onClick={
+                          cell.column.id === "actions"
+                            ? (e) => e.stopPropagation()
+                            : undefined
+                        }
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {isPriority && cell === row.getVisibleCells()[0] && (
+                            <Star className="h-3 w-3 shrink-0 fill-yellow-500 text-yellow-500" />
+                          )}
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

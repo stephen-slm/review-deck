@@ -119,6 +119,19 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_tracked_teams_org ON tracked_teams(org_name);`,
+
+	// Migration 4: Priority reviewers for review request triage.
+	`CREATE TABLE IF NOT EXISTS review_priorities (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		org_name   TEXT NOT NULL,
+		name       TEXT NOT NULL,
+		type       TEXT NOT NULL CHECK(type IN ('user', 'team')),
+		priority   INTEGER NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(org_name, name, type)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_review_priorities_org ON review_priorities(org_name);`,
 }
 
 // Migrate runs all pending migrations.

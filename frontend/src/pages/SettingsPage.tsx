@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newOrg, setNewOrg] = useState("");
   const [syncingOrg, setSyncingOrg] = useState<string | null>(null);
+  const [newPriorityName, setNewPriorityName] = useState("");
+  const [newPriorityType, setNewPriorityType] = useState<"user" | "team">("user");
 
   useEffect(() => {
     loadOrgs();
@@ -19,7 +21,7 @@ export function SettingsPage() {
     loadCacheTTL();
   }, [loadOrgs, loadFilterBots, loadCacheTTL]);
 
-  // Load teams for all orgs once orgs are loaded; sync from GitHub if none cached yet.
+  // Load teams and priorities for all orgs once orgs are loaded; sync teams from GitHub if none cached yet.
   useEffect(() => {
     if (orgs.length === 0) return;
     loadAllTeams().then(() => {
@@ -30,6 +32,7 @@ export function SettingsPage() {
         }
       }
     });
+    loadAllPriorities();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgs]);
 
@@ -314,6 +317,115 @@ export function SettingsPage() {
                 ) : (
                   <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
                     No teams found. Click Sync to fetch from GitHub.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Priority Reviewers Section */}
+      {isAuthenticated && orgs.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-muted-foreground" />
+            <h3 className="text-lg font-semibold">Priority Reviewers</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            PRs from prioritised users or teams are surfaced first in the Review
+            Requests view and marked with a visual indicator.
+          </p>
+
+          {orgs.map((org) => {
+            const priorities = prioritiesByOrg[org] || [];
+            return (
+              <div key={org} className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">{org}</h4>
+
+                {/* Add form */}
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPriorityName}
+                    onChange={(e) => setNewPriorityName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newPriorityName.trim()) {
+                        addPriority(org, newPriorityName.trim(), newPriorityType);
+                        setNewPriorityName("");
+                      }
+                    }}
+                    placeholder="username or team-slug"
+                    className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <select
+                    value={newPriorityType}
+                    onChange={(e) => setNewPriorityType(e.target.value as "user" | "team")}
+                    className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="user">User</option>
+                    <option value="team">Team</option>
+                  </select>
+                  <button
+                    onClick={() => {
+                      if (!newPriorityName.trim()) return;
+                      addPriority(org, newPriorityName.trim(), newPriorityType);
+                      setNewPriorityName("");
+                    }}
+                    disabled={!newPriorityName.trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add
+                  </button>
+                </div>
+
+                {/* Priority list */}
+                {priorities.length > 0 ? (
+                  <ul className="space-y-1">
+                    {priorities.map((p, idx) => (
+                      <li
+                        key={`${p.name}-${p.type}`}
+                        className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+                      >
+                        <Star className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+                        <span className="flex-1 text-sm font-medium text-foreground">
+                          {p.name}
+                        </span>
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          {p.type}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            onClick={() => movePriority(org, p.name, p.type, "up")}
+                            disabled={idx === 0}
+                            className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                            title="Move up (higher priority)"
+                          >
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={() => movePriority(org, p.name, p.type, "down")}
+                            disabled={idx === priorities.length - 1}
+                            className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground disabled:opacity-30"
+                            title="Move down (lower priority)"
+                          >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => removePriority(org, p.name, p.type)}
+                          className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                          title="Remove"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                    No priority reviewers configured.
                   </p>
                 )}
               </div>

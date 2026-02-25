@@ -7,39 +7,6 @@
 
 ---
 
-### Priority Review List
-**Priority:** Medium
-
-Add a configurable priority list of people and/or teams whose review requests are surfaced first. PRs from prioritised authors or teams should be visually distinguished (e.g. pinned to the top of the Review Requests view, highlighted badge) so the user can triage their review queue by importance.
-
-**Tasks:**
-- [ ] New SQLite table `review_priorities`: `id`, `org_name`, `name TEXT` (login or team slug), `type TEXT` ("user" or "team"), `priority INTEGER DEFAULT 0` (higher = more important), `created_at DATETIME`
-- [ ] Storage methods: `GetReviewPriorities(org)`, `AddReviewPriority(org, name, type)`, `RemoveReviewPriority(org, name, type)`, `UpdateReviewPriorityOrder(org, name, type, priority)`
-- [ ] Expose via `SettingsService` (or a new `PriorityService`): same CRUD methods bound through Wails
-- [ ] Settings UI section in `SettingsPage.tsx`:
-  - "Priority reviewers" card per tracked org
-  - Add input with type selector (user / team), autocomplete from cached org members and viewer teams
-  - Draggable reorder list or up/down arrows to set relative priority
-  - Remove button per entry
-- [ ] Frontend sorting logic:
-  - In the Review Requests view, sort PRs so those authored by (or review-requested by) a priority person/team appear first
-  - Add a visual indicator (pin icon, coloured left border, or "Priority" badge) on priority-matched rows in `PRTable`
-- [ ] Store integration: load priorities into `settingsStore` (or a new `priorityStore`) on app start, expose a `isPriority(author)` helper for the UI
-- [ ] Consider extending to "My PRs" view as well: highlight PRs where a priority reviewer has been requested but hasn't responded yet
-
----
-
-### Header Click to Fullscreen
-**Priority:** Low
-
-Clicking the app header/titlebar area should toggle the window to fullscreen mode. Wails exposes `WindowFullscreen()` and `WindowUnfullscreen()` (or `WindowToggleMaximise()`) via the runtime JS bindings. Wire a click handler on the header/titlebar region in `Sidebar.tsx` (the "Review Deck" heading) or the drag region spacer to call the appropriate Wails runtime method.
-
-**Tasks:**
-- [ ] Add click handler to the header element that calls `WindowToggleMaximise()` from `wailsjs/runtime/runtime`
-- [ ] Ensure double-click vs single-click behaviour is correct (macOS convention is double-click titlebar to zoom)
-
----
-
 ---
 
 ### Filter Out Repositories
@@ -150,6 +117,34 @@ Add a theme engine inspired by opencode's approach. The app currently has a sing
 
 
 ## Done
+
+### Priority Review List
+Configurable priority list of users/teams whose review requests are surfaced first with visual distinction.
+
+**What was done:**
+- `internal/storage/migrations.go` — Migration 4: `review_priorities` table (`org_name`, `name`, `type` with CHECK constraint, `priority`, `created_at`, unique on org+name+type).
+- `internal/storage/priorities.go` — NEW file: `ReviewPriority` struct, `GetReviewPriorities(org)` (ordered by priority DESC), `AddReviewPriority` (auto-assigns max+1), `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
+- `internal/services/settings.go` — Added `GetReviewPriorities`, `AddReviewPriority`, `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
+- Wails bindings auto-generated for all 4 methods and `storage.ReviewPriority` model.
+- `frontend/src/stores/settingsStore.ts` — Added `prioritiesByOrg` state, `loadPriorities(org)`, `loadAllPriorities()`, `addPriority(org, name, type)`, `removePriority(org, name, type)`, `movePriority(org, name, type, direction)` (swaps priority values with adjacent item), `getPriorityNames()` (returns Set of all priority names for quick lookup).
+- `frontend/src/pages/SettingsPage.tsx` — Added "Priority Reviewers" section: per-org card with text input + user/team type selector + Add button. Priority list with up/down arrows for reordering and remove button per entry.
+- `frontend/src/components/pr/PRTable.tsx` — Added optional `priorityNames` prop (Set<string>). Matching rows (author or review requester in set) get a yellow left border, subtle yellow background tint, and a filled star icon on the first cell.
+- `frontend/src/pages/ReviewRequestsPage.tsx` — Loads priorities on mount. Sorts review requests so priority-matched PRs appear first (stable sort). Passes `priorityNames` to PRTable.
+
+**Not done (future enhancements):**
+- Autocomplete from cached org members and viewer teams in the add input.
+- Drag-and-drop reordering (currently uses up/down arrows).
+- Extending to My PRs view (highlight PRs where a priority reviewer was requested but hasn't responded).
+
+---
+
+### Header Click to Fullscreen
+Double-clicking the sidebar header toggles the window between maximised and normal size.
+
+**What was done:**
+- `frontend/src/components/layout/Sidebar.tsx` — Added `onDoubleClick` handler on the "Review Deck" heading container that calls `WindowToggleMaximise()` from the Wails runtime. Uses double-click to match macOS titlebar convention.
+
+---
 
 ### Dedicated Pull Request Detail Page
 Clicking a PR row now opens an in-app detail page with all important PR information at a glance.

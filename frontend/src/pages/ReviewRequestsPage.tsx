@@ -1,13 +1,14 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { github } from "../../wailsjs/go/models";
 
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
-  const { orgs, loadOrgs } = useSettingsStore();
+  const { orgs, loadOrgs, loadAllPriorities, getPriorityNames } = useSettingsStore();
   const {
     reviewRequests,
     pageState,
@@ -34,7 +35,23 @@ export function ReviewRequestsPage() {
 
   useEffect(() => {
     loadOrgs();
-  }, [loadOrgs]);
+    loadAllPriorities();
+  }, [loadOrgs, loadAllPriorities]);
+
+  // Build priority set and sort PRs so priority items come first.
+  const priorityNames = useMemo(() => getPriorityNames(), [getPriorityNames]);
+
+  const sortedReviewRequests = useMemo(() => {
+    if (priorityNames.size === 0) return reviewRequests;
+    const isPriority = (pr: github.PullRequest) =>
+      priorityNames.has(pr.author) ||
+      (pr.reviewRequests || []).some((rr) => priorityNames.has(rr.reviewer));
+    return [...reviewRequests].sort((a, b) => {
+      const aPri = isPriority(a) ? 1 : 0;
+      const bPri = isPriority(b) ? 1 : 0;
+      return bPri - aPri; // priority items first
+    });
+  }, [reviewRequests, priorityNames]);
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
@@ -97,12 +114,13 @@ export function ReviewRequestsPage() {
       )}
 
       <PRTable
-        data={reviewRequests}
+        data={sortedReviewRequests}
         isLoading={isLoadingReviewRequests}
         showAuthor
         emptyMessage="No pending review requests."
         serverPageInfo={pageState.reviewRequests}
         onLoadMore={handleLoadMore}
+        priorityNames={priorityNames}
       />
     </div>
   );

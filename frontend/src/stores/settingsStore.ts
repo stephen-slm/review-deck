@@ -7,6 +7,10 @@ import {
   SetSetting,
   GetTrackedTeams,
   SetTeamEnabled,
+  GetReviewPriorities,
+  AddReviewPriority,
+  RemoveReviewPriority,
+  UpdateReviewPriorityOrder,
 } from "../../wailsjs/go/services/SettingsService";
 import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
 import { storage } from "../../wailsjs/go/models";
@@ -20,6 +24,8 @@ interface SettingsState {
   cacheTTLMinutes: number;
   /** Tracked teams keyed by org name */
   teamsByOrg: Record<string, storage.TrackedTeam[]>;
+  /** Review priorities keyed by org name */
+  prioritiesByOrg: Record<string, storage.ReviewPriority[]>;
   isLoading: boolean;
 
   loadOrgs: () => Promise<void>;
@@ -33,6 +39,13 @@ interface SettingsState {
   loadAllTeams: () => Promise<void>;
   syncTeams: (org: string) => Promise<void>;
   setTeamEnabled: (org: string, slug: string, enabled: boolean) => Promise<void>;
+  loadPriorities: (org: string) => Promise<void>;
+  loadAllPriorities: () => Promise<void>;
+  addPriority: (org: string, name: string, type: string) => Promise<void>;
+  removePriority: (org: string, name: string, type: string) => Promise<void>;
+  movePriority: (org: string, name: string, type: string, direction: "up" | "down") => Promise<void>;
+  /** Returns a Set of priority names (users + teams) across all orgs for quick lookup. */
+  getPriorityNames: () => Set<string>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -40,6 +53,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   filterBots: false,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   teamsByOrg: {},
+  prioritiesByOrg: {},
   isLoading: false,
 
   loadOrgs: async () => {
@@ -128,5 +142,58 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         ),
       },
     }));
+  },
+
+  loadPriorities: async (org: string) => {
+    try {
+      const priorities = await GetReviewPriorities(org);
+      set((s) => ({
+        prioritiesByOrg: { ...s.prioritiesByOrg, [org]: priorities || [] },
+      }));
+    } catch {
+      // ignore
+    }
+  },
+
+  loadAllPriorities: async () => {
+    const { orgs, loadPriorities } = get();
+    await Promise.all(orgs.map((org) => loadPriorities(org)));
+  },
+
+  addPriority: async (org: string, name: string, type: string) => {
+    await AddReviewPriority(org, name, type);
+    await get().loadPriorities(org);
+  },
+
+  removePriority: async (org: string, name: string, type: string) => {
+    await RemoveReviewPriority(org, name, type);
+    await get().loadPriorities(org);
+  },
+
+  movePriority: async (org: string, name: string, type: string, direction: "up" | "down") => {
+    const priorities = get().prioritiesByOrg[org] || [];
+    // Priorities are sorted by priority DESC (highest first).
+    const idx = priorities.findIndex((p) => p.name === name && p.type === type);
+    if (idx === -1) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= priorities.length) return;
+
+    const current = priorities[idx];
+    const swap = priorities[swapIdx];
+    // Swap priority values
+    await UpdateReviewPriorityOrder(org, current.name, current.type, swap.priority);
+    await UpdateReviewPriorityOrder(org, swap.name, swap.type, current.priority);
+    await get().loadPriorities(org);
+  },
+
+  getPriorityNames: () => {
+    const { prioritiesByOrg } = get();
+    const names = new Set<string>();
+    for (const orgPriorities of Object.values(prioritiesByOrg)) {
+      for (const p of orgPriorities) {
+        names.add(p.name);
+      }
+    }
+    return names;
   },
 }));
