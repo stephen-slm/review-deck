@@ -60,19 +60,6 @@ Allow users to exclude specific repositories from all PR views. Currently the ap
 
 ---
 
-### Filter Out Teams
-**Priority:** Medium
-
-Allow users to exclude specific teams from team review request views. Currently `GetTeamReviewRequests` fetches for a single team, but there's no UI to select which teams to track or exclude.
-
-**Tasks:**
-- [ ] On login / org add, fetch the viewer's teams via `Client.GetViewerTeams()` (`internal/github/auth.go:74`) and cache them in SQLite (new `viewer_teams` table or store as JSON in settings)
-- [ ] Add a `tracked_teams` table: `id`, `org_name`, `team_slug`, `enabled INTEGER DEFAULT 1`
-- [ ] Add storage + service methods: `GetTrackedTeams(org)`, `SetTeamEnabled(org, slug, enabled)`
-- [ ] Add UI in `SettingsPage.tsx`: show the user's teams per org with enable/disable toggles
-- [ ] Update the poller to iterate over enabled teams and call `GetTeamReviewRequests` for each
-- [ ] Consider a "Review Requests" page tab or filter that separates personal vs team review requests
-
 ---
 
 ### Complete Assignee Implementation with Cached Org Members
@@ -97,30 +84,6 @@ The current `ReviewerAssign` component calls `SearchOrgMembers` on every keystro
 - [ ] Expose `GetOrgMembers(org)` and `SyncOrgMembers(org)` via Wails bindings
 
 ---
-
-### Dedicated Pull Request Detail Page
-**Priority:** Medium
-
-Clicking a PR row currently only opens the GitHub URL externally. Add an in-app detail page showing all important PR information at a glance.
-
-**Tasks:**
-- [ ] Add route `/pr/:nodeId` in `App.tsx`
-- [ ] Create `PRDetailPage.tsx` with sections:
-  - **Header:** title, PR number, repo, state badge, draft badge, author (avatar + login), created/updated timestamps
-  - **Branch info:** head ref -> base ref, merge status (mergeable/conflicting)
-  - **Stats:** additions/deletions/changed files/commits, size badge
-  - **CI status:** checks status with icon
-  - **Review status:** review decision badge, list of all reviews (author, state, submitted date, body preview)
-  - **Review requests:** list of pending reviewers (user + team), with ability to add more via `ReviewerAssign`
-  - **Labels:** rendered with colours
-  - **Assignees:** avatar list
-  - **Body:** rendered PR description (markdown to HTML -- add a markdown renderer like `react-markdown`)
-  - **Actions:** Open in GitHub button, Merge button (if applicable), Request Review button
-- [ ] Update `PRTable.tsx` row click to navigate to `/pr/:nodeId` instead of (or in addition to) opening GitHub
-- [ ] Add a "Back" navigation or breadcrumb
-- [ ] Load PR data from local SQLite cache (`GetPullRequestJSON` already exists in `storage/pullrequests.go:127`) and hydrate with reviews from `GetReviewsForPR`
-- [ ] Expose a combined `GetPRDetail(nodeId)` method that returns the PR + reviews + review requests in one call
-- [ ] Consider a "Refresh" button that re-fetches this single PR from GitHub (would need a new single-PR GraphQL query)
 
 ---
 
@@ -187,6 +150,49 @@ Add a theme engine inspired by opencode's approach. The app currently has a sing
 
 
 ## Done
+
+### Dedicated Pull Request Detail Page
+Clicking a PR row now opens an in-app detail page with all important PR information at a glance.
+
+**What was done:**
+- `frontend/src/pages/PRDetailPage.tsx` — NEW file. Two-column layout (main + sidebar):
+  - **Header:** back button, title, PR number, repo, state badge, review decision badge, CI status icon, conflict indicator.
+  - **Author card:** avatar, login, created/updated/merged timestamps with relative time.
+  - **Branch info:** head ref -> base ref with code-styled labels.
+  - **Description:** PR body rendered as GitHub-flavored Markdown using `react-markdown` + `remark-gfm`. Falls back to "No description" placeholder.
+  - **Reviews:** list of all reviews with author avatar, name, state badge (Approved/Changes requested/Commented/Dismissed/Pending), relative timestamp, and body preview.
+  - **Sidebar — Actions:** Open in GitHub button, Merge button (reuses existing `MergeButton` component), Request Review (reuses `ReviewerAssign`).
+  - **Sidebar — Stats:** additions, deletions, changed files, commits count, size badge.
+  - **Sidebar — Review Requests:** pending reviewers with user/team type badges.
+  - **Sidebar — Labels:** rendered with GitHub hex colours (tinted background + border).
+  - **Sidebar — Assignees:** avatar + name list.
+  - **Sidebar — Timestamps:** created, updated, merged, closed with relative and absolute times.
+  - PR data is looked up from the existing zustand store arrays (`useFindPR` hook searches myPRs, myRecentMerged, reviewRequests, teamReviewRequests, reviewedByMe). Not-found state shows a message with back button.
+- `frontend/src/App.tsx` — Added route `/pr/:nodeId` pointing to `PRDetailPage`.
+- `frontend/src/components/pr/PRTable.tsx` — Table rows are now clickable (`cursor-pointer`, `onClick` navigates to `/pr/:nodeId`). Actions column clicks are stopped from propagating so buttons still work independently. External link button retained.
+- `frontend/package.json` — Added `react-markdown` and `remark-gfm` dependencies.
+
+**Not done (future enhancements):**
+- Backend `GetPRDetail(nodeId)` method to load from SQLite cache (currently uses in-memory store data which is sufficient for navigation from table rows).
+- Refresh button to re-fetch a single PR from GitHub API (would need a new single-PR GraphQL query).
+
+---
+
+### Filter Out Teams
+Allow users to select which teams' review requests are tracked. Teams are synced from GitHub and can be individually enabled/disabled in Settings.
+
+**What was done:**
+- `internal/storage/migrations.go` — Migration 3: `tracked_teams` table (`org_name`, `team_slug`, `team_name`, `enabled`, unique constraint on org+slug).
+- `internal/storage/teams.go` — NEW file: `TrackedTeam` struct, `UpsertTrackedTeams`, `GetTrackedTeams`, `GetEnabledTeamSlugs`, `SetTeamEnabled`.
+- `internal/services/settings.go` — Added `GetTrackedTeams(org)` and `SetTeamEnabled(org, slug, enabled)`.
+- `internal/services/pullrequest.go` — Added `SyncTeamsForOrg(org)` which calls `client.GetViewerTeams()` and upserts into `tracked_teams`.
+- `internal/services/poller.go` — Added `TeamReviewRequests` to `PollResult`; poll loop fetches team review requests for each enabled team per org.
+- `frontend/src/stores/settingsStore.ts` — Added `teamsByOrg` state, `loadTeams(org)`, `loadAllTeams()`, `syncTeams(org)`, `setTeamEnabled(org, slug, enabled)`.
+- `frontend/src/pages/SettingsPage.tsx` — Added "Teams" section: per-org list with enable/disable toggle switches and a Sync button to re-fetch teams from GitHub.
+- `frontend/src/hooks/usePollerEvents.ts` — Added `teamReviewRequests` to `PollResult` interface and handler to push team review request data into `prStore`.
+- Wails bindings auto-generated for `SettingsService.GetTrackedTeams`, `SettingsService.SetTeamEnabled`, `PullRequestService.SyncTeamsForOrg`, and `storage.TrackedTeam` model.
+
+---
 
 ### Filter Out Bots
 Toggle in Settings to exclude bot-authored PRs (Dependabot, Renovate, GitHub Actions, Snyk) from all views.

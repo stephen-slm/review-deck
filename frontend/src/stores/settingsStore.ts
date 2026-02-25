@@ -39,6 +39,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
   filterBots: false,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
+  teamsByOrg: {},
   isLoading: false,
 
   loadOrgs: async () => {
@@ -93,5 +94,39 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await SetSetting("cache_ttl_minutes", String(clamped));
     set({ cacheTTLMinutes: clamped });
     usePRStore.getState().setCacheTTL(clamped * 60 * 1000);
+  },
+
+  loadTeams: async (org: string) => {
+    try {
+      const teams = await GetTrackedTeams(org);
+      set((s) => ({
+        teamsByOrg: { ...s.teamsByOrg, [org]: teams || [] },
+      }));
+    } catch {
+      // ignore — teams stay as-is
+    }
+  },
+
+  loadAllTeams: async () => {
+    const { orgs, loadTeams } = get();
+    await Promise.all(orgs.map((org) => loadTeams(org)));
+  },
+
+  syncTeams: async (org: string) => {
+    await SyncTeamsForOrg(org);
+    await get().loadTeams(org);
+  },
+
+  setTeamEnabled: async (org: string, slug: string, enabled: boolean) => {
+    await SetTeamEnabled(org, slug, enabled);
+    // Optimistically update local state
+    set((s) => ({
+      teamsByOrg: {
+        ...s.teamsByOrg,
+        [org]: (s.teamsByOrg[org] || []).map((t) =>
+          t.teamSlug === slug ? { ...t, enabled } : t
+        ),
+      },
+    }));
   },
 }));

@@ -6,6 +6,7 @@ import { useToast } from "@/components/ui/Toast";
 interface PollResult {
   myPRs: unknown[] | null;
   reviewRequests: unknown[] | null;
+  teamReviewRequests: unknown[] | null;
   reviewedByMe: unknown[] | null;
   recentMerged: unknown[] | null;
   error?: string;
@@ -61,6 +62,13 @@ export function usePollerEvents() {
         usePRStore.setState((s) => ({
           reviewedByMe: prs,
           pageState: { ...s.pageState, reviewedByMe: { ...noMorePages, totalCount: prs.length } },
+        }));
+      }
+      if (result.teamReviewRequests) {
+        const prs = result.teamReviewRequests as typeof state.teamReviewRequests;
+        usePRStore.setState((s) => ({
+          teamReviewRequests: prs,
+          pageState: { ...s.pageState, teamReviewRequests: { ...noMorePages, totalCount: prs.length } },
         }));
       }
       if (result.recentMerged) {

@@ -6,6 +6,7 @@ import { MyPRsPage } from "./pages/MyPRsPage";
 import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { PRDetailPage } from "./pages/PRDetailPage";
 import { usePollerEvents } from "./hooks/usePollerEvents";
 
 function AppContent() {
@@ -29,6 +30,7 @@ function AppContent() {
             />
             <Route path="/reviewed" element={<ReviewedByMePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/pr/:nodeId" element={<PRDetailPage />} />
           </Routes>
         </div>
       </main>

@@ -1,22 +1,37 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newOrg, setNewOrg] = useState("");
+  const [syncingOrg, setSyncingOrg] = useState<string | null>(null);
 
   useEffect(() => {
     loadOrgs();
     loadFilterBots();
     loadCacheTTL();
   }, [loadOrgs, loadFilterBots, loadCacheTTL]);
+
+  // Load teams for all orgs once orgs are loaded; sync from GitHub if none cached yet.
+  useEffect(() => {
+    if (orgs.length === 0) return;
+    loadAllTeams().then(() => {
+      const current = useSettingsStore.getState().teamsByOrg;
+      for (const org of orgs) {
+        if (!current[org] || current[org].length === 0) {
+          syncTeams(org);
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgs]);
 
   const handleLogin = async () => {
     if (!token.trim()) return;
@@ -233,6 +248,79 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* Teams Section */}
+      {isAuthenticated && orgs.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-muted-foreground" />
+            <h3 className="text-lg font-semibold">Teams</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Enable the teams whose review requests you want to track. Disabled
+            teams are excluded from the poller and team review request views.
+          </p>
+
+          {orgs.map((org) => {
+            const teams = teamsByOrg[org] || [];
+            return (
+              <div key={org} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-foreground">{org}</h4>
+                  <button
+                    onClick={async () => {
+                      setSyncingOrg(org);
+                      try {
+                        await syncTeams(org);
+                      } finally {
+                        setSyncingOrg(null);
+                      }
+                    }}
+                    disabled={syncingOrg === org}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${syncingOrg === org ? "animate-spin" : ""}`} />
+                    Sync
+                  </button>
+                </div>
+                {teams.length > 0 ? (
+                  <ul className="space-y-1">
+                    {teams.map((team) => (
+                      <li
+                        key={team.teamSlug}
+                        className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{team.teamName}</p>
+                          <p className="text-xs text-muted-foreground">@{org}/{team.teamSlug}</p>
+                        </div>
+                        <button
+                          role="switch"
+                          aria-checked={team.enabled}
+                          onClick={() => setTeamEnabled(org, team.teamSlug, !team.enabled)}
+                          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
+                            team.enabled ? "bg-primary" : "bg-muted"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                              team.enabled ? "translate-x-4" : "translate-x-0.5"
+                            }`}
+                          />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                    No teams found. Click Sync to fetch from GitHub.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {/* Cache Section */}
       <section className="space-y-4">

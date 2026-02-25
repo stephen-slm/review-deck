@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   useReactTable,
   getCoreRowModel,
@@ -57,6 +58,7 @@ export function PRTable({
   serverPageInfo,
   onLoadMore,
 }: PRTableProps) {
+  const navigate = useNavigate();
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [pagination, setPagination] = useState<PaginationState>({
@@ -319,10 +321,19 @@ export function PRTable({
               table.getRowModel().rows.map((row) => (
                 <tr
                   key={row.id}
-                  className="border-b border-border transition-colors last:border-0 hover:bg-muted/30"
+                  onClick={() => navigate(`/pr/${row.original.nodeId}`)}
+                  className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30"
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-3 py-2">
+                    <td
+                      key={cell.id}
+                      className="px-3 py-2"
+                      onClick={
+                        cell.column.id === "actions"
+                          ? (e) => e.stopPropagation()
+                          : undefined
+                      }
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
