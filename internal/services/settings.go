@@ -68,3 +68,18 @@ func (s *SettingsService) RemoveReviewPriority(org, name, typeName string) error
 func (s *SettingsService) UpdateReviewPriorityOrder(org, name, typeName string, priority int) error {
 	return s.db.UpdateReviewPriorityOrder(org, name, typeName, priority)
 }
+
+// GetExcludedRepos returns all excluded repository names for an org.
+func (s *SettingsService) GetExcludedRepos(org string) ([]string, error) {
+	return s.db.GetExcludedRepos(org)
+}
+
+// AddExcludedRepo adds a repository to the exclusion list for an org.
+func (s *SettingsService) AddExcludedRepo(org, repo string) error {
+	return s.db.AddExcludedRepo(org, repo)
+}
+
+// RemoveExcludedRepo removes a repository from the exclusion list.
+func (s *SettingsService) RemoveExcludedRepo(org, repo string) error {
+	return s.db.RemoveExcludedRepo(org, repo)
+}

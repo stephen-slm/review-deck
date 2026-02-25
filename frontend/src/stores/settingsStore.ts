@@ -11,6 +11,9 @@ import {
   AddReviewPriority,
   RemoveReviewPriority,
   UpdateReviewPriorityOrder,
+  GetExcludedRepos,
+  AddExcludedRepo,
+  RemoveExcludedRepo,
 } from "../../wailsjs/go/services/SettingsService";
 import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
 import { storage } from "../../wailsjs/go/models";
@@ -46,6 +49,12 @@ interface SettingsState {
   movePriority: (org: string, name: string, type: string, direction: "up" | "down") => Promise<void>;
   /** Returns a Set of priority names (users + teams) across all orgs for quick lookup. */
   getPriorityNames: () => Set<string>;
+  /** Excluded repos keyed by org name */
+  excludedReposByOrg: Record<string, string[]>;
+  loadExcludedRepos: (org: string) => Promise<void>;
+  loadAllExcludedRepos: () => Promise<void>;
+  addExcludedRepo: (org: string, repo: string) => Promise<void>;
+  removeExcludedRepo: (org: string, repo: string) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -54,6 +63,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   teamsByOrg: {},
   prioritiesByOrg: {},
+  excludedReposByOrg: {},
   isLoading: false,
 
   loadOrgs: async () => {
@@ -195,5 +205,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       }
     }
     return names;
+  },
+
+  loadExcludedRepos: async (org: string) => {
+    try {
+      const repos = await GetExcludedRepos(org);
+      set((s) => ({
+        excludedReposByOrg: { ...s.excludedReposByOrg, [org]: repos || [] },
+      }));
+    } catch {
+      // ignore
+    }
+  },
+
+  loadAllExcludedRepos: async () => {
+    const { orgs, loadExcludedRepos } = get();
+    await Promise.all(orgs.map((org) => loadExcludedRepos(org)));
+  },
+
+  addExcludedRepo: async (org: string, repo: string) => {
+    await AddExcludedRepo(org, repo);
+    await get().loadExcludedRepos(org);
+  },
+
+  removeExcludedRepo: async (org: string, repo: string) => {
+    await RemoveExcludedRepo(org, repo);
+    await get().loadExcludedRepos(org);
   },
 }));

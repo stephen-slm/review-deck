@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -14,6 +14,7 @@ export function SettingsPage() {
   const [syncingOrg, setSyncingOrg] = useState<string | null>(null);
   const [newPriorityName, setNewPriorityName] = useState("");
   const [newPriorityType, setNewPriorityType] = useState<"user" | "team">("user");
+  const [newExcludedRepo, setNewExcludedRepo] = useState("");
 
   useEffect(() => {
     loadOrgs();
@@ -33,6 +34,7 @@ export function SettingsPage() {
       }
     });
     loadAllPriorities();
+    loadAllExcludedRepos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgs]);
 
@@ -251,6 +253,81 @@ export function SettingsPage() {
           </div>
         </div>
       </section>
+
+      {/* Excluded Repositories Section */}
+      {isAuthenticated && orgs.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <GitFork className="h-5 w-5 text-muted-foreground" />
+            <h3 className="text-lg font-semibold">Excluded Repositories</h3>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Repositories listed here are excluded from all PR views and poller
+            queries. Enter the repo name only (not the full org/repo path).
+          </p>
+
+          {orgs.map((org) => {
+            const repos = excludedReposByOrg[org] || [];
+            return (
+              <div key={org} className="space-y-2">
+                <h4 className="text-sm font-medium text-foreground">{org}</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newExcludedRepo}
+                    onChange={(e) => setNewExcludedRepo(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newExcludedRepo.trim()) {
+                        addExcludedRepo(org, newExcludedRepo.trim());
+                        setNewExcludedRepo("");
+                      }
+                    }}
+                    placeholder="repository-name"
+                    className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newExcludedRepo.trim()) return;
+                      addExcludedRepo(org, newExcludedRepo.trim());
+                      setNewExcludedRepo("");
+                    }}
+                    disabled={!newExcludedRepo.trim()}
+                    className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Exclude
+                  </button>
+                </div>
+                {repos.length > 0 ? (
+                  <ul className="space-y-1">
+                    {repos.map((repo) => (
+                      <li
+                        key={repo}
+                        className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2"
+                      >
+                        <span className="text-sm text-foreground">
+                          {org}/{repo}
+                        </span>
+                        <button
+                          onClick={() => removeExcludedRepo(org, repo)}
+                          className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                          title="Remove exclusion"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                    No repositories excluded.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
 
       {/* Teams Section */}
       {isAuthenticated && orgs.length > 0 && (

@@ -9,24 +9,6 @@
 
 ---
 
-### Filter Out Repositories
-**Priority:** High
-
-Allow users to exclude specific repositories from all PR views. Currently the app fetches PRs across an entire org with no repo-level filtering.
-
-**Tasks:**
-- [ ] Add a `filtered_repos` table in SQLite (new migration): `id`, `org_name`, `repo_name`, `excluded INTEGER DEFAULT 1`
-- [ ] Add storage methods: `GetExcludedRepos(org)`, `AddExcludedRepo(org, repo)`, `RemoveExcludedRepo(org, repo)`
-- [ ] Expose via `SettingsService`: `GetExcludedRepos(org)`, `AddExcludedRepo(org, repo)`, `RemoveExcludedRepo(org, repo)`
-- [ ] Apply filtering -- two options:
-  - **Option A (query-time):** Append `-repo:org/name` qualifiers to the GitHub search queries. Limited by GitHub's query length but simplest approach.
-  - **Option B (client-side):** Filter out excluded repos after fetching, before storing/returning. Works regardless of count but wastes API quota.
-  - Recommend Option A with fallback to Option B if the exclusion list is long (>10 repos)
-- [ ] Add UI in `SettingsPage.tsx` under each tracked org: a list of excluded repos with add/remove, possibly with autocomplete from repos seen in cached PR data
-- [ ] Apply the same filtering in the poller
-
----
-
 ---
 
 ### Complete Assignee Implementation with Cached Org Members
@@ -117,6 +99,26 @@ Add a theme engine inspired by opencode's approach. The app currently has a sing
 
 
 ## Done
+
+### Filter Out Repositories
+Allow users to exclude specific repositories from all PR views via query-time filtering.
+
+**What was done:**
+- `internal/storage/migrations.go` — Migration 5: `excluded_repos` table (`org_name`, `repo_name`, unique constraint).
+- `internal/storage/excluded_repos.go` — NEW file: `GetExcludedRepos(org)`, `AddExcludedRepo(org, repo)`, `RemoveExcludedRepo(org, repo)`.
+- `internal/services/settings.go` — Added `GetExcludedRepos`, `AddExcludedRepo`, `RemoveExcludedRepo`.
+- `internal/github/queries.go` — Extended `buildQuery` to accept `excludedRepos []string` and append `-repo:org/name` qualifiers (Option A: query-time filtering). Updated all 10 client methods (5 fetch-all + 5 paginated) to accept and pass `excludedRepos`.
+- `internal/services/pullrequest.go` — Added `getExcludedRepos(org)` helper that reads from DB and formats as `org/repo`. All 10 service methods now pass excluded repos to the client.
+- `internal/services/poller.go` — Added `getExcludedRepos(org)` helper. All poller fetch calls now pass excluded repos per org.
+- Wails bindings auto-generated for `GetExcludedRepos`, `AddExcludedRepo`, `RemoveExcludedRepo`.
+- `frontend/src/stores/settingsStore.ts` — Added `excludedReposByOrg` state, `loadExcludedRepos(org)`, `loadAllExcludedRepos()`, `addExcludedRepo(org, repo)`, `removeExcludedRepo(org, repo)`.
+- `frontend/src/pages/SettingsPage.tsx` — Added "Excluded Repositories" section: per-org list with text input + Exclude button. Each excluded repo shown as `org/repo` with a remove button.
+
+**Not done (future enhancements):**
+- Autocomplete from repos seen in cached PR data.
+- Fallback to client-side filtering if exclusion list exceeds GitHub query length limit (~256 chars).
+
+---
 
 ### Priority Review List
 Configurable priority list of users/teams whose review requests are surfaced first with visual distinction.

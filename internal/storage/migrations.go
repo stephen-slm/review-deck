@@ -132,6 +132,16 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_review_priorities_org ON review_priorities(org_name);`,
+
+	// Migration 5: Excluded repositories for per-org repo filtering.
+	`CREATE TABLE IF NOT EXISTS excluded_repos (
+		id        INTEGER PRIMARY KEY AUTOINCREMENT,
+		org_name  TEXT NOT NULL,
+		repo_name TEXT NOT NULL,
+		UNIQUE(org_name, repo_name)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_excluded_repos_org ON excluded_repos(org_name);`,
 }
 
 // Migrate runs all pending migrations.
