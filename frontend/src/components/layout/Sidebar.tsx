@@ -54,7 +54,9 @@ export function Sidebar() {
 
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-card">
-      <div className="wails-drag flex h-14 items-center border-b border-border px-4">
+      {/* macOS titlebar spacer — drag region that sits behind the traffic lights */}
+      <div className="wails-drag h-[52px] shrink-0" />
+      <div className="flex h-10 shrink-0 items-center border-b border-border px-4">
         <h1 className="text-lg font-semibold text-foreground">Review Deck</h1>
       </div>
       <nav className="flex-1 space-y-1 p-2">

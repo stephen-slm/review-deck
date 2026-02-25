@@ -60,11 +60,49 @@ type Poller struct {
 	previous *PollResult // previous poll for diffing
 }
 
-// NewPoller creates a new Poller with the given interval.
-func NewPoller(db *storage.DB, interval time.Duration) *Poller {
+// NewPoller creates a new Poller. It reads poll_interval_minutes from the
+// database, falling back to the given default if not set.
+func NewPoller(db *storage.DB, defaultInterval time.Duration) *Poller {
+	interval := defaultInterval
+	if val, err := db.GetSetting("poll_interval_minutes"); err == nil && val != "" {
+		if mins := parseMinutes(val); mins > 0 {
+			interval = time.Duration(mins) * time.Minute
+		}
+	}
 	return &Poller{
 		db:       db,
 		interval: interval,
+	}
+}
+
+// parseMinutes parses a string as an integer of minutes.
+func parseMinutes(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+// SetInterval updates the poll interval and restarts the loop if running.
+func (p *Poller) SetInterval(minutes int) {
+	if minutes < 1 {
+		minutes = 1
+	}
+	p.mu.Lock()
+	p.interval = time.Duration(minutes) * time.Minute
+	wasRunning := p.running
+	emit := p.emit
+	ctx := p.ctx
+	p.mu.Unlock()
+
+	if wasRunning && emit != nil && ctx != nil {
+		p.Stop()
+		// Re-derive a parent context (the original Wails ctx may still be valid).
+		p.Start(ctx, emit)
 	}
 }
 

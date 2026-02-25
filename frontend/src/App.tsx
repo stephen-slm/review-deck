@@ -15,8 +15,10 @@ function AppContent() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
       <Sidebar />
-      <main className="flex-1 overflow-auto">
-        <div className="h-full p-6">
+      <main className="flex flex-1 flex-col overflow-hidden">
+        {/* macOS titlebar spacer — drag region */}
+        <div className="wails-drag h-[52px] shrink-0" />
+        <div className="flex-1 overflow-auto p-6">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />

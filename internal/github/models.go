@@ -99,6 +99,19 @@ type Team struct {
 	Name string `json:"name"`
 }
 
+// PageInfo contains cursor-based pagination metadata.
+type PageInfo struct {
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
+	TotalCount  int    `json:"totalCount"`
+}
+
+// PRPage represents a single page of pull request results.
+type PRPage struct {
+	PullRequests []PullRequest `json:"pullRequests"`
+	PageInfo     PageInfo      `json:"pageInfo"`
+}
+
 // ViewerInfo holds the authenticated user's details.
 type ViewerInfo struct {
 	Login     string `json:"login"`

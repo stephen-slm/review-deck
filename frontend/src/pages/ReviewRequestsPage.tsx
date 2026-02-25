@@ -8,9 +8,9 @@ import { RefreshCw, AlertCircle } from "lucide-react";
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
-  const { reviewRequests, isLoadingReviewRequests, error, fetchReviewRequests, clearError } = usePRStore();
+  const { reviewRequests, isLoadingReviewRequests, error, fetchReviewRequests, fetchIfStale, clearError } = usePRStore();
 
-  const refresh = useCallback(() => {
+  const forceRefresh = useCallback(() => {
     clearError();
     for (const org of orgs) {
       fetchReviewRequests(org);
@@ -23,9 +23,11 @@ export function ReviewRequestsPage() {
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
-      refresh();
+      for (const org of orgs) {
+        fetchIfStale("reviewRequests", () => fetchReviewRequests(org));
+      }
     }
-  }, [isAuthenticated, orgs, refresh]);
+  }, [isAuthenticated, orgs, fetchReviewRequests, fetchIfStale]);
 
   if (!isAuthenticated) {
     return (
@@ -63,7 +65,7 @@ export function ReviewRequestsPage() {
           </p>
         </div>
         <button
-          onClick={refresh}
+          onClick={forceRefresh}
           disabled={isLoadingReviewRequests}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >

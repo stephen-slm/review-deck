@@ -207,9 +207,9 @@ export function DashboardPage() {
     isLoadingReviewRequests ||
     isLoadingReviewedByMe;
 
-  const refresh = useCallback(() => {
+  const forceRefresh = useCallback(() => {
     clearError();
-    fetchAll(orgs);
+    fetchAll(orgs, true);
   }, [orgs, fetchAll, clearError]);
 
   useEffect(() => {
@@ -218,9 +218,9 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
-      refresh();
+      fetchAll(orgs); // uses cache — skips categories that are still fresh
     }
-  }, [isAuthenticated, orgs, refresh]);
+  }, [isAuthenticated, orgs, fetchAll]);
 
   if (!isAuthenticated) {
     return (
@@ -269,7 +269,7 @@ export function DashboardPage() {
           </p>
         </div>
         <button
-          onClick={refresh}
+          onClick={forceRefresh}
           disabled={isLoading}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >

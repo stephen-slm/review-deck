@@ -26,6 +26,22 @@ export namespace github {
 	        this.color = source["color"];
 	    }
 	}
+	export class PageInfo {
+	    hasNextPage: boolean;
+	    endCursor: string;
+	    totalCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PageInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.hasNextPage = source["hasNextPage"];
+	        this.endCursor = source["endCursor"];
+	        this.totalCount = source["totalCount"];
+	    }
+	}
 	export class Review {
 	    id: string;
 	    author: string;
@@ -189,6 +205,40 @@ export namespace github {
 		    return a;
 		}
 	}
+	export class PRPage {
+	    pullRequests: PullRequest[];
+	    pageInfo: PageInfo;
+	
+	    static createFrom(source: any = {}) {
+	        return new PRPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.pullRequests = this.convertValues(source["pullRequests"], PullRequest);
+	        this.pageInfo = this.convertValues(source["pageInfo"], PageInfo);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	
 	
 	export class Team {

@@ -8,9 +8,9 @@ import { RefreshCw, AlertCircle } from "lucide-react";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
-  const { myPRs, isLoadingMyPRs, error, fetchMyPRs, clearError } = usePRStore();
+  const { myPRs, isLoadingMyPRs, error, fetchMyPRs, fetchIfStale, clearError } = usePRStore();
 
-  const refresh = useCallback(() => {
+  const forceRefresh = useCallback(() => {
     clearError();
     for (const org of orgs) {
       fetchMyPRs(org);
@@ -23,9 +23,11 @@ export function MyPRsPage() {
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
-      refresh();
+      for (const org of orgs) {
+        fetchIfStale("myPRs", () => fetchMyPRs(org));
+      }
     }
-  }, [isAuthenticated, orgs, refresh]);
+  }, [isAuthenticated, orgs, fetchMyPRs, fetchIfStale]);
 
   if (!isAuthenticated) {
     return (
@@ -63,7 +65,7 @@ export function MyPRsPage() {
           </p>
         </div>
         <button
-          onClick={refresh}
+          onClick={forceRefresh}
           disabled={isLoadingMyPRs}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >
@@ -85,7 +87,7 @@ export function MyPRsPage() {
         emptyMessage="No open pull requests found."
         showMerge
         showAssignReviewer
-        onRefresh={refresh}
+        onRefresh={forceRefresh}
       />
     </div>
   );

@@ -6,13 +6,23 @@ export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullR
 
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
 
+export function GetMyPRsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
+
 export function GetMyRecentMerged(arg1:string,arg2:number):Promise<Array<github.PullRequest>>;
+
+export function GetMyRecentMergedPage(arg1:string,arg2:number,arg3:number,arg4:string):Promise<github.PRPage>;
 
 export function GetReviewRequests(arg1:string):Promise<Array<github.PullRequest>>;
 
+export function GetReviewRequestsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
+
 export function GetReviewedByMe(arg1:string):Promise<Array<github.PullRequest>>;
 
+export function GetReviewedByMePage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
+
 export function GetTeamReviewRequests(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
+
+export function GetTeamReviewRequestsPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
 
 export function MergePR(arg1:string,arg2:string):Promise<void>;
 

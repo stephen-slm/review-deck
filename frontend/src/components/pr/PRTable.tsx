@@ -4,13 +4,15 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
+  getPaginationRowModel,
   flexRender,
   createColumnHelper,
   type SortingState,
+  type PaginationState,
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -18,6 +20,8 @@ import { ReviewStatusBadge } from "./ReviewStatusBadge";
 import { ChecksStatusIcon } from "./ChecksStatusIcon";
 import { MergeButton } from "./MergeButton";
 import { ReviewerAssign } from "./ReviewerAssign";
+
+const PAGE_SIZE_OPTIONS = [10, 15, 20, 25] as const;
 
 interface PRTableProps {
   data: github.PullRequest[];
@@ -27,6 +31,7 @@ interface PRTableProps {
   showMerge?: boolean;
   showAssignReviewer?: boolean;
   onRefresh?: () => void;
+  defaultPageSize?: number;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -39,9 +44,14 @@ export function PRTable({
   showMerge = false,
   showAssignReviewer = false,
   onRefresh,
+  defaultPageSize = 10,
 }: PRTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const [pagination, setPagination] = useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: defaultPageSize,
+  });
 
   const columns = useMemo(() => {
     const authorCol = columnHelper.accessor("author", {
@@ -202,12 +212,14 @@ export function PRTable({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter },
+    state: { sorting, globalFilter, pagination },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
   });
 
   return (
@@ -293,11 +305,66 @@ export function PRTable({
         </table>
       </div>
 
-      {/* Row count */}
+      {/* Pagination controls */}
       {!isLoading && data.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {table.getFilteredRowModel().rows.length} of {data.length} pull request{data.length !== 1 ? "s" : ""}
-        </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Rows per page</span>
+            <select
+              value={pagination.pageSize}
+              onChange={(e) =>
+                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })
+              }
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="mr-2 text-xs text-muted-foreground">
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {table.getPageCount() || 1}
+              {" "}({table.getFilteredRowModel().rows.length} result{table.getFilteredRowModel().rows.length !== 1 ? "s" : ""})
+            </span>
+            <button
+              onClick={() => table.setPageIndex(0)}
+              disabled={!table.getCanPreviousPage()}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+              title="First page"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+              title="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+              title="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
+              disabled={!table.getCanNextPage()}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
+              title="Last page"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
