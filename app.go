@@ -101,6 +101,11 @@ func (a *App) StopPoller() {
 	a.poller.Stop()
 }
 
+// SyncOrgMembers forces a refresh of the org members cache for the given org.
+func (a *App) SyncOrgMembers(org string) error {
+	return a.prService.SyncOrgMembers(org)
+}
+
 // shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
 	a.poller.Stop()

@@ -4,3 +4,5 @@
 export function StartPoller():Promise<void>;
 
 export function StopPoller():Promise<void>;
+
+export function SyncOrgMembers(arg1:string):Promise<void>;

@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -14,7 +14,9 @@ export function SettingsPage() {
 
   useEffect(() => {
     loadOrgs();
-  }, [loadOrgs]);
+    loadFilterBots();
+    loadCacheTTL();
+  }, [loadOrgs, loadFilterBots, loadCacheTTL]);
 
   const handleLogin = async () => {
     if (!token.trim()) return;
@@ -194,6 +196,78 @@ export function SettingsPage() {
             No organizations tracked yet. Add one above to get started.
           </p>
         )}
+      </section>
+
+      {/* Filters Section */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Bot className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Filters</h3>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Filter out bot pull requests
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Hide PRs authored by Dependabot, Renovate, GitHub Actions, and
+                Snyk from all views.
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={filterBots}
+              onClick={() => setFilterBots(!filterBots)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
+                filterBots ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                  filterBots ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Cache Section */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Timer className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Cache</h3>
+        </div>
+
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Cache expiry
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Data is served from cache unless you click Refresh. Pages will
+                re-fetch from GitHub after this period.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={cacheTTLMinutes}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) setCacheTTL(val);
+                }}
+                className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   );

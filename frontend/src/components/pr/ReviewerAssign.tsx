@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { UserPlus, Search, X, Loader2 } from "lucide-react";
 import { SearchOrgMembers, RequestReviews } from "../../../wailsjs/go/services/PullRequestService";
+import { SyncOrgMembers } from "../../../wailsjs/go/main/App";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { github } from "../../../wailsjs/go/models";
 
@@ -25,6 +26,7 @@ export function ReviewerAssign({
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const { orgs } = useSettingsStore();
+  const syncTriggered = useRef(false);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -46,7 +48,12 @@ export function ReviewerAssign({
     if (isOpen && inputRef.current) {
       inputRef.current.focus();
     }
-  }, [isOpen]);
+    // Trigger an org member cache sync the first time the dropdown opens.
+    if (isOpen && !syncTriggered.current && orgs.length > 0) {
+      syncTriggered.current = true;
+      SyncOrgMembers(orgs[0]).catch(() => {});
+    }
+  }, [isOpen, orgs]);
 
   const search = useCallback(
     (q: string) => {

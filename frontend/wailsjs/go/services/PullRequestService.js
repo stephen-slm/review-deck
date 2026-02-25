@@ -61,3 +61,15 @@ export function SearchOrgMembers(arg1, arg2) {
 export function SetClient(arg1) {
   return window['go']['services']['PullRequestService']['SetClient'](arg1);
 }
+
+export function SyncOrgMembers(arg1) {
+  return window['go']['services']['PullRequestService']['SyncOrgMembers'](arg1);
+}
+
+export function SyncOrgMembersIfStale(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['SyncOrgMembersIfStale'](arg1, arg2);
+}
+
+export function SyncTeamsForOrg(arg1) {
+  return window['go']['services']['PullRequestService']['SyncTeamsForOrg'](arg1);
+}

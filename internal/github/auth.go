@@ -70,6 +70,59 @@ func (c *Client) SearchOrgMembers(ctx context.Context, org string, query string)
 	return users, nil
 }
 
+// ListOrgMembers fetches ALL members of an organization using paginated GraphQL queries.
+// Requires the read:org scope on the PAT.
+func (c *Client) ListOrgMembers(ctx context.Context, org string) ([]User, error) {
+	var query struct {
+		Organization struct {
+			MembersWithRole struct {
+				Nodes []struct {
+					Login     string
+					Name      string
+					AvatarURL string `graphql:"avatarUrl"`
+					ID        string `graphql:"id"`
+				}
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   githubv4.String
+				}
+			} `graphql:"membersWithRole(first: 100, after: $cursor)"`
+		} `graphql:"organization(login: $org)"`
+	}
+
+	variables := map[string]interface{}{
+		"org":    githubv4.String(org),
+		"cursor": (*githubv4.String)(nil),
+	}
+
+	var users []User
+	for {
+		err := c.graphql.Query(ctx, &query, variables)
+		if err != nil {
+			return users, err
+		}
+
+		for _, n := range query.Organization.MembersWithRole.Nodes {
+			if n.Login == "" {
+				continue
+			}
+			users = append(users, User{
+				NodeID:    n.ID,
+				Login:     n.Login,
+				Name:      n.Name,
+				AvatarURL: n.AvatarURL,
+			})
+		}
+
+		if !query.Organization.MembersWithRole.PageInfo.HasNextPage {
+			break
+		}
+		variables["cursor"] = githubv4.NewString(query.Organization.MembersWithRole.PageInfo.EndCursor)
+	}
+
+	return users, nil
+}
+
 // GetViewerTeams returns the teams the authenticated user belongs to for a given org.
 func (c *Client) GetViewerTeams(ctx context.Context, org string) ([]Team, error) {
 	var query struct {

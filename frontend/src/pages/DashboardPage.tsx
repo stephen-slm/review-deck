@@ -192,6 +192,7 @@ export function DashboardPage() {
     myRecentMerged,
     reviewRequests,
     reviewedByMe,
+    pageState,
     isLoadingMyPRs,
     isLoadingRecentMerged,
     isLoadingReviewRequests,
@@ -291,28 +292,28 @@ export function DashboardPage() {
       <div className="grid grid-cols-4 gap-4">
         <StatCard
           label="Open PRs"
-          value={myPRs.length}
+          value={pageState.myPRs.totalCount || myPRs.length}
           icon={<GitPullRequest className="h-5 w-5" />}
           href="/my-prs"
           sublabel="Authored by you"
         />
         <StatCard
           label="Review Requests"
-          value={reviewRequests.length}
+          value={pageState.reviewRequests.totalCount || reviewRequests.length}
           icon={<Eye className="h-5 w-5" />}
           href="/review-requests"
           sublabel="Waiting for your review"
         />
         <StatCard
           label="Reviewed"
-          value={reviewedByMe.length}
+          value={pageState.reviewedByMe.totalCount || reviewedByMe.length}
           icon={<CheckCircle className="h-5 w-5" />}
           href="/reviewed"
           sublabel="Open PRs you reviewed"
         />
         <StatCard
           label="Recently Merged"
-          value={myRecentMerged.length}
+          value={pageState.myRecentMerged.totalCount || myRecentMerged.length}
           icon={<GitMerge className="h-5 w-5" />}
           sublabel="Last 14 days"
         />

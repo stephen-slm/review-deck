@@ -34,16 +34,20 @@ type Notification struct {
 
 // PollResult contains the data from a single poll cycle, sent to the frontend.
 type PollResult struct {
-	MyPRs          []gh.PullRequest `json:"myPRs"`
-	ReviewRequests []gh.PullRequest `json:"reviewRequests"`
-	ReviewedByMe   []gh.PullRequest `json:"reviewedByMe"`
-	RecentMerged   []gh.PullRequest `json:"recentMerged"`
-	Error          string           `json:"error,omitempty"`
-	Timestamp      time.Time        `json:"timestamp"`
+	MyPRs              []gh.PullRequest `json:"myPRs"`
+	ReviewRequests     []gh.PullRequest `json:"reviewRequests"`
+	TeamReviewRequests []gh.PullRequest `json:"teamReviewRequests"`
+	ReviewedByMe       []gh.PullRequest `json:"reviewedByMe"`
+	RecentMerged       []gh.PullRequest `json:"recentMerged"`
+	Error              string           `json:"error,omitempty"`
+	Timestamp          time.Time        `json:"timestamp"`
 }
 
 // EventEmitter is the function signature for Wails runtime.EventsEmit.
 type EventEmitter func(ctx context.Context, eventName string, data ...interface{})
+
+// memberSyncInterval is how often the poller refreshes the org members cache.
+const memberSyncInterval = 24 * time.Hour
 
 // Poller periodically fetches PR data and emits events to the frontend.
 type Poller struct {
@@ -159,6 +163,15 @@ func (p *Poller) IsRunning() bool {
 	return p.running
 }
 
+// filterBotsEnabled reads the filter_bots setting from the database.
+func (p *Poller) filterBotsEnabled() bool {
+	val, err := p.db.GetSetting("filter_bots")
+	if err != nil {
+		return false
+	}
+	return val == "true"
+}
+
 func (p *Poller) loop(ctx context.Context) {
 	// Wait before the first poll to let the frontend's initial fetches finish.
 	select {
@@ -243,8 +256,10 @@ func (p *Poller) poll(ctx context.Context) {
 
 	result := PollResult{Timestamp: time.Now()}
 
+	filterBots := p.filterBotsEnabled()
+
 	for _, org := range orgs {
-		if prs, err := client.GetMyOpenPRs(ctx, org, login); err == nil {
+		if prs, err := client.GetMyOpenPRs(ctx, org, login, filterBots); err == nil {
 			result.MyPRs = append(result.MyPRs, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -256,7 +271,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewRequestsForUser(ctx, org, login); err == nil {
+		if prs, err := client.GetReviewRequestsForUser(ctx, org, login, filterBots); err == nil {
 			result.ReviewRequests = append(result.ReviewRequests, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -268,7 +283,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewedByUser(ctx, org, login); err == nil {
+		if prs, err := client.GetReviewedByUser(ctx, org, login, filterBots); err == nil {
 			result.ReviewedByMe = append(result.ReviewedByMe, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -281,7 +296,7 @@ func (p *Poller) poll(ctx context.Context) {
 		}
 
 		since := time.Now().AddDate(0, 0, -14)
-		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, since); err == nil {
+		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, since, filterBots); err == nil {
 			result.RecentMerged = append(result.RecentMerged, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -291,6 +306,24 @@ func (p *Poller) poll(ctx context.Context) {
 
 		if !sleep(ctx, requestDelay) {
 			return
+		}
+
+		// Fetch team review requests for enabled teams.
+		enabledTeams, err := p.db.GetEnabledTeamSlugs(org)
+		if err == nil {
+			for _, team := range enabledTeams {
+				if prs, err := client.GetTeamReviewRequests(ctx, org, team, filterBots); err == nil {
+					result.TeamReviewRequests = append(result.TeamReviewRequests, prs...)
+					_ = p.db.UpsertPullRequests(prs)
+				} else if isRateLimited(err) {
+					log.Printf("poller: rate limited, stopping this cycle")
+					return
+				}
+
+				if !sleep(ctx, requestDelay) {
+					return
+				}
+			}
 		}
 	}
 
@@ -308,6 +341,44 @@ func (p *Poller) poll(ctx context.Context) {
 	}
 
 	emit(ctx, PollerEvent, result)
+
+	// Sync org members cache if stale (daily).
+	p.syncOrgMembersIfNeeded(ctx, client, orgs)
+}
+
+// syncOrgMembersIfNeeded checks each tracked org and refreshes the member
+// cache if it is older than memberSyncInterval.
+func (p *Poller) syncOrgMembersIfNeeded(ctx context.Context, client *gh.Client, orgs []string) {
+	for _, org := range orgs {
+		syncedAt, err := p.db.GetOrgMembersSyncedAt(org)
+		if err != nil {
+			continue
+		}
+
+		if !syncedAt.IsZero() && time.Since(syncedAt) < memberSyncInterval {
+			continue
+		}
+
+		if !sleep(ctx, requestDelay) {
+			return
+		}
+
+		members, err := client.ListOrgMembers(ctx, org)
+		if err != nil {
+			if isRateLimited(err) {
+				log.Printf("poller: rate limited syncing org members for %s", org)
+				return
+			}
+			log.Printf("poller: sync org members for %s: %v", org, err)
+			continue
+		}
+
+		if err := p.db.UpsertOrgMembers(org, members); err != nil {
+			log.Printf("poller: store org members for %s: %v", org, err)
+		} else {
+			log.Printf("poller: synced %d members for org %s", len(members), org)
+		}
+	}
 }
 
 // ---- Change detection ----

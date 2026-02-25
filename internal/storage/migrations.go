@@ -94,6 +94,31 @@ var migrations = []string{
 	CREATE INDEX IF NOT EXISTS idx_reviews_pr ON reviews(pr_node_id);
 	CREATE INDEX IF NOT EXISTS idx_review_requests_pr ON review_requests(pr_node_id);
 	CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);`,
+
+	// Migration 2: Org members cache for reviewer assignment.
+	`CREATE TABLE IF NOT EXISTS org_members (
+		node_id    TEXT NOT NULL,
+		org_name   TEXT NOT NULL,
+		login      TEXT NOT NULL,
+		name       TEXT,
+		avatar_url TEXT,
+		synced_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (org_name, login)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_name);`,
+
+	// Migration 3: Tracked teams for team review request filtering.
+	`CREATE TABLE IF NOT EXISTS tracked_teams (
+		id        INTEGER PRIMARY KEY AUTOINCREMENT,
+		org_name  TEXT NOT NULL,
+		team_slug TEXT NOT NULL,
+		team_name TEXT NOT NULL,
+		enabled   INTEGER DEFAULT 1,
+		UNIQUE(org_name, team_slug)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_tracked_teams_org ON tracked_teams(org_name);`,
 }
 
 // Migrate runs all pending migrations.

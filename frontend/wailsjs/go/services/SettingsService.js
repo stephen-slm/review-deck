@@ -14,10 +14,18 @@ export function GetTrackedOrgs() {
   return window['go']['services']['SettingsService']['GetTrackedOrgs']();
 }
 
+export function GetTrackedTeams(arg1) {
+  return window['go']['services']['SettingsService']['GetTrackedTeams'](arg1);
+}
+
 export function RemoveTrackedOrg(arg1) {
   return window['go']['services']['SettingsService']['RemoveTrackedOrg'](arg1);
 }
 
 export function SetSetting(arg1, arg2) {
   return window['go']['services']['SettingsService']['SetSetting'](arg1, arg2);
+}
+
+export function SetTeamEnabled(arg1, arg2, arg3) {
+  return window['go']['services']['SettingsService']['SetTeamEnabled'](arg1, arg2, arg3);
 }

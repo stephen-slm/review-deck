@@ -134,7 +134,7 @@ func (s *PullRequestService) GetMyPRs(org string) ([]gh.PullRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetMyOpenPRs(context.Background(), org, login)
+	prs, err := s.client.GetMyOpenPRs(context.Background(), org, login, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs: %w", err)
 	}
@@ -149,7 +149,7 @@ func (s *PullRequestService) GetMyRecentMerged(org string, daysBack int) ([]gh.P
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, login, since)
+	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, login, since, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs: %w", err)
 	}
@@ -163,7 +163,7 @@ func (s *PullRequestService) GetReviewRequests(org string) ([]gh.PullRequest, er
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login)
+	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -176,7 +176,7 @@ func (s *PullRequestService) GetTeamReviewRequests(org, team string) ([]gh.PullR
 	if s.client == nil {
 		return nil, fmt.Errorf("not authenticated")
 	}
-	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team)
+	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch team review requests: %w", err)
 	}
@@ -190,7 +190,7 @@ func (s *PullRequestService) GetReviewedByMe(org string) ([]gh.PullRequest, erro
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewedByUser(context.Background(), org, login)
+	prs, err := s.client.GetReviewedByUser(context.Background(), org, login, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
@@ -234,10 +234,64 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 }
 
 // SearchOrgMembers returns org members matching a search query.
+// Searches the local DB cache first; falls back to the GitHub API if the cache is empty.
 func (s *PullRequestService) SearchOrgMembers(org string, query string) ([]gh.User, error) {
 	if s.client == nil {
 		return nil, fmt.Errorf("not authenticated")
 	}
 
+	// Check if we have cached members for this org.
+	count, _ := s.db.GetOrgMemberCount(org)
+	if count > 0 {
+		return s.db.SearchOrgMembers(org, query)
+	}
+
+	// No cache yet — trigger a background sync and fall back to API search.
+	go func() { _ = s.SyncOrgMembers(org) }()
 	return s.client.SearchOrgMembers(context.Background(), org, query)
+}
+
+// SyncOrgMembers fetches all members of an organization from GitHub and
+// stores them in the local database cache.
+func (s *PullRequestService) SyncOrgMembers(org string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+
+	members, err := s.client.ListOrgMembers(context.Background(), org)
+	if err != nil {
+		return fmt.Errorf("list org members for %s: %w", org, err)
+	}
+
+	return s.db.UpsertOrgMembers(org, members)
+}
+
+// SyncOrgMembersIfStale syncs org members only if the cache is older than maxAge.
+func (s *PullRequestService) SyncOrgMembersIfStale(org string, maxAge time.Duration) error {
+	syncedAt, err := s.db.GetOrgMembersSyncedAt(org)
+	if err != nil {
+		return err
+	}
+
+	if !syncedAt.IsZero() && time.Since(syncedAt) < maxAge {
+		return nil // cache is fresh
+	}
+
+	return s.SyncOrgMembers(org)
+}
+
+// SyncTeamsForOrg fetches the viewer's teams from GitHub and upserts them
+// into the tracked_teams table. New teams are enabled by default; existing
+// teams keep their current enabled state.
+func (s *PullRequestService) SyncTeamsForOrg(org string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+
+	teams, err := s.client.GetViewerTeams(context.Background(), org)
+	if err != nil {
+		return fmt.Errorf("get teams for %s: %w", org, err)
+	}
+
+	return s.db.UpsertTrackedTeams(org, teams)
 }

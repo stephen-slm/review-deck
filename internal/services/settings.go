@@ -38,3 +38,13 @@ func (s *SettingsService) AddTrackedOrg(org string) error {
 func (s *SettingsService) RemoveTrackedOrg(org string) error {
 	return s.db.RemoveTrackedOrg(org)
 }
+
+// GetTrackedTeams returns all tracked teams for an org (enabled and disabled).
+func (s *SettingsService) GetTrackedTeams(org string) ([]storage.TrackedTeam, error) {
+	return s.db.GetTrackedTeams(org)
+}
+
+// SetTeamEnabled enables or disables a tracked team.
+func (s *SettingsService) SetTeamEnabled(org, slug string, enabled bool) error {
+	return s.db.SetTeamEnabled(org, slug, enabled)
+}

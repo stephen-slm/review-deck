@@ -9,3 +9,7 @@ export function StartPoller() {
 export function StopPoller() {
   return window['go']['main']['App']['StopPoller']();
 }
+
+export function SyncOrgMembers(arg1) {
+  return window['go']['main']['App']['SyncOrgMembers'](arg1);
+}

@@ -38,24 +38,37 @@ export function usePollerEvents() {
       }
 
       const state = usePRStore.getState();
+      const noMorePages = { endCursor: "", hasNextPage: false, totalCount: 0 };
 
+      // The poller fetches ALL pages, so replace the data and reset pagination
+      // state (cursors are no longer valid for the poller's complete result set).
       if (result.myPRs) {
-        usePRStore.setState({ myPRs: result.myPRs as typeof state.myPRs });
+        const prs = result.myPRs as typeof state.myPRs;
+        usePRStore.setState((s) => ({
+          myPRs: prs,
+          pageState: { ...s.pageState, myPRs: { ...noMorePages, totalCount: prs.length } },
+        }));
       }
       if (result.reviewRequests) {
-        usePRStore.setState({
-          reviewRequests: result.reviewRequests as typeof state.reviewRequests,
-        });
+        const prs = result.reviewRequests as typeof state.reviewRequests;
+        usePRStore.setState((s) => ({
+          reviewRequests: prs,
+          pageState: { ...s.pageState, reviewRequests: { ...noMorePages, totalCount: prs.length } },
+        }));
       }
       if (result.reviewedByMe) {
-        usePRStore.setState({
-          reviewedByMe: result.reviewedByMe as typeof state.reviewedByMe,
-        });
+        const prs = result.reviewedByMe as typeof state.reviewedByMe;
+        usePRStore.setState((s) => ({
+          reviewedByMe: prs,
+          pageState: { ...s.pageState, reviewedByMe: { ...noMorePages, totalCount: prs.length } },
+        }));
       }
       if (result.recentMerged) {
-        usePRStore.setState({
-          myRecentMerged: result.recentMerged as typeof state.myRecentMerged,
-        });
+        const prs = result.recentMerged as typeof state.myRecentMerged;
+        usePRStore.setState((s) => ({
+          myRecentMerged: prs,
+          pageState: { ...s.pageState, myRecentMerged: { ...noMorePages, totalCount: prs.length } },
+        }));
       }
     };
 

@@ -8,7 +8,16 @@ import { RefreshCw, AlertCircle } from "lucide-react";
 export function ReviewedByMePage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
-  const { reviewedByMe, isLoadingReviewedByMe, error, fetchReviewedByMe, fetchIfStale, clearError } = usePRStore();
+  const {
+    reviewedByMe,
+    pageState,
+    isLoadingReviewedByMe,
+    error,
+    fetchReviewedByMe,
+    loadMoreReviewedByMe,
+    fetchIfStale,
+    clearError,
+  } = usePRStore();
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -16,6 +25,12 @@ export function ReviewedByMePage() {
       fetchReviewedByMe(org);
     }
   }, [orgs, fetchReviewedByMe, clearError]);
+
+  const handleLoadMore = useCallback(() => {
+    for (const org of orgs) {
+      loadMoreReviewedByMe(org);
+    }
+  }, [orgs, loadMoreReviewedByMe]);
 
   useEffect(() => {
     loadOrgs();
@@ -86,6 +101,8 @@ export function ReviewedByMePage() {
         isLoading={isLoadingReviewedByMe}
         showAuthor
         emptyMessage="No reviewed pull requests found."
+        serverPageInfo={pageState.reviewedByMe}
+        onLoadMore={handleLoadMore}
       />
     </div>
   );

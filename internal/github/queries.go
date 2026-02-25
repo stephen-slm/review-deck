@@ -260,33 +260,33 @@ func (c *Client) searchPRsPage(ctx context.Context, queryStr string, pageSize in
 // ---- Fetch-all variants (used by poller) ----
 
 // GetMyOpenPRs returns ALL open PRs authored by the given user in the given org.
-func (c *Client) GetMyOpenPRs(ctx context.Context, org, user string) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr author:%s is:open org:%s sort:updated-desc", user, org)
+func (c *Client) GetMyOpenPRs(ctx context.Context, org, user string, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr author:%s is:open org:%s sort:updated-desc", user, org), filterBots)
 	return c.searchAllPRs(ctx, query)
 }
 
 // GetMyRecentMergedPRs returns ALL recently merged PRs authored by the given user.
-func (c *Client) GetMyRecentMergedPRs(ctx context.Context, org, user string, since time.Time) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr author:%s is:merged merged:>=%s org:%s sort:updated-desc",
-		user, since.Format("2006-01-02"), org)
+func (c *Client) GetMyRecentMergedPRs(ctx context.Context, org, user string, since time.Time, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr author:%s is:merged merged:>=%s org:%s sort:updated-desc",
+		user, since.Format("2006-01-02"), org), filterBots)
 	return c.searchAllPRs(ctx, query)
 }
 
 // GetReviewRequestsForUser returns ALL open PRs where the user has a pending review request.
-func (c *Client) GetReviewRequestsForUser(ctx context.Context, org, user string) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org)
+func (c *Client) GetReviewRequestsForUser(ctx context.Context, org, user string, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org), filterBots)
 	return c.searchAllPRs(ctx, query)
 }
 
 // GetTeamReviewRequests returns ALL open PRs where the given team has a pending review request.
-func (c *Client) GetTeamReviewRequests(ctx context.Context, org, team string) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org)
+func (c *Client) GetTeamReviewRequests(ctx context.Context, org, team string, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org), filterBots)
 	return c.searchAllPRs(ctx, query)
 }
 
 // GetReviewedByUser returns ALL open PRs that the user has reviewed.
-func (c *Client) GetReviewedByUser(ctx context.Context, org, user string) ([]PullRequest, error) {
-	query := fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org)
+func (c *Client) GetReviewedByUser(ctx context.Context, org, user string, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org), filterBots)
 	return c.searchAllPRs(ctx, query)
 }
 

@@ -8,7 +8,16 @@ import { RefreshCw, AlertCircle } from "lucide-react";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
-  const { myPRs, isLoadingMyPRs, error, fetchMyPRs, fetchIfStale, clearError } = usePRStore();
+  const {
+    myPRs,
+    pageState,
+    isLoadingMyPRs,
+    error,
+    fetchMyPRs,
+    loadMoreMyPRs,
+    fetchIfStale,
+    clearError,
+  } = usePRStore();
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -16,6 +25,12 @@ export function MyPRsPage() {
       fetchMyPRs(org);
     }
   }, [orgs, fetchMyPRs, clearError]);
+
+  const handleLoadMore = useCallback(() => {
+    for (const org of orgs) {
+      loadMoreMyPRs(org);
+    }
+  }, [orgs, loadMoreMyPRs]);
 
   useEffect(() => {
     loadOrgs();
@@ -88,6 +103,8 @@ export function MyPRsPage() {
         showMerge
         showAssignReviewer
         onRefresh={forceRefresh}
+        serverPageInfo={pageState.myPRs}
+        onLoadMore={handleLoadMore}
       />
     </div>
   );

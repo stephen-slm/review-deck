@@ -12,7 +12,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -23,6 +23,11 @@ import { ReviewerAssign } from "./ReviewerAssign";
 
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25] as const;
 
+interface ServerPageInfo {
+  hasNextPage: boolean;
+  totalCount: number;
+}
+
 interface PRTableProps {
   data: github.PullRequest[];
   isLoading: boolean;
@@ -32,6 +37,10 @@ interface PRTableProps {
   showAssignReviewer?: boolean;
   onRefresh?: () => void;
   defaultPageSize?: number;
+  /** Server-side pagination info. When provided, the table shows total count and a "Load more" trigger. */
+  serverPageInfo?: ServerPageInfo;
+  /** Called when the user navigates past the currently loaded data and more server pages exist. */
+  onLoadMore?: () => void;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -45,6 +54,8 @@ export function PRTable({
   showAssignReviewer = false,
   onRefresh,
   defaultPageSize = 10,
+  serverPageInfo,
+  onLoadMore,
 }: PRTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -222,6 +233,23 @@ export function PRTable({
     getPaginationRowModel: getPaginationRowModel(),
   });
 
+  // Determine if the user is on the last client page and more server data is available.
+  const isOnLastClientPage = !table.getCanNextPage();
+  const canLoadMore = !!serverPageInfo?.hasNextPage && !!onLoadMore;
+  const totalCount = serverPageInfo?.totalCount ?? data.length;
+
+  // Handle "next": if at the end of client data and server has more, load more first.
+  const handleNext = () => {
+    if (isOnLastClientPage && canLoadMore) {
+      onLoadMore!();
+    } else {
+      table.nextPage();
+    }
+  };
+
+  // Can go forward if TanStack has more pages OR if the server has more data to fetch.
+  const canGoNext = table.getCanNextPage() || canLoadMore;
+
   return (
     <div className="space-y-3">
       {/* Search bar */}
@@ -269,7 +297,7 @@ export function PRTable({
             ))}
           </thead>
           <tbody>
-            {isLoading ? (
+            {isLoading && data.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
@@ -327,9 +355,12 @@ export function PRTable({
 
           <div className="flex items-center gap-1">
             <span className="mr-2 text-xs text-muted-foreground">
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
+              {data.length} loaded{totalCount > data.length ? ` of ${totalCount}` : ""}
+              {" "}&middot; Page {table.getState().pagination.pageIndex + 1} of{" "}
               {table.getPageCount() || 1}
-              {" "}({table.getFilteredRowModel().rows.length} result{table.getFilteredRowModel().rows.length !== 1 ? "s" : ""})
+              {isLoading && (
+                <Loader2 className="ml-1 inline h-3 w-3 animate-spin" />
+              )}
             </span>
             <button
               onClick={() => table.setPageIndex(0)}
@@ -348,20 +379,12 @@ export function PRTable({
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              onClick={handleNext}
+              disabled={!canGoNext || isLoading}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
-              title="Next page"
+              title={isOnLastClientPage && canLoadMore ? "Load more from GitHub" : "Next page"}
             >
               <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-              disabled={!table.getCanNextPage()}
-              className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
-              title="Last page"
-            >
-              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>

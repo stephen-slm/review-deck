@@ -8,7 +8,16 @@ import { RefreshCw, AlertCircle } from "lucide-react";
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
-  const { reviewRequests, isLoadingReviewRequests, error, fetchReviewRequests, fetchIfStale, clearError } = usePRStore();
+  const {
+    reviewRequests,
+    pageState,
+    isLoadingReviewRequests,
+    error,
+    fetchReviewRequests,
+    loadMoreReviewRequests,
+    fetchIfStale,
+    clearError,
+  } = usePRStore();
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -16,6 +25,12 @@ export function ReviewRequestsPage() {
       fetchReviewRequests(org);
     }
   }, [orgs, fetchReviewRequests, clearError]);
+
+  const handleLoadMore = useCallback(() => {
+    for (const org of orgs) {
+      loadMoreReviewRequests(org);
+    }
+  }, [orgs, loadMoreReviewRequests]);
 
   useEffect(() => {
     loadOrgs();
@@ -86,6 +101,8 @@ export function ReviewRequestsPage() {
         isLoading={isLoadingReviewRequests}
         showAuthor
         emptyMessage="No pending review requests."
+        serverPageInfo={pageState.reviewRequests}
+        onLoadMore={handleLoadMore}
       />
     </div>
   );

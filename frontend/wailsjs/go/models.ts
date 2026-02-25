@@ -295,3 +295,26 @@ export namespace github {
 
 }
 
+export namespace storage {
+	
+	export class TrackedTeam {
+	    orgName: string;
+	    teamSlug: string;
+	    teamName: string;
+	    enabled: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrackedTeam(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.orgName = source["orgName"];
+	        this.teamSlug = source["teamSlug"];
+	        this.teamName = source["teamName"];
+	        this.enabled = source["enabled"];
+	    }
+	}
+
+}
+
