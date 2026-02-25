@@ -58,14 +58,11 @@ func (s *PullRequestService) filterBotsEnabled() bool {
 
 // GetMyPRsPage returns a single page of open PRs authored by the current user.
 func (s *PullRequestService) GetMyPRsPage(org string, pageSize int, cursor string) (*gh.PRPage, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
-		return nil, fmt.Errorf("get viewer: %w", err)
+		return nil, err
 	}
-	page, err := s.client.GetMyOpenPRsPage(context.Background(), org, viewer.Login, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyOpenPRsPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs: %w", err)
 	}
@@ -75,15 +72,12 @@ func (s *PullRequestService) GetMyPRsPage(org string, pageSize int, cursor strin
 
 // GetMyRecentMergedPage returns a single page of recently merged PRs by the current user.
 func (s *PullRequestService) GetMyRecentMergedPage(org string, daysBack int, pageSize int, cursor string) (*gh.PRPage, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	page, err := s.client.GetMyRecentMergedPRsPage(context.Background(), org, viewer.Login, since, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyRecentMergedPRsPage(context.Background(), org, login, since, pageSize, cursor, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs: %w", err)
 	}
@@ -93,14 +87,11 @@ func (s *PullRequestService) GetMyRecentMergedPage(org string, daysBack int, pag
 
 // GetReviewRequestsPage returns a single page of PRs awaiting the current user's review.
 func (s *PullRequestService) GetReviewRequestsPage(org string, pageSize int, cursor string) (*gh.PRPage, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewRequestsPage(context.Background(), org, viewer.Login, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewRequestsPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -123,14 +114,11 @@ func (s *PullRequestService) GetTeamReviewRequestsPage(org, team string, pageSiz
 
 // GetReviewedByMePage returns a single page of open PRs reviewed by the current user.
 func (s *PullRequestService) GetReviewedByMePage(org string, pageSize int, cursor string) (*gh.PRPage, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewedByUserPage(context.Background(), org, viewer.Login, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewedByUserPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled())
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
@@ -142,14 +130,11 @@ func (s *PullRequestService) GetReviewedByMePage(org string, pageSize int, curso
 
 // GetMyPRs fetches ALL open PRs authored by the current user (used by poller).
 func (s *PullRequestService) GetMyPRs(org string) ([]gh.PullRequest, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
-		return nil, fmt.Errorf("get viewer: %w", err)
+		return nil, err
 	}
-	prs, err := s.client.GetMyOpenPRs(context.Background(), org, viewer.Login)
+	prs, err := s.client.GetMyOpenPRs(context.Background(), org, login)
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs: %w", err)
 	}
@@ -159,15 +144,12 @@ func (s *PullRequestService) GetMyPRs(org string) ([]gh.PullRequest, error) {
 
 // GetMyRecentMerged returns ALL recently merged PRs (used by poller).
 func (s *PullRequestService) GetMyRecentMerged(org string, daysBack int) ([]gh.PullRequest, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, viewer.Login, since)
+	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, login, since)
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs: %w", err)
 	}
@@ -177,14 +159,11 @@ func (s *PullRequestService) GetMyRecentMerged(org string, daysBack int) ([]gh.P
 
 // GetReviewRequests returns ALL pending review requests (used by poller).
 func (s *PullRequestService) GetReviewRequests(org string) ([]gh.PullRequest, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, viewer.Login)
+	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login)
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -207,14 +186,11 @@ func (s *PullRequestService) GetTeamReviewRequests(org, team string) ([]gh.PullR
 
 // GetReviewedByMe returns ALL open PRs reviewed by the current user (used by poller).
 func (s *PullRequestService) GetReviewedByMe(org string) ([]gh.PullRequest, error) {
-	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
-	}
-	viewer, err := s.client.GetViewer(context.Background())
+	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewedByUser(context.Background(), org, viewer.Login)
+	prs, err := s.client.GetReviewedByUser(context.Background(), org, login)
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}

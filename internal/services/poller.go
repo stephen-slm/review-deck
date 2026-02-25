@@ -50,9 +50,10 @@ type Poller struct {
 	db     *storage.DB
 	client *gh.Client
 
-	interval time.Duration
-	emit     EventEmitter
-	ctx      context.Context
+	interval    time.Duration
+	emit        EventEmitter
+	ctx         context.Context
+	viewerLogin string // cached viewer login, cleared on client change
 
 	mu       sync.Mutex
 	cancel   context.CancelFunc
@@ -106,11 +107,12 @@ func (p *Poller) SetInterval(minutes int) {
 	}
 }
 
-// SetClient updates the GitHub client used for polling.
+// SetClient updates the GitHub client used for polling and clears the cached viewer.
 func (p *Poller) SetClient(client *gh.Client) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.client = client
+	p.viewerLogin = "" // clear cache on client change
 
 	if client == nil {
 		p.stopLocked()
@@ -214,24 +216,35 @@ func (p *Poller) poll(ctx context.Context) {
 		return
 	}
 
-	viewer, err := client.GetViewer(ctx)
-	if err != nil {
-		if isRateLimited(err) {
-			log.Printf("poller: rate limited on viewer query, backing off")
+	// Use cached viewer login; fetch once per client lifetime.
+	p.mu.Lock()
+	login := p.viewerLogin
+	p.mu.Unlock()
+
+	if login == "" {
+		viewer, err := client.GetViewer(ctx)
+		if err != nil {
+			if isRateLimited(err) {
+				log.Printf("poller: rate limited on viewer query, backing off")
+				return
+			}
+			log.Printf("poller: get viewer: %v", err)
+			emit(ctx, PollerEvent, PollResult{
+				Error:     err.Error(),
+				Timestamp: time.Now(),
+			})
 			return
 		}
-		log.Printf("poller: get viewer: %v", err)
-		emit(ctx, PollerEvent, PollResult{
-			Error:     err.Error(),
-			Timestamp: time.Now(),
-		})
-		return
+		login = viewer.Login
+		p.mu.Lock()
+		p.viewerLogin = login
+		p.mu.Unlock()
 	}
 
 	result := PollResult{Timestamp: time.Now()}
 
 	for _, org := range orgs {
-		if prs, err := client.GetMyOpenPRs(ctx, org, viewer.Login); err == nil {
+		if prs, err := client.GetMyOpenPRs(ctx, org, login); err == nil {
 			result.MyPRs = append(result.MyPRs, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -243,7 +256,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewRequestsForUser(ctx, org, viewer.Login); err == nil {
+		if prs, err := client.GetReviewRequestsForUser(ctx, org, login); err == nil {
 			result.ReviewRequests = append(result.ReviewRequests, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -255,7 +268,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewedByUser(ctx, org, viewer.Login); err == nil {
+		if prs, err := client.GetReviewedByUser(ctx, org, login); err == nil {
 			result.ReviewedByMe = append(result.ReviewedByMe, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -268,7 +281,7 @@ func (p *Poller) poll(ctx context.Context) {
 		}
 
 		since := time.Now().AddDate(0, 0, -14)
-		if prs, err := client.GetMyRecentMergedPRs(ctx, org, viewer.Login, since); err == nil {
+		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, since); err == nil {
 			result.RecentMerged = append(result.RecentMerged, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
