@@ -37,6 +37,12 @@ export interface VimState {
   onCopy: (() => void) | null;
   /** Hide/dismiss PR at index — called by 'x' keybinding. */
   onHide: ((index: number) => void) | null;
+  /** Space override — used by files tab to toggle expand/collapse. Falls back to togglePick. */
+  onSpace: (() => void) | null;
+  /** Direct tab selection by number (1-based). Used on detail page for 1-4. */
+  onTabDirect: ((index: number) => void) | null;
+  /** Toggle draft PR visibility — called by 't' keybinding. */
+  onToggleDrafts: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -65,7 +71,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -88,13 +94,16 @@ const emptyActions = {
   onApprove: null,
   onCopy: null,
   onHide: null,
+  onSpace: null,
+  onTabDirect: null,
+  onToggleDrafts: null,
   onEscape: null,
 };
 
 export const useVimStore = create<VimState>((set, get) => ({
   selectedIndex: -1,
   listLength: 0,
-  showHints: true,
+  showHints: false,
   visualMode: false,
   visualAnchor: -1,
   pickedIndices: new Set<number>(),

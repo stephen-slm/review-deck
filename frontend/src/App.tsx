@@ -26,6 +26,7 @@ function AppContent() {
     usePRStore.getState().loadCacheTimestamps();
     usePRStore.getState().loadHiddenPRs();
     useSettingsStore.getState().loadHideStackedPRs();
+    useSettingsStore.getState().loadHideDraftPRs();
   }, []);
 
   return (

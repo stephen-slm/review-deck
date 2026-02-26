@@ -30,6 +30,7 @@ interface SettingsState {
   orgs: string[];
   filterBots: boolean;
   hideStackedPRs: boolean;
+  hideDraftPRs: boolean;
   hideCopilotReviews: boolean;
   theme: ThemeChoice;
   cacheTTLMinutes: number;
@@ -47,6 +48,8 @@ interface SettingsState {
   setFilterBots: (enabled: boolean) => Promise<void>;
   loadHideStackedPRs: () => Promise<void>;
   setHideStackedPRs: (enabled: boolean) => Promise<void>;
+  loadHideDraftPRs: () => Promise<void>;
+  setHideDraftPRs: (enabled: boolean) => Promise<void>;
   loadHideCopilotReviews: () => Promise<void>;
   setHideCopilotReviews: (enabled: boolean) => Promise<void>;
   loadTheme: () => Promise<void>;
@@ -83,6 +86,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
   filterBots: false,
   hideStackedPRs: false,
+  hideDraftPRs: false,
   hideCopilotReviews: false,
   theme: DEFAULT_THEME,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
@@ -139,6 +143,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setHideStackedPRs: async (enabled: boolean) => {
     await SetSetting("hide_stacked_prs", enabled ? "true" : "false");
     set({ hideStackedPRs: enabled });
+  },
+
+  loadHideDraftPRs: async () => {
+    try {
+      const val = await GetSetting("hide_draft_prs");
+      set({ hideDraftPRs: val === "true" });
+    } catch {
+      set({ hideDraftPRs: false });
+    }
+  },
+
+  setHideDraftPRs: async (enabled: boolean) => {
+    await SetSetting("hide_draft_prs", enabled ? "true" : "false");
+    set({ hideDraftPRs: enabled });
   },
 
   loadHideCopilotReviews: async () => {

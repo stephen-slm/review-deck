@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useVimStore } from "@/stores/vimStore";
 
@@ -6,84 +7,145 @@ interface Hint {
   label: string;
 }
 
+interface HintGroup {
+  title: string;
+  hints: Hint[];
+}
+
 const GLOBAL_HINTS: Hint[] = [
-  { keys: "1-6", label: "tabs" },
-  { keys: "J/K", label: "scroll" },
-  { keys: "?", label: "toggle hints" },
+  { keys: "\u2318+1-6", label: "switch sidebar tabs" },
+  { keys: "Shift+J/K", label: "smooth scroll" },
+  { keys: "?", label: "toggle this popup" },
 ];
 
 const LIST_HINTS: Hint[] = [
-  { keys: "j/k", label: "navigate" },
-  { keys: "Enter/l", label: "open" },
-  { keys: "o", label: "GitHub" },
-  { keys: "/", label: "search" },
-  { keys: "gg/G", label: "top/bottom" },
-  { keys: "n/N", label: "page" },
+  { keys: "j/k", label: "navigate rows" },
+  { keys: "Enter/l", label: "open PR" },
+  { keys: "o", label: "open in GitHub" },
+  { keys: "/", label: "focus search" },
+  { keys: "gg/G", label: "jump to top/bottom" },
+  { keys: "n/N", label: "next/prev page" },
   { keys: "r", label: "refresh" },
   { keys: "v", label: "visual select" },
   { keys: "Space", label: "toggle pick" },
-  { keys: "c", label: "copy" },
+  { keys: "c", label: "copy selection" },
+  { keys: "t", label: "toggle drafts" },
+];
+
+const REVIEW_REQUEST_HINTS: Hint[] = [
+  { keys: "x", label: "hide review request" },
 ];
 
 const DETAIL_HINTS: Hint[] = [
+  { keys: "1-4", label: "switch tab" },
   { keys: "h/l", label: "prev/next tab" },
-  { keys: "j/k", label: "scroll/navigate" },
-  { keys: "Enter", label: "open" },
-  { keys: "gg/G", label: "top/bottom" },
-  { keys: "Backspace", label: "back" },
+  { keys: "j/k", label: "scroll / navigate items" },
+  { keys: "Space", label: "toggle expand file" },
+  { keys: "Enter", label: "open item" },
+  { keys: "gg/G", label: "jump to top/bottom" },
+  { keys: "Backspace", label: "go back" },
   { keys: "r", label: "refresh" },
-  { keys: "o", label: "GitHub" },
+  { keys: "o", label: "open in GitHub" },
   { keys: "a", label: "assign reviewer" },
   { keys: "m", label: "merge" },
   { keys: "A", label: "approve" },
 ];
 
 const SCROLL_HINTS: Hint[] = [
-  { keys: "j/k", label: "scroll" },
+  { keys: "j/k", label: "scroll page" },
 ];
 
-function getHintsForPath(pathname: string): Hint[] {
-  // PR detail page
+function getHintGroupsForPath(pathname: string): HintGroup[] {
   if (pathname.startsWith("/pr/")) {
-    return [...DETAIL_HINTS, ...GLOBAL_HINTS];
+    return [
+      { title: "PR Detail", hints: DETAIL_HINTS },
+      { title: "Global", hints: GLOBAL_HINTS },
+    ];
   }
-  // Review requests page has hide shortcut
   if (pathname === "/review-requests") {
-    return [...LIST_HINTS, { keys: "x", label: "hide" }, ...GLOBAL_HINTS];
+    return [
+      { title: "List Navigation", hints: LIST_HINTS },
+      { title: "Review Requests", hints: REVIEW_REQUEST_HINTS },
+      { title: "Global", hints: GLOBAL_HINTS },
+    ];
   }
-  // Other pages with PRTable
-  if (
-    pathname === "/my-prs" ||
-    pathname === "/reviewed"
-  ) {
-    return [...LIST_HINTS, ...GLOBAL_HINTS];
+  if (pathname === "/my-prs" || pathname === "/reviewed") {
+    return [
+      { title: "List Navigation", hints: LIST_HINTS },
+      { title: "Global", hints: GLOBAL_HINTS },
+    ];
   }
-  // Metrics and settings support j/k scrolling
   if (pathname === "/metrics" || pathname === "/settings") {
-    return [...SCROLL_HINTS, ...GLOBAL_HINTS];
+    return [
+      { title: "Page", hints: SCROLL_HINTS },
+      { title: "Global", hints: GLOBAL_HINTS },
+    ];
   }
-  // Dashboard and fallback — no page-specific actions
-  return GLOBAL_HINTS;
+  return [{ title: "Global", hints: GLOBAL_HINTS }];
 }
 
 export function ShortcutHintBar() {
   const showHints = useVimStore((s) => s.showHints);
+  const toggleHints = useVimStore((s) => s.toggleHints);
   const { pathname } = useLocation();
+
+  // Close on Escape
+  useEffect(() => {
+    if (!showHints) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        toggleHints();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showHints, toggleHints]);
 
   if (!showHints) return null;
 
-  const hints = getHintsForPath(pathname);
+  const groups = getHintGroupsForPath(pathname);
 
   return (
-    <div className="flex shrink-0 items-center gap-3 border-t border-border bg-card/80 px-3 py-1">
-      {hints.map((hint) => (
-        <span key={hint.keys} className="flex items-center gap-1 text-[11px] text-muted-foreground">
-          <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] font-medium text-foreground">
-            {hint.keys}
+    // Backdrop
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      onClick={toggleHints}
+    >
+      {/* Modal */}
+      <div
+        className="w-full max-w-md rounded-xl border border-border bg-card shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Keyboard Shortcuts</h2>
+          <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            ? to close
           </kbd>
-          <span>{hint.label}</span>
-        </span>
-      ))}
+        </div>
+
+        {/* Body */}
+        <div className="max-h-[60vh] overflow-y-auto px-5 py-3 space-y-4">
+          {groups.map((group) => (
+            <div key={group.title}>
+              <h3 className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {group.title}
+              </h3>
+              <div className="space-y-0.5">
+                {group.hints.map((hint) => (
+                  <div key={hint.keys} className="flex items-center justify-between py-0.5">
+                    <span className="text-sm text-foreground">{hint.label}</span>
+                    <kbd className="min-w-[3rem] rounded bg-muted px-2 py-0.5 text-center font-mono text-xs font-medium text-foreground">
+                      {hint.keys}
+                    </kbd>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

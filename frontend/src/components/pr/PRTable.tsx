@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -85,10 +85,13 @@ export function PRTable({
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
+  const globalHideDrafts = useSettingsStore((s) => s.hideDraftPRs);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
   const [localHideStacked, setLocalHideStacked] = useState<boolean | null>(null);
+  const [localHideDrafts, setLocalHideDrafts] = useState<boolean | null>(null);
   const hideStacked = localHideStacked ?? globalHideStacked;
+  const hideDrafts = localHideDrafts ?? globalHideDrafts;
   const { copiedKey, flash } = useCopyFeedback();
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
@@ -99,17 +102,20 @@ export function PRTable({
   const visualAnchor = useVimStore((s) => s.visualAnchor);
   const pickedIndices = useVimStore((s) => s.pickedIndices);
 
-  // Filter out stacked PRs and hidden PRs.
+  // Filter out stacked PRs, draft PRs, and hidden PRs.
   const filteredData = useMemo(() => {
     let result = data;
     if (hideStacked) {
       result = result.filter((pr) => DEFAULT_BRANCHES.has(pr.baseRef));
     }
+    if (hideDrafts) {
+      result = result.filter((pr) => !pr.isDraft);
+    }
     if (hiddenPRs && hiddenPRs.size > 0) {
       result = result.filter((pr) => !hiddenPRs.has(pr.nodeId));
     }
     return result;
-  }, [data, hideStacked, hiddenPRs]);
+  }, [data, hideStacked, hideDrafts, hiddenPRs]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -152,6 +158,7 @@ export function PRTable({
         const pr = getRows()[index];
         if (pr) onHide(pr.nodeId);
       } : null,
+      onToggleDrafts: () => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts)),
     });
 
     return () => useVimStore.getState().clearActions();
@@ -442,6 +449,18 @@ export function PRTable({
         >
           <Layers className="h-3.5 w-3.5" />
           {hideStacked ? "Stacked hidden" : "Show all"}
+        </button>
+        <button
+          onClick={() => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts))}
+          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+            hideDrafts
+              ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+              : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          }`}
+          title={hideDrafts ? "Draft PRs hidden (click to show)" : "Showing all PRs (click to hide drafts)"}
+        >
+          <PenLine className="h-3.5 w-3.5" />
+          {hideDrafts ? "Drafts hidden" : "Drafts"}
         </button>
         {data.length > 0 && (
           <div className="relative" ref={copyMenuRef}>

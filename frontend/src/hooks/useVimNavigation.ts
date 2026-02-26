@@ -49,13 +49,19 @@ export function useVimNavigation() {
     const store = useVimStore.getState;
 
     const unsubscribe = tinykeys(window, {
-      // ---- Global: Tab navigation (1-6) ----
-      "1": vim(() => navigate(TAB_ROUTES[0])),
-      "2": vim(() => navigate(TAB_ROUTES[1])),
-      "3": vim(() => navigate(TAB_ROUTES[2])),
-      "4": vim(() => navigate(TAB_ROUTES[3])),
-      "5": vim(() => navigate(TAB_ROUTES[4])),
-      "6": vim(() => navigate(TAB_ROUTES[5])),
+      // ---- Global: Tab navigation (Cmd+1 through Cmd+6) ----
+      "$mod+1": vim(() => navigate(TAB_ROUTES[0])),
+      "$mod+2": vim(() => navigate(TAB_ROUTES[1])),
+      "$mod+3": vim(() => navigate(TAB_ROUTES[2])),
+      "$mod+4": vim(() => navigate(TAB_ROUTES[3])),
+      "$mod+5": vim(() => navigate(TAB_ROUTES[4])),
+      "$mod+6": vim(() => navigate(TAB_ROUTES[5])),
+
+      // ---- Page tab navigation (1-4) — only active when a page registers onTabDirect ----
+      "1": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(0); }),
+      "2": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(1); }),
+      "3": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(2); }),
+      "4": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(3); }),
 
       // ---- Global: Escape — exit visual/pick mode > close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {
@@ -183,8 +189,10 @@ export function useVimNavigation() {
         store().toggleVisualMode();
       }),
 
-      // ---- Toggle pick individual row (Space) ----
+      // ---- Toggle pick / space override (Space) ----
       "Space": vim(() => {
+        const { onSpace } = store();
+        if (onSpace) { onSpace(); return; }
         store().togglePick();
       }),
 
@@ -198,6 +206,12 @@ export function useVimNavigation() {
       "x": vim(() => {
         const { selectedIndex, onHide } = store();
         if (onHide && selectedIndex >= 0) onHide(selectedIndex);
+      }),
+
+      // ---- Toggle draft visibility (t) ----
+      "t": vim(() => {
+        const { onToggleDrafts } = store();
+        if (onToggleDrafts) onToggleDrafts();
       }),
 
       // ---- Smooth scroll: Shift+J (down) / Shift+K (up) ----

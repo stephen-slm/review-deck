@@ -158,6 +158,7 @@ export function PRDetailPage() {
   const reviewerToggleRef = useRef<(() => void) | null>(null);
   const mergeToggleRef = useRef<(() => void) | null>(null);
   const approveRef = useRef<(() => void) | null>(null);
+  const fileToggleRef = useRef<(() => void) | null>(null);
 
   // Fetch check runs when the checks tab is first selected
   useEffect(() => {
@@ -273,6 +274,7 @@ export function PRDetailPage() {
       onRefresh: handleRefresh,
       onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
       onTabPrev: () => setActiveTab(tabKeys[(currentIdx - 1 + tabKeys.length) % tabKeys.length]),
+      onTabDirect: (idx: number) => { if (idx >= 0 && idx < tabKeys.length) setActiveTab(tabKeys[idx]); },
       onAssignReviewer: () => reviewerToggleRef.current?.(),
       onMerge: () => mergeToggleRef.current?.(),
       onApprove: () => approveRef.current?.(),
@@ -308,6 +310,9 @@ export function PRDetailPage() {
           if (url) BrowserOpenURL(url);
         }
       };
+    } else if (activeTab === "files") {
+      actions.onSpace = () => fileToggleRef.current?.();
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
     }
 
     useVimStore.getState().registerActions(actions);
@@ -441,7 +446,7 @@ export function PRDetailPage() {
 
           {/* Tab bar */}
           <div className="flex border-b border-border">
-            {tabs.map((tab) => (
+            {tabs.map((tab, idx) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
@@ -453,6 +458,9 @@ export function PRDetailPage() {
               >
                 {tab.icon}
                 {tab.label}
+                <kbd className="ml-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+                  {idx + 1}
+                </kbd>
               </button>
             ))}
           </div>
@@ -570,12 +578,13 @@ export function PRDetailPage() {
               error={filesError}
               owner={pr.repoOwner}
               repo={pr.repoName}
+              toggleSelectedRef={fileToggleRef}
             />
           )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-3">
+        {/* Sidebar — sticky so it stays visible while scrolling main content */}
+        <div className="sticky top-0 self-start space-y-3">
           {/* Actions */}
           <SidebarSection title="Actions">
             <div className="space-y-2">

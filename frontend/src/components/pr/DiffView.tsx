@@ -24,6 +24,8 @@ interface DiffViewProps {
   /** Owner and repo for "Open in GoLand" per-file buttons */
   owner?: string;
   repo?: string;
+  /** Ref populated with a function to toggle expand/collapse of the currently selected file. */
+  toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 /** Parse a unified diff patch string into individual diff lines. */
@@ -217,7 +219,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
   );
 }
 
-export function DiffView({ files, loading, error, owner, repo }: DiffViewProps) {
+export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef }: DiffViewProps) {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
@@ -263,6 +265,18 @@ export function DiffView({ files, loading, error, owner, repo }: DiffViewProps) 
       return next;
     });
   };
+
+  // Expose a function to toggle the currently selected file via ref.
+  useEffect(() => {
+    if (toggleSelectedRef) {
+      toggleSelectedRef.current = () => {
+        if (files && selectedIndex >= 0 && selectedIndex < files.length) {
+          toggleFile(files[selectedIndex].filename);
+        }
+      };
+      return () => { toggleSelectedRef.current = null; };
+    }
+  }); // no deps — keeps closure fresh
 
   const expandAll = () => {
     if (files) setExpandedFiles(new Set(files.map((f) => f.filename)));

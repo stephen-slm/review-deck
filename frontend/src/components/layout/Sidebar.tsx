@@ -64,7 +64,7 @@ export function Sidebar() {
         <h1 className="text-lg font-semibold text-foreground">Review Deck</h1>
       </div>
       <nav className="flex-1 space-y-1 p-1.5">
-        {navItems.map((item) => {
+        {navItems.map((item, idx) => {
           const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
           return (
             <NavLink
@@ -93,6 +93,9 @@ export function Sidebar() {
                   {count}
                 </span>
               )}
+              <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+                {"\u2318"}{idx + 1}
+              </kbd>
             </NavLink>
           );
         })}
