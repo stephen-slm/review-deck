@@ -215,22 +215,22 @@ export function MetricsPage() {
           {/* Row 1: Summary cards */}
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
             <MetricCard
-              icon={<GitPullRequest className="h-5 w-5 text-blue-400" />}
+              icon={<GitPullRequest className="h-5 w-5 text-blue-600 dark:text-blue-300" />}
               label="Open PRs"
               value={metrics.openPRs}
             />
             <MetricCard
-              icon={<Eye className="h-5 w-5 text-yellow-400" />}
+              icon={<Eye className="h-5 w-5 text-amber-500 dark:text-amber-300" />}
               label="Pending Reviews"
               value={metrics.pendingReviews}
             />
             <MetricCard
-              icon={<GitMerge className="h-5 w-5 text-green-400" />}
+              icon={<GitMerge className="h-5 w-5 text-green-600 dark:text-green-300" />}
               label="Merged (14d)"
               value={metrics.merged14d}
             />
             <MetricCard
-              icon={<Clock className="h-5 w-5 text-purple-400" />}
+              icon={<Clock className="h-5 w-5 text-purple-600 dark:text-purple-300" />}
               label="Avg Time to Merge"
               value={metrics.avgMergeHours > 0 ? fmtHours(metrics.avgMergeHours) : "--"}
             />
@@ -491,14 +491,14 @@ function EmptyChart({ message = "No data" }: { message?: string }) {
 
 function AttentionBadge({ reason }: { reason: string }) {
   const styles: Record<string, string> = {
-    Conflicts: "bg-red-900/60 text-red-300",
-    "CI failure": "bg-red-900/60 text-red-300",
-    "Changes requested": "bg-yellow-900/60 text-yellow-300",
-    "Stale >7d": "bg-zinc-700 text-zinc-300",
+    Conflicts: "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200",
+    "CI failure": "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200",
+    "Changes requested": "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200",
+    "Stale >7d": "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200",
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[reason] || "bg-zinc-700 text-zinc-300"}`}
+      className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[reason] || "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200"}`}
     >
       <AlertTriangle className="h-2.5 w-2.5" />
       {reason}

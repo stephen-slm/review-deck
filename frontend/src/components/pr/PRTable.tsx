@@ -317,7 +317,7 @@ export function PRTable({
                 title="Copy PR link"
               >
                 {justCopied ? (
-                  <Check className="h-3.5 w-3.5 text-green-400" />
+                  <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-300" />
                 ) : (
                   <Copy className="h-3.5 w-3.5" />
                 )}
@@ -396,7 +396,7 @@ export function PRTable({
               title="Copy PRs to clipboard"
             >
               {copiedKey === "__all__" ? (
-                <Check className="h-3.5 w-3.5 text-green-400" />
+                <Check className="h-3.5 w-3.5 text-green-600 dark:text-green-300" />
               ) : (
                 <Copy className="h-3.5 w-3.5" />
               )}

@@ -79,7 +79,7 @@ export function MergeButton({
   // Show enqueued indicator
   if (mergeResult === "enqueued") {
     return (
-      <span className="inline-flex items-center gap-1 rounded p-1 text-xs text-green-400" title="Added to merge queue">
+      <span className="inline-flex items-center gap-1 rounded p-1 text-xs text-green-600 dark:text-green-300" title="Added to merge queue">
         <CheckCircle className="h-3.5 w-3.5" />
         Queued
       </span>

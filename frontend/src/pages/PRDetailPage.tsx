@@ -335,7 +335,7 @@ export function PRDetailPage() {
           <ReviewStatusBadge reviewDecision={pr.reviewDecision} />
           <ChecksStatusIcon status={pr.checksStatus} isMerged={pr.state === "MERGED"} />
           {pr.mergeable === "CONFLICTING" && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-900/60 px-2 py-0.5 text-xs font-medium text-red-300">
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/60 dark:text-red-200">
               <AlertTriangle className="h-3 w-3" />
               Conflicts
             </span>
@@ -543,12 +543,12 @@ export function PRDetailPage() {
           <SidebarSection title="Stats">
             <div className="grid grid-cols-2 gap-2">
               <StatItem
-                icon={<Plus className="h-3.5 w-3.5 text-green-400" />}
+                icon={<Plus className="h-3.5 w-3.5 text-green-600 dark:text-green-300" />}
                 label="Additions"
                 value={String(pr.additions)}
               />
               <StatItem
-                icon={<Minus className="h-3.5 w-3.5 text-red-400" />}
+                icon={<Minus className="h-3.5 w-3.5 text-red-600 dark:text-red-300" />}
                 label="Deletions"
                 value={String(pr.deletions)}
               />
@@ -705,7 +705,7 @@ function DetailMergeButton({
   // Show enqueued state
   if (mergeResult === "enqueued") {
     return (
-      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-900/40 px-3 py-2 text-sm font-medium text-green-400">
+      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
         <CheckCircle className="h-4 w-4" />
         Added to merge queue
       </div>
@@ -818,7 +818,7 @@ function DetailApproveButton({
 
   if (approved || alreadyApproved) {
     return (
-      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-900/40 px-3 py-2 text-sm font-medium text-green-400">
+      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
         <CheckCircle className="h-4 w-4" />
         Approved
       </div>
@@ -836,7 +836,7 @@ function DetailApproveButton({
         onClick={handleApprove}
         disabled={disabled}
         title={title}
-        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-600 bg-transparent px-3 py-2 text-sm font-medium text-green-400 transition-colors hover:bg-green-600/20 disabled:cursor-not-allowed disabled:opacity-40"
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-600 bg-transparent px-3 py-2 text-sm font-medium text-green-700 transition-colors hover:bg-green-600/20 disabled:cursor-not-allowed disabled:opacity-40 dark:text-green-300"
       >
         <ThumbsUp className={`h-4 w-4 ${isApproving ? "animate-pulse" : ""}`} />
         {isApproving ? "Approving..." : "Approve"}
@@ -855,17 +855,17 @@ function CheckRunIcon({ status, conclusion, isMerged }: { status: string; conclu
   // In-progress
   if (status === "IN_PROGRESS" || status === "QUEUED" || status === "PENDING" || status === "WAITING") {
     if (isMerged) return <Circle className="h-4 w-4 text-muted-foreground" />;
-    return <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />;
+    return <Loader2 className="h-4 w-4 animate-spin text-amber-500 dark:text-amber-300" />;
   }
   // Completed — check conclusion
   if (conclusion === "SUCCESS" || conclusion === "NEUTRAL" || conclusion === "SKIPPED") {
-    return <CheckCircle className="h-4 w-4 text-green-400" />;
+    return <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-300" />;
   }
   if (conclusion === "FAILURE" || conclusion === "TIMED_OUT" || conclusion === "CANCELLED" || conclusion === "STARTUP_FAILURE") {
-    return <XCircle className="h-4 w-4 text-red-400" />;
+    return <XCircle className="h-4 w-4 text-red-600 dark:text-red-300" />;
   }
   if (conclusion === "ACTION_REQUIRED") {
-    return <Circle className="h-4 w-4 text-yellow-400" />;
+    return <Circle className="h-4 w-4 text-amber-500 dark:text-amber-300" />;
   }
   // Fallback
   return <Circle className="h-4 w-4 text-muted-foreground" />;
@@ -902,7 +902,7 @@ function ChecksTab({
   }
   if (error) {
     return (
-      <div className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
         Failed to load checks: {error}
       </div>
     );
@@ -925,17 +925,17 @@ function ChecksTab({
       {/* Summary bar */}
       <div className="flex items-center gap-4 text-sm">
         {passed.length > 0 && (
-          <span className="flex items-center gap-1 text-green-400">
+          <span className="flex items-center gap-1 text-green-600 dark:text-green-300">
             <CheckCircle className="h-4 w-4" /> {passed.length} passed
           </span>
         )}
         {failed.length > 0 && (
-          <span className="flex items-center gap-1 text-red-400">
+          <span className="flex items-center gap-1 text-red-600 dark:text-red-300">
             <XCircle className="h-4 w-4" /> {failed.length} failed
           </span>
         )}
         {pending.length > 0 && (
-          <span className="flex items-center gap-1 text-yellow-400">
+          <span className="flex items-center gap-1 text-amber-500 dark:text-amber-300">
             <Loader2 className="h-4 w-4" /> {pending.length} pending
           </span>
         )}
@@ -1008,7 +1008,7 @@ function CommentsTab({
   }
   if (error) {
     return (
-      <div className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+      <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
         Failed to load comments: {error}
       </div>
     );
@@ -1095,7 +1095,7 @@ function CommentsTab({
                   {thread.isResolved ? (
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, false); }}
-                      className="ml-auto rounded-full bg-green-900/60 px-1.5 py-0.5 text-[10px] font-medium text-green-300 transition-colors hover:bg-green-900/80"
+                      className="ml-auto rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 transition-colors hover:bg-green-200 dark:bg-green-900/60 dark:text-green-200 dark:hover:bg-green-900/80"
                       title="Unresolve thread"
                     >
                       Resolved
@@ -1103,7 +1103,7 @@ function CommentsTab({
                   ) : (
                     <button
                       onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, true); }}
-                      className="ml-auto rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300 transition-colors hover:bg-yellow-900/80"
+                      className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 transition-colors hover:bg-amber-200 dark:bg-amber-900/60 dark:text-amber-200 dark:hover:bg-amber-900/80"
                       title="Resolve thread"
                     >
                       Unresolved
@@ -1256,7 +1256,7 @@ function ReviewStateBadge({ state }: { state: string }) {
   };
   return (
     <span
-      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[state] || "bg-zinc-700 text-zinc-300"}`}
+      className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${styles[state] || "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200"}`}
     >
       {labels[state] || state}
     </span>
