@@ -5,8 +5,6 @@ import {time} from '../models';
 
 export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
 
-export function GetOrgMembers(arg1:string):Promise<Array<github.User>>;
-
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
 
 export function GetMyPRsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;

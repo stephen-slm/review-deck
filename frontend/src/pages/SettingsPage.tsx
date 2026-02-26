@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
+import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
@@ -15,6 +17,9 @@ export function SettingsPage() {
   const [newPriorityName, setNewPriorityName] = useState("");
   const [newPriorityType, setNewPriorityType] = useState<"user" | "team">("user");
   const [newExcludedRepo, setNewExcludedRepo] = useState("");
+  const [syncingMembers, setSyncingMembers] = useState<string | null>(null);
+  const [membersByOrg, setMembersByOrg] = useState<Record<string, github.User[]>>({});
+  const [showPrioritySuggestions, setShowPrioritySuggestions] = useState(false);
 
   useEffect(() => {
     loadOrgs();
@@ -35,6 +40,12 @@ export function SettingsPage() {
     });
     loadAllPriorities();
     loadAllExcludedRepos();
+    // Load cached org members for priority autocomplete.
+    for (const org of orgs) {
+      GetOrgMembers(org).then((members) => {
+        setMembersByOrg((prev) => ({ ...prev, [org]: members || [] }));
+      }).catch(() => {});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgs]);
 
@@ -202,12 +213,32 @@ export function SettingsPage() {
                 className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2.5"
               >
                 <span className="text-sm font-medium">{org}</span>
-                <button
-                  onClick={() => removeOrg(org)}
-                  className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={async () => {
+                      setSyncingMembers(org);
+                      try {
+                        await SyncOrgMembers(org);
+                        const members = await GetOrgMembers(org);
+                        setMembersByOrg((prev) => ({ ...prev, [org]: members || [] }));
+                      } finally {
+                        setSyncingMembers(null);
+                      }
+                    }}
+                    disabled={syncingMembers === org}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                    title="Sync org members from GitHub"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${syncingMembers === org ? "animate-spin" : ""}`} />
+                    Sync members
+                  </button>
+                  <button
+                    onClick={() => removeOrg(org)}
+                    className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>
@@ -416,28 +447,81 @@ export function SettingsPage() {
 
           {orgs.map((org) => {
             const priorities = prioritiesByOrg[org] || [];
+            const existingNames = new Set(priorities.map((p) => p.name));
+            const suggestions = useMemo(() => {
+              const q = newPriorityName.toLowerCase();
+              if (newPriorityType === "team") {
+                return (teamsByOrg[org] || [])
+                  .filter((t) => !existingNames.has(t.teamSlug) && (q.length === 0 || t.teamSlug.toLowerCase().includes(q) || t.teamName.toLowerCase().includes(q)))
+                  .slice(0, 10)
+                  .map((t) => ({ name: t.teamSlug, label: t.teamName, avatar: "" }));
+              }
+              return (membersByOrg[org] || [])
+                .filter((u) => !existingNames.has(u.login) && (q.length === 0 || u.login.toLowerCase().includes(q) || (u.name && u.name.toLowerCase().includes(q))))
+                .slice(0, 10)
+                .map((u) => ({ name: u.login, label: u.name || u.login, avatar: u.avatarUrl || "" }));
+            }, [newPriorityName, newPriorityType, org, membersByOrg, teamsByOrg, existingNames]);
             return (
               <div key={org} className="space-y-2">
                 <h4 className="text-sm font-medium text-foreground">{org}</h4>
 
-                {/* Add form */}
+                {/* Add form with autocomplete */}
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newPriorityName}
-                    onChange={(e) => setNewPriorityName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && newPriorityName.trim()) {
-                        addPriority(org, newPriorityName.trim(), newPriorityType);
-                        setNewPriorityName("");
-                      }
-                    }}
-                    placeholder="username or team-slug"
-                    className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={newPriorityName}
+                      onChange={(e) => {
+                        setNewPriorityName(e.target.value);
+                        setShowPrioritySuggestions(true);
+                      }}
+                      onFocus={() => setShowPrioritySuggestions(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newPriorityName.trim()) {
+                          addPriority(org, newPriorityName.trim(), newPriorityType);
+                          setNewPriorityName("");
+                          setShowPrioritySuggestions(false);
+                        }
+                        if (e.key === "Escape") setShowPrioritySuggestions(false);
+                      }}
+                      placeholder={newPriorityType === "team" ? "team-slug" : "username"}
+                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    {showPrioritySuggestions && suggestions.length > 0 && (
+                      <ul className="absolute left-0 top-full z-50 mt-1 max-h-48 w-full overflow-auto rounded-md border border-border bg-popover shadow-md">
+                        {suggestions.map((s) => (
+                          <li key={s.name}>
+                            <button
+                              type="button"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                addPriority(org, s.name, newPriorityType);
+                                setNewPriorityName("");
+                                setShowPrioritySuggestions(false);
+                              }}
+                              className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent"
+                            >
+                              {s.avatar && (
+                                <img src={s.avatar} className="h-5 w-5 rounded-full" alt="" />
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm text-popover-foreground">{s.name}</p>
+                                {s.label !== s.name && (
+                                  <p className="truncate text-xs text-muted-foreground">{s.label}</p>
+                                )}
+                              </div>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                   <select
                     value={newPriorityType}
-                    onChange={(e) => setNewPriorityType(e.target.value as "user" | "team")}
+                    onChange={(e) => {
+                      setNewPriorityType(e.target.value as "user" | "team");
+                      setNewPriorityName("");
+                    }}
                     className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   >
                     <option value="user">User</option>
@@ -448,6 +532,7 @@ export function SettingsPage() {
                       if (!newPriorityName.trim()) return;
                       addPriority(org, newPriorityName.trim(), newPriorityType);
                       setNewPriorityName("");
+                      setShowPrioritySuggestions(false);
                     }}
                     disabled={!newPriorityName.trim()}
                     className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
