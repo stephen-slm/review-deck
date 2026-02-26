@@ -57,8 +57,10 @@ function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
     items: prs.slice(0, pageSize),
     currentPage: 1,
     pageSize,
-    hasNextPage: totalPages > 1,
-    endCursor: totalPages > 1 ? "poller-1" : "",
+    // The poller fetches ALL data, so there are no more server pages to fetch.
+    // Local page navigation still works via pageCache entries.
+    hasNextPage: false,
+    endCursor: "",
     totalCount: prs.length,
     cursorStack: [""],
     pageCache,

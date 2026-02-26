@@ -557,9 +557,11 @@ export const usePRStore = create<PRState>((set, get) => ({
   appendNextPage: async (key, fetcher) => {
     const pg = get().pages[key];
     if (!pg.hasNextPage || get().isLoading[key]) return;
+    // Guard against fake poller cursors (e.g. "poller-1") being sent to the API.
+    const cursor = pg.endCursor.startsWith("poller-") ? "" : pg.endCursor;
     set((s) => ({ isLoading: { ...s.isLoading, [key]: true } }));
     try {
-      const page = await fetcher(pg.pageSize, pg.endCursor);
+      const page = await fetcher(pg.pageSize, cursor);
       const prs = page.pullRequests || [];
       set((s) => {
         const cur = s.pages[key];
