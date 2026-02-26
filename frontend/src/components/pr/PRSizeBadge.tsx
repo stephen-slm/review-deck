@@ -7,11 +7,11 @@ interface PRSizeBadgeProps {
 
 function getSize(additions: number, deletions: number) {
   const total = additions + deletions;
-  if (total < 10) return { label: "XS", bg: "bg-zinc-700 text-zinc-300" };
-  if (total < 50) return { label: "S", bg: "bg-green-900/60 text-green-300" };
-  if (total < 200) return { label: "M", bg: "bg-yellow-900/60 text-yellow-300" };
-  if (total < 500) return { label: "L", bg: "bg-orange-900/60 text-orange-300" };
-  return { label: "XL", bg: "bg-red-900/60 text-red-300" };
+  if (total < 10) return { label: "XS", bg: "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200" };
+  if (total < 50) return { label: "S", bg: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200" };
+  if (total < 200) return { label: "M", bg: "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200" };
+  if (total < 500) return { label: "L", bg: "bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-200" };
+  return { label: "XL", bg: "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200" };
 }
 
 export function PRSizeBadge({ additions, deletions }: PRSizeBadgeProps) {

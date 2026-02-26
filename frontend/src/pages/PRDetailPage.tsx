@@ -1241,11 +1241,11 @@ function TimestampRow({
 
 function ReviewStateBadge({ state }: { state: string }) {
   const styles: Record<string, string> = {
-    APPROVED: "bg-green-900/60 text-green-300",
-    CHANGES_REQUESTED: "bg-red-900/60 text-red-300",
-    COMMENTED: "bg-zinc-700 text-zinc-300",
-    DISMISSED: "bg-zinc-700 text-zinc-300",
-    PENDING: "bg-yellow-900/60 text-yellow-300",
+    APPROVED: "bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200",
+    CHANGES_REQUESTED: "bg-red-100 text-red-800 dark:bg-red-900/60 dark:text-red-200",
+    COMMENTED: "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200",
+    DISMISSED: "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200",
+    PENDING: "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200",
   };
   const labels: Record<string, string> = {
     APPROVED: "Approved",
@@ -1363,11 +1363,11 @@ function ReviewersSidebar({
               <User className="h-5 w-5 text-muted-foreground" />
             )}
             <span className="text-sm text-muted-foreground">{rr.reviewer}</span>
-            <span className="ml-auto">
-              <span className="rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300">
+              <span className="ml-auto">
+              <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
                 Pending
               </span>
-            </span>
+              </span>
           </div>
         ))}
         {isOpen && (

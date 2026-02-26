@@ -60,6 +60,8 @@ type Poller struct {
 	emit        EventEmitter
 	ctx         context.Context
 	viewerLogin string // cached viewer login, cleared on client change
+	// lastMemberSyncCheck gates how often we attempt org member syncs.
+	lastMemberSyncCheck time.Time
 
 	mu       sync.Mutex
 	cancel   context.CancelFunc
@@ -380,7 +382,19 @@ func (p *Poller) poll(ctx context.Context) {
 	p.recordMetrics(&result)
 
 	// Sync org members cache if stale (daily).
-	p.syncOrgMembersIfNeeded(ctx, client, orgs)
+	if p.shouldSyncMembersNow() {
+		p.syncOrgMembersIfNeeded(ctx, client, orgs)
+	}
+}
+
+// shouldSyncMembersNow ensures member sync runs at most once per memberSyncInterval.
+// It also triggers on first run (zero value).
+func (p *Poller) shouldSyncMembersNow() bool {
+	if p.lastMemberSyncCheck.IsZero() || time.Since(p.lastMemberSyncCheck) >= memberSyncInterval {
+		p.lastMemberSyncCheck = time.Now()
+		return true
+	}
+	return false
 }
 
 // syncOrgMembersIfNeeded checks each tracked org and refreshes the member

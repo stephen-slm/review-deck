@@ -2,14 +2,15 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork } from "lucide-react";
+import { themeChoices, getTheme, ThemeChoice } from "@/theme";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -27,9 +28,10 @@ export function SettingsPage() {
     loadFilterBots();
     loadHideStackedPRs();
     loadHideCopilotReviews();
+    loadTheme();
     loadCacheTTL();
     loadPollInterval();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideCopilotReviews, loadCacheTTL, loadPollInterval]);
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -92,6 +94,28 @@ export function SettingsPage() {
   const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
     if (e.key === "Enter") action();
   };
+
+  const themeOptions = useMemo(
+    () =>
+      themeChoices.map((choice: ThemeChoice) => {
+        if (choice === "system") {
+          return {
+            name: "system" as ThemeChoice,
+            displayName: "System",
+            description: "Follows your OS preference",
+            preview: { background: "linear-gradient(135deg, #F7F9FB 50%, #2E3440 50%)", accent: "#88C0D0" },
+          };
+        }
+        const def = getTheme(choice);
+        return {
+          name: choice as ThemeChoice,
+          displayName: def.displayName,
+          description: choice === "nord" ? "Low-light friendly" : "Default light theme",
+          preview: def.preview,
+        };
+      }),
+    [],
+  );
 
   return (
     <div className="max-w-2xl space-y-8">
@@ -191,6 +215,51 @@ export function SettingsPage() {
             </button>
           </div>
         )}
+      </section>
+
+      {/* Appearance Section */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Palette className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Appearance</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">Choose a color theme for the app.</p>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {themeOptions.map((opt) => {
+            const selected = theme === opt.name;
+            return (
+              <button
+                key={opt.name}
+                onClick={() => setTheme(opt.name)}
+                className={`flex w-full flex-col items-center gap-2 rounded-lg border bg-card p-3 text-center transition-colors ${
+                  selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
+                }`}
+                aria-pressed={selected}
+              >
+                <div className="flex h-10 w-full overflow-hidden rounded-md border border-border shadow-sm">
+                  {opt.name === "system" ? (
+                    <span className="flex-1" style={{ background: opt.preview.background }} />
+                  ) : (
+                    <>
+                      <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
+                      <span className="w-5" style={{ backgroundColor: opt.preview.accent }} />
+                    </>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">{opt.displayName}</p>
+                  <p className="text-xs text-muted-foreground">{opt.description}</p>
+                </div>
+                {selected && (
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
+                    Active
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Organizations Section */}

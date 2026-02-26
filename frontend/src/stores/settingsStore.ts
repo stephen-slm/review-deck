@@ -19,6 +19,9 @@ import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
 import { SetPollInterval } from "../../wailsjs/go/main/App";
 import { storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
+import { ThemeChoice, themeChoices } from "../theme";
+
+const DEFAULT_THEME: ThemeChoice = "system";
 
 const DEFAULT_CACHE_TTL_MINUTES = 5;
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
@@ -28,6 +31,7 @@ interface SettingsState {
   filterBots: boolean;
   hideStackedPRs: boolean;
   hideCopilotReviews: boolean;
+  theme: ThemeChoice;
   cacheTTLMinutes: number;
   pollIntervalMinutes: number;
   /** Tracked teams keyed by org name */
@@ -45,6 +49,8 @@ interface SettingsState {
   setHideStackedPRs: (enabled: boolean) => Promise<void>;
   loadHideCopilotReviews: () => Promise<void>;
   setHideCopilotReviews: (enabled: boolean) => Promise<void>;
+  loadTheme: () => Promise<void>;
+  setTheme: (theme: ThemeChoice) => Promise<void>;
   loadCacheTTL: () => Promise<void>;
   setCacheTTL: (minutes: number) => Promise<void>;
   loadPollInterval: () => Promise<void>;
@@ -73,6 +79,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   filterBots: false,
   hideStackedPRs: false,
   hideCopilotReviews: false,
+  theme: DEFAULT_THEME,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
   teamsByOrg: {},
@@ -140,6 +147,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setHideCopilotReviews: async (enabled: boolean) => {
     await SetSetting("hide_copilot_reviews", enabled ? "true" : "false");
     set({ hideCopilotReviews: enabled });
+  },
+
+  loadTheme: async () => {
+    try {
+      const val = await GetSetting("theme");
+      if (themeChoices.includes(val as ThemeChoice)) {
+        set({ theme: val as ThemeChoice });
+        return;
+      }
+    } catch {
+      // fall through to default
+    }
+    set({ theme: DEFAULT_THEME });
+  },
+
+  setTheme: async (theme: ThemeChoice) => {
+    await SetSetting("theme", theme);
+    set({ theme });
   },
 
   loadCacheTTL: async () => {
