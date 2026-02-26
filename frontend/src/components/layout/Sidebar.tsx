@@ -86,7 +86,7 @@ export function Sidebar() {
                   className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                     item.badgeKey === "reviewRequests"
-                      ? "bg-yellow-500/20 text-yellow-500"
+                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
                       : "bg-secondary text-secondary-foreground"
                   )}
                 >
