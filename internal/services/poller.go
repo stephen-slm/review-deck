@@ -351,6 +351,24 @@ func (p *Poller) poll(ctx context.Context) {
 
 	if prev != nil {
 		notifications := diffResults(prev, &result)
+
+		// Filter out review-request notifications for PRs only assigned
+		// through disabled teams (the user toggled the team off in settings).
+		if disabledTeams, err := p.db.GetDisabledTeamSlugs(); err == nil && len(disabledTeams) > 0 {
+			filtered := notifications[:0]
+			for _, n := range notifications {
+				if n.Type == "new-review-request" {
+					if pr := findPRByNodeID(result.ReviewRequests, n.NodeID); pr != nil {
+						if isOnlyDisabledTeamRequest(pr, disabledTeams, login) {
+							continue
+						}
+					}
+				}
+				filtered = append(filtered, n)
+			}
+			notifications = filtered
+		}
+
 		if len(notifications) > 0 {
 			emit(ctx, NotificationEvent, notifications)
 		}
@@ -521,6 +539,34 @@ func diffResults(prev, curr *PollResult) []Notification {
 	}
 
 	return notes
+}
+
+// findPRByNodeID looks up a PR in a slice by its GraphQL node ID.
+func findPRByNodeID(prs []gh.PullRequest, nodeID string) *gh.PullRequest {
+	for i := range prs {
+		if prs[i].NodeID == nodeID {
+			return &prs[i]
+		}
+	}
+	return nil
+}
+
+// isOnlyDisabledTeamRequest returns true when a PR's review request for the
+// viewer exists solely because of a disabled team — i.e. the PR has a team
+// review request from a disabled team and the viewer is NOT directly requested
+// as a user-type reviewer.
+func isOnlyDisabledTeamRequest(pr *gh.PullRequest, disabledTeams map[string]bool, viewerLogin string) bool {
+	hasDisabledTeam := false
+	hasDirectUserRequest := false
+	for _, rr := range pr.ReviewRequests {
+		if rr.ReviewerType == "team" && disabledTeams[rr.Reviewer] {
+			hasDisabledTeam = true
+		}
+		if rr.ReviewerType == "user" && strings.EqualFold(rr.Reviewer, viewerLogin) {
+			hasDirectUserRequest = true
+		}
+	}
+	return hasDisabledTeam && !hasDirectUserRequest
 }
 
 // recordMetrics computes aggregate metrics from a poll result and stores

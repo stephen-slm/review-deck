@@ -140,6 +140,7 @@ export function ReviewRequestsPage() {
         pagination={pg}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
+        onRefresh={forceRefresh}
         priorityNames={priorityNames}
       />
     </div>

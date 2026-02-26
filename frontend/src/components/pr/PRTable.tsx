@@ -499,7 +499,7 @@ export function PRTable({
                       else rowRefs.current.delete(rowIndex);
                     }}
                     onClick={() => navigate(`/pr/${pr.nodeId}`)}
-                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isPriority ? "border-l-2 border-l-yellow-500 bg-yellow-500/5" : ""} ${isVimSelected ? "ring-1 ring-primary bg-accent/40" : ""}`}
+                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isVimSelected ? "ring-1 ring-primary bg-accent/40" : ""}`}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td

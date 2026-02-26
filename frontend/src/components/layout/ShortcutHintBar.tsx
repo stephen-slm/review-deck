@@ -13,7 +13,8 @@ const GLOBAL_HINTS: Hint[] = [
 
 const LIST_HINTS: Hint[] = [
   { keys: "j/k", label: "navigate" },
-  { keys: "Enter", label: "open" },
+  { keys: "Enter/l", label: "open" },
+  { keys: "h", label: "back" },
   { keys: "o", label: "GitHub" },
   { keys: "/", label: "search" },
   { keys: "gg/G", label: "top/bottom" },

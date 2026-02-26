@@ -85,7 +85,7 @@ export const useVimStore = create<VimState>((set, get) => ({
     set({ selectedIndex: next });
   },
 
-  resetSelection: () => set({ selectedIndex: -1, listLength: 0, ...emptyActions }),
+  resetSelection: () => set({ selectedIndex: -1, listLength: 0 }),
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
 

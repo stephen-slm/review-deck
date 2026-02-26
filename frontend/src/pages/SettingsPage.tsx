@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useVimStore } from "@/stores/vimStore";
 import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
@@ -28,6 +29,16 @@ export function SettingsPage() {
     loadCacheTTL();
     loadPollInterval();
   }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadCacheTTL, loadPollInterval]);
+
+  // Register j/k as page scroll on this non-list page.
+  useEffect(() => {
+    const scrollEl = document.getElementById("scroll-region");
+    useVimStore.getState().registerActions({
+      onMoveDown: () => scrollEl?.scrollBy(0, 150),
+      onMoveUp: () => scrollEl?.scrollBy(0, -150),
+    });
+    return () => useVimStore.getState().clearActions();
+  }, []);
 
   // Load teams and priorities for all orgs once orgs are loaded; sync teams from GitHub if none cached yet.
   useEffect(() => {

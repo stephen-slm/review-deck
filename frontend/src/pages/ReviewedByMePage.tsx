@@ -122,6 +122,7 @@ export function ReviewedByMePage() {
         pagination={pg}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
+        onRefresh={forceRefresh}
       />
     </div>
   );

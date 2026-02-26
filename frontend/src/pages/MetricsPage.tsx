@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useVimStore } from "@/stores/vimStore";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -106,6 +107,16 @@ const tooltipStyle = {
 export function MetricsPage() {
   const metrics = useMetrics();
   const navigate = useNavigate();
+
+  // Register j/k as page scroll on this non-list page.
+  useEffect(() => {
+    const scrollEl = document.getElementById("scroll-region");
+    useVimStore.getState().registerActions({
+      onMoveDown: () => scrollEl?.scrollBy(0, 150),
+      onMoveUp: () => scrollEl?.scrollBy(0, -150),
+    });
+    return () => useVimStore.getState().clearActions();
+  }, []);
 
   const hasData = metrics.openPRs > 0 || metrics.merged14d > 0 || metrics.pendingReviews > 0;
 

@@ -89,6 +89,27 @@ func (db *DB) GetEnabledTeamSlugs(org string) ([]string, error) {
 	return slugs, rows.Err()
 }
 
+// GetDisabledTeamSlugs returns the slugs of all disabled teams across all orgs.
+func (db *DB) GetDisabledTeamSlugs() (map[string]bool, error) {
+	rows, err := db.conn.Query(
+		"SELECT team_slug FROM tracked_teams WHERE enabled = 0",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get disabled teams: %w", err)
+	}
+	defer rows.Close()
+
+	slugs := make(map[string]bool)
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		slugs[slug] = true
+	}
+	return slugs, rows.Err()
+}
+
 // SetTeamEnabled enables or disables a tracked team.
 func (db *DB) SetTeamEnabled(org, slug string, enabled bool) error {
 	val := 0
