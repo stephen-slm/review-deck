@@ -22,7 +22,9 @@ const LIST_HINTS: Hint[] = [
 ];
 
 const DETAIL_HINTS: Hint[] = [
-  { keys: "h", label: "back" },
+  { keys: "h/l", label: "prev/next tab" },
+  { keys: "j/k", label: "scroll/navigate" },
+  { keys: "Backspace", label: "back" },
   { keys: "r", label: "refresh" },
   { keys: "o", label: "GitHub" },
 ];

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -159,13 +159,59 @@ export function PRDetailPage() {
     }
   };
 
-  // Register VIM actions for the detail page (back, refresh, open in GitHub).
+  // Reset selection when the active tab changes.
   useEffect(() => {
-    useVimStore.getState().registerActions({
+    useVimStore.getState().setSelectedIndex(-1);
+  }, [activeTab]);
+
+  // Update list length based on active tab and loaded data.
+  useEffect(() => {
+    if (activeTab === "checks") {
+      useVimStore.getState().setListLength(checkRuns?.length ?? 0);
+    } else if (activeTab === "comments") {
+      const ic = comments?.issueComments?.length ?? 0;
+      const rt = comments?.reviewThreads?.length ?? 0;
+      useVimStore.getState().setListLength(ic + rt);
+    } else {
+      useVimStore.getState().setListLength(0);
+    }
+  }, [activeTab, checkRuns, comments]);
+
+  // Register VIM actions for the detail page.
+  // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
+  useEffect(() => {
+    const tabKeys: DetailTab[] = ["description", "checks", "comments"];
+    const currentIdx = tabKeys.indexOf(activeTab);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actions: any = {
       onGoBack: () => navigate(-1),
       onRefresh: handleRefresh,
-      onOpenExternal: () => { if (pr) BrowserOpenURL(pr.url); },
-    });
+      onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
+      onTabPrev: () => setActiveTab(tabKeys[(currentIdx - 1 + tabKeys.length) % tabKeys.length]),
+    };
+
+    if (activeTab === "description") {
+      const scrollEl = document.getElementById("scroll-region");
+      actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
+      actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+    } else if (activeTab === "checks") {
+      actions.onOpen = (idx: number) => {
+        if (checkRuns && checkRuns[idx]?.detailsUrl) BrowserOpenURL(checkRuns[idx].detailsUrl);
+      };
+      actions.onOpenExternal = (idx: number) => {
+        if (idx >= 0 && checkRuns && checkRuns[idx]?.detailsUrl) {
+          BrowserOpenURL(checkRuns[idx].detailsUrl);
+        } else if (pr) {
+          BrowserOpenURL(pr.url);
+        }
+      };
+    } else {
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+    }
+
+    useVimStore.getState().registerActions(actions);
     return () => useVimStore.getState().clearActions();
   }); // no deps — re-registers each render with fresh closures
 
@@ -728,6 +774,16 @@ function ChecksTab({
   error: string | null;
   isMerged: boolean;
 }) {
+  const selectedIndex = useVimStore((s) => s.selectedIndex);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Auto-scroll the selected check into view.
+  useEffect(() => {
+    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
+      itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [selectedIndex]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -782,7 +838,12 @@ function ChecksTab({
         {checkRuns.map((check, i) => (
           <div
             key={check.name + i}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5"
+            ref={(el) => { itemRefs.current[i] = el; }}
+            className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 transition-colors ${
+              i === selectedIndex
+                ? "ring-1 ring-primary bg-accent/40 border-primary/50"
+                : "border-border bg-card"
+            }`}
           >
             <CheckRunIcon status={check.status} conclusion={check.conclusion} isMerged={isMerged} />
             <span className="min-w-0 flex-1 truncate text-sm text-foreground">{check.name}</span>
@@ -814,6 +875,16 @@ function CommentsTab({
   loading: boolean;
   error: string | null;
 }) {
+  const selectedIndex = useVimStore((s) => s.selectedIndex);
+  const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Auto-scroll the selected comment/thread into view.
+  useEffect(() => {
+    if (selectedIndex >= 0 && itemRefs.current[selectedIndex]) {
+      itemRefs.current[selectedIndex]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [selectedIndex]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -851,14 +922,21 @@ function CommentsTab({
             Conversation ({issueComments.length})
           </h3>
           <div className="space-y-2">
-            {issueComments.map((comment) => (
-              <CommentCard
+            {issueComments.map((comment, i) => (
+              <div
                 key={comment.id}
-                author={comment.author}
-                authorAvatar={comment.authorAvatar}
-                body={comment.body}
-                createdAt={comment.createdAt}
-              />
+                ref={(el) => { itemRefs.current[i] = el; }}
+                className={`rounded-lg transition-colors ${
+                  i === selectedIndex ? "ring-1 ring-primary ring-offset-1 ring-offset-background" : ""
+                }`}
+              >
+                <CommentCard
+                  author={comment.author}
+                  authorAvatar={comment.authorAvatar}
+                  body={comment.body}
+                  createdAt={comment.createdAt}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -871,10 +949,17 @@ function CommentsTab({
             Review threads ({reviewThreads.length})
           </h3>
           <div className="space-y-3">
-            {reviewThreads.map((thread) => (
+            {reviewThreads.map((thread, i) => {
+              const globalIdx = issueComments.length + i;
+              return (
               <div
                 key={thread.id}
-                className="rounded-lg border border-border bg-card"
+                ref={(el) => { itemRefs.current[globalIdx] = el; }}
+                className={`rounded-lg border transition-colors ${
+                  globalIdx === selectedIndex
+                    ? "ring-1 ring-primary border-primary/50 bg-card"
+                    : "border-border bg-card"
+                }`}
               >
                 {/* Thread header */}
                 <div className="flex items-center gap-2 border-b border-border px-4 py-2">
@@ -908,7 +993,8 @@ function CommentsTab({
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -77,9 +77,17 @@ export function useVimNavigation() {
         store().toggleHints();
       }),
 
-      // ---- List navigation: j/k ----
-      "j": vim(() => store().moveSelection(1)),
-      "k": vim(() => store().moveSelection(-1)),
+      // ---- List navigation / scroll: j/k ----
+      "j": vim(() => {
+        const { onMoveDown } = store();
+        if (onMoveDown) { onMoveDown(); return; }
+        store().moveSelection(1);
+      }),
+      "k": vim(() => {
+        const { onMoveUp } = store();
+        if (onMoveUp) { onMoveUp(); return; }
+        store().moveSelection(-1);
+      }),
 
       // ---- List navigation: gg (top), G (bottom) ----
       "g g": vim(() => {
@@ -97,16 +105,15 @@ export function useVimNavigation() {
         if (selectedIndex >= 0 && onOpen) onOpen(selectedIndex);
       }),
       "l": vim(() => {
-        const { selectedIndex, onOpen } = store();
+        const { onTabNext, selectedIndex, onOpen } = store();
+        if (onTabNext) { onTabNext(); return; }
         if (selectedIndex >= 0 && onOpen) onOpen(selectedIndex);
       }),
 
       // ---- Open in GitHub ----
       "o": vim(() => {
         const { selectedIndex, onOpenExternal } = store();
-        if (selectedIndex >= 0 && onOpenExternal) {
-          onOpenExternal(selectedIndex);
-        }
+        if (onOpenExternal) onOpenExternal(selectedIndex);
       }),
 
       // ---- Page navigation ----
@@ -131,9 +138,10 @@ export function useVimNavigation() {
         if (onRefresh) onRefresh();
       }),
 
-      // ---- Go back (h / Backspace) ----
+      // ---- Go back / prev tab (h / Backspace) ----
       "h": vim(() => {
-        const { onGoBack } = store();
+        const { onTabPrev, onGoBack } = store();
+        if (onTabPrev) { onTabPrev(); return; }
         if (onGoBack) onGoBack();
       }),
       "Backspace": vim(() => {

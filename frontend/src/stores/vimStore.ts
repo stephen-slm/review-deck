@@ -16,6 +16,12 @@ export interface VimState {
   onPrevPage: (() => void) | null;
   onFocusSearch: (() => void) | null;
   onGoBack: (() => void) | null;
+  /** Override j/k default moveSelection (e.g. page scroll on description tab). */
+  onMoveDown: (() => void) | null;
+  onMoveUp: (() => void) | null;
+  /** Override h/l to cycle tabs instead of back/open (used on detail page). */
+  onTabNext: (() => void) | null;
+  onTabPrev: (() => void) | null;
 
   // ---- Actions ----
   setSelectedIndex: (i: number) => void;
@@ -27,7 +33,8 @@ export interface VimState {
   /** Pages call this to register their context-specific handlers. */
   registerActions: (actions: Partial<Pick<VimState,
     "onOpen" | "onOpenExternal" | "onRefresh" |
-    "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack"
+    "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
+    "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -41,6 +48,10 @@ const emptyActions = {
   onPrevPage: null,
   onFocusSearch: null,
   onGoBack: null,
+  onMoveDown: null,
+  onMoveUp: null,
+  onTabNext: null,
+  onTabPrev: null,
 };
 
 export const useVimStore = create<VimState>((set, get) => ({
