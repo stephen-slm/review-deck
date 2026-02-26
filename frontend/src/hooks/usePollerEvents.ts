@@ -28,19 +28,40 @@ interface Notification {
 }
 
 /**
- * Helper: reset a category's pagination to show the full poller dataset as page 1.
- * Since the poller fetches ALL results, there are no more server pages.
+ * Helper: reset a category's pagination after a poller update.
+ * The poller fetches ALL results, so we slice them into page-sized chunks
+ * and pre-populate the page cache so prev/next navigation works without
+ * hitting the server (the cursors from a search query wouldn't be valid
+ * for the poller's complete dataset anyway).
  */
 function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
+  const pageSize = prev.pageSize;
+  const totalPages = Math.max(1, Math.ceil(prs.length / pageSize));
+
+  // Pre-populate page cache with all pages.
+  const pageCache: Record<number, { items: github.PullRequest[]; pageInfo: github.PageInfo; fetchedAt: number }> = {};
+  for (let p = 1; p <= totalPages; p++) {
+    const start = (p - 1) * pageSize;
+    pageCache[p] = {
+      items: prs.slice(start, start + pageSize),
+      pageInfo: new github.PageInfo({
+        hasNextPage: p < totalPages,
+        endCursor: `poller-${p}`,
+        totalCount: prs.length,
+      }),
+      fetchedAt: Date.now(),
+    };
+  }
+
   return {
-    items: prs,
+    items: prs.slice(0, pageSize),
     currentPage: 1,
-    pageSize: prev.pageSize,
-    hasNextPage: false,
-    endCursor: "",
+    pageSize,
+    hasNextPage: totalPages > 1,
+    endCursor: totalPages > 1 ? "poller-1" : "",
     totalCount: prs.length,
     cursorStack: [""],
-    pageCache: {},
+    pageCache,
   };
 }
 

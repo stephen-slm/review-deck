@@ -66,6 +66,7 @@ const mdComponents: Components = {
 
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useVimStore } from "@/stores/vimStore";
 import { github } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
@@ -157,6 +158,16 @@ export function PRDetailPage() {
       setRefreshing(false);
     }
   };
+
+  // Register VIM actions for the detail page (back, refresh, open in GitHub).
+  useEffect(() => {
+    useVimStore.getState().registerActions({
+      onGoBack: () => navigate(-1),
+      onRefresh: handleRefresh,
+      onOpenExternal: () => { if (pr) BrowserOpenURL(pr.url); },
+    });
+    return () => useVimStore.getState().clearActions();
+  }); // no deps — re-registers each render with fresh closures
 
   if (!pr) {
     return (
@@ -411,14 +422,6 @@ export function PRDetailPage() {
                 <ExternalLink className="h-4 w-4" />
                 Open in GitHub
               </button>
-              {pr.state === "OPEN" && (
-                <ReviewerAssign
-                  prNodeId={pr.nodeId}
-                  currentReviewers={(pr.reviewRequests || []).map(
-                    (rr) => rr.reviewer
-                  )}
-                />
-              )}
             </div>
           </SidebarSection>
 
@@ -452,7 +455,7 @@ export function PRDetailPage() {
           </SidebarSection>
 
           {/* Reviewers: completed reviews + pending requests */}
-          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} />
+          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} />
 
           {/* Labels */}
           {pr.labels && pr.labels.length > 0 && (
@@ -1069,9 +1072,13 @@ function LabelBadge({ label }: { label: github.Label }) {
 function ReviewersSidebar({
   reviews,
   reviewRequests,
+  prNodeId,
+  isOpen,
 }: {
   reviews: github.Review[] | null;
   reviewRequests: github.ReviewRequest[] | null;
+  prNodeId: string;
+  isOpen: boolean;
 }) {
   const latestReviews = useMemo(() => {
     if (!reviews || reviews.length === 0) return [];
@@ -1103,7 +1110,9 @@ function ReviewersSidebar({
     return reviewRequests.filter((rr) => !reviewedAuthors.has(rr.reviewer));
   }, [reviewRequests, latestReviews]);
 
-  if (latestReviews.length === 0 && pendingRequests.length === 0) return null;
+  const hasReviewers = latestReviews.length > 0 || pendingRequests.length > 0;
+
+  if (!hasReviewers && !isOpen) return null;
 
   return (
     <SidebarSection title="Reviewers">
@@ -1142,6 +1151,12 @@ function ReviewersSidebar({
             </span>
           </div>
         ))}
+        {isOpen && (
+          <ReviewerAssign
+            prNodeId={prNodeId}
+            currentReviewers={(reviewRequests || []).map((rr) => rr.reviewer)}
+          />
+        )}
       </div>
     </SidebarSection>
   );

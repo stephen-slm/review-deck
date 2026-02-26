@@ -5,6 +5,7 @@ import {
   GitPullRequest,
   Eye,
   CheckCircle,
+  TrendingUp,
   Settings,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
     icon: CheckCircle,
     badgeKey: "reviewedByMe",
   },
+  { to: "/metrics", label: "Metrics", icon: TrendingUp },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

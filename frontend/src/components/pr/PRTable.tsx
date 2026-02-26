@@ -21,6 +21,7 @@ import { MergeButton } from "./MergeButton";
 import { ReviewerAssign } from "./ReviewerAssign";
 import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useVimStore } from "@/stores/vimStore";
 import type { PageDirection, PaginationState } from "@/stores/prStore";
 
 /** Common default branch names — PRs targeting these are NOT considered stacked. */
@@ -85,6 +86,9 @@ export function PRTable({
   const { copiedKey, flash } = useCopyFeedback();
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
+  const selectedIndex = useVimStore((s) => s.selectedIndex);
 
   // Filter out stacked PRs (baseRef not main/master) when toggle is on.
   const filteredData = useMemo(
@@ -106,6 +110,42 @@ export function PRTable({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [copyMenuOpen]);
+
+  // ---- VIM navigation integration ----
+  // We use the table's visible (filtered+sorted) rows for vim navigation.
+  // `tableRows` is set after the table is built (below) and then used by
+  // the registration effect, so we capture it in a ref that updates each render.
+  const tableRowsRef = useRef<github.PullRequest[]>([]);
+
+  // Register vim actions — runs on every render so callbacks close over fresh data.
+  useEffect(() => {
+    const vim = useVimStore.getState();
+    const getRows = () => tableRowsRef.current;
+
+    vim.registerActions({
+      onOpen: (index: number) => {
+        const pr = getRows()[index];
+        if (pr) navigate(`/pr/${pr.nodeId}`);
+      },
+      onOpenExternal: (index: number) => {
+        const pr = getRows()[index];
+        if (pr) BrowserOpenURL(pr.url);
+      },
+      onRefresh: onRefresh || null,
+      onNextPage: pagination.hasNextPage ? () => onPageChange("next") : null,
+      onPrevPage: pagination.currentPage > 1 ? () => onPageChange("prev") : null,
+      onFocusSearch: () => searchInputRef.current?.focus(),
+    });
+
+    return () => useVimStore.getState().clearActions();
+  }); // intentionally no deps — re-registers each render with fresh closures
+
+  // Auto-scroll the selected row into view.
+  useEffect(() => {
+    if (selectedIndex < 0) return;
+    const row = rowRefs.current.get(selectedIndex);
+    if (row) row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedIndex]);
 
   const handleCopyRow = useCallback(
     async (pr: github.PullRequest) => {
@@ -309,6 +349,15 @@ export function PRTable({
     getFilteredRowModel: getFilteredRowModel(),
   });
 
+  // Sync visible rows to vim store for j/k navigation.
+  const visibleRows = table.getRowModel().rows;
+  const visiblePRs = useMemo(() => visibleRows.map((r) => r.original), [visibleRows]);
+  tableRowsRef.current = visiblePRs;
+
+  useEffect(() => {
+    useVimStore.getState().setListLength(visiblePRs.length);
+  }, [visiblePRs.length]);
+
   const totalPages = pagination.totalCount > 0
     ? Math.ceil(pagination.totalCount / pagination.pageSize)
     : 1;
@@ -320,6 +369,7 @@ export function PRTable({
       {/* Toolbar: search + copy dropdown */}
       <div className="flex items-center gap-2">
         <input
+          ref={searchInputRef}
           type="text"
           value={globalFilter}
           onChange={(e) => setGlobalFilter(e.target.value)}
@@ -434,17 +484,22 @@ export function PRTable({
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row) => {
+              table.getRowModel().rows.map((row, rowIndex) => {
                 const pr = row.original;
                 const isPriority = priorityNames && priorityNames.size > 0 && (
                   priorityNames.has(pr.author) ||
                   (pr.reviewRequests || []).some((rr) => priorityNames.has(rr.reviewer))
                 );
+                const isVimSelected = rowIndex === selectedIndex;
                 return (
                   <tr
                     key={row.id}
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(rowIndex, el);
+                      else rowRefs.current.delete(rowIndex);
+                    }}
                     onClick={() => navigate(`/pr/${pr.nodeId}`)}
-                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isPriority ? "border-l-2 border-l-yellow-500 bg-yellow-500/5" : ""}`}
+                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isPriority ? "border-l-2 border-l-yellow-500 bg-yellow-500/5" : ""} ${isVimSelected ? "ring-1 ring-primary bg-accent/40" : ""}`}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td

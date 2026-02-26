@@ -469,6 +469,63 @@ export namespace github {
 
 export namespace storage {
 	
+	export class MetricsSnapshot {
+	    id: number;
+	    // Go type: time
+	    recordedAt: any;
+	    openPRs: number;
+	    pendingReviews: number;
+	    teamReviews: number;
+	    reviewedByMe: number;
+	    merged14d: number;
+	    avgMergeHours: number;
+	    ciFailures: number;
+	    conflicts: number;
+	    stalePRs: number;
+	    changesRequested: number;
+	    totalAdditions: number;
+	    totalDeletions: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MetricsSnapshot(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.recordedAt = this.convertValues(source["recordedAt"], null);
+	        this.openPRs = source["openPRs"];
+	        this.pendingReviews = source["pendingReviews"];
+	        this.teamReviews = source["teamReviews"];
+	        this.reviewedByMe = source["reviewedByMe"];
+	        this.merged14d = source["merged14d"];
+	        this.avgMergeHours = source["avgMergeHours"];
+	        this.ciFailures = source["ciFailures"];
+	        this.conflicts = source["conflicts"];
+	        this.stalePRs = source["stalePRs"];
+	        this.changesRequested = source["changesRequested"];
+	        this.totalAdditions = source["totalAdditions"];
+	        this.totalDeletions = source["totalDeletions"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ReviewPriority {
 	    id: number;
 	    orgName: string;

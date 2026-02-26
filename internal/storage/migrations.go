@@ -142,6 +142,26 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_excluded_repos_org ON excluded_repos(org_name);`,
+
+	// Migration 6: Metrics snapshots for trending dashboard.
+	`CREATE TABLE IF NOT EXISTS metrics_snapshots (
+		id                INTEGER PRIMARY KEY AUTOINCREMENT,
+		recorded_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		open_prs          INTEGER NOT NULL DEFAULT 0,
+		pending_reviews   INTEGER NOT NULL DEFAULT 0,
+		team_reviews      INTEGER NOT NULL DEFAULT 0,
+		reviewed_by_me    INTEGER NOT NULL DEFAULT 0,
+		merged_14d        INTEGER NOT NULL DEFAULT 0,
+		avg_merge_hours   REAL    NOT NULL DEFAULT 0,
+		ci_failures       INTEGER NOT NULL DEFAULT 0,
+		conflicts         INTEGER NOT NULL DEFAULT 0,
+		stale_prs         INTEGER NOT NULL DEFAULT 0,
+		changes_requested INTEGER NOT NULL DEFAULT 0,
+		total_additions   INTEGER NOT NULL DEFAULT 0,
+		total_deletions   INTEGER NOT NULL DEFAULT 0
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics_snapshots(recorded_at);`,
 }
 
 // Migrate runs all pending migrations.

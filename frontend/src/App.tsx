@@ -8,13 +8,18 @@ import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PRDetailPage } from "./pages/PRDetailPage";
+import { MetricsPage } from "./pages/MetricsPage";
+import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { usePollerEvents } from "./hooks/usePollerEvents";
+import { useVimNavigation } from "./hooks/useVimNavigation";
 import { usePRStore } from "./stores/prStore";
 import { useSettingsStore } from "./stores/settingsStore";
 
 function AppContent() {
   // Listen for backend poller events and push data into stores.
   usePollerEvents();
+  // Global VIM-style keyboard navigation.
+  useVimNavigation();
 
   // Hydrate persisted settings and cache timestamps on startup.
   useEffect(() => {
@@ -38,10 +43,12 @@ function AppContent() {
               element={<ReviewRequestsPage />}
             />
             <Route path="/reviewed" element={<ReviewedByMePage />} />
+            <Route path="/metrics" element={<MetricsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/pr/:nodeId" element={<PRDetailPage />} />
           </Routes>
         </div>
+        <ShortcutHintBar />
       </main>
     </div>
   );

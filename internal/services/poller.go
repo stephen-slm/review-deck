@@ -358,6 +358,9 @@ func (p *Poller) poll(ctx context.Context) {
 
 	emit(ctx, PollerEvent, result)
 
+	// Record a metrics snapshot for the trending dashboard.
+	p.recordMetrics(&result)
+
 	// Sync org members cache if stale (daily).
 	p.syncOrgMembersIfNeeded(ctx, client, orgs)
 }
@@ -518,6 +521,59 @@ func diffResults(prev, curr *PollResult) []Notification {
 	}
 
 	return notes
+}
+
+// recordMetrics computes aggregate metrics from a poll result and stores
+// a snapshot in the database for the trending dashboard.
+func (p *Poller) recordMetrics(result *PollResult) {
+	snapshot := storage.MetricsSnapshot{
+		RecordedAt:     result.Timestamp,
+		OpenPRs:        len(result.MyPRs),
+		PendingReviews: len(result.ReviewRequests),
+		TeamReviews:    len(result.TeamReviewRequests),
+		ReviewedByMe:   len(result.ReviewedByMe),
+		Merged14d:      len(result.RecentMerged),
+	}
+
+	// Average time-to-merge across recently merged PRs.
+	var totalMergeHours float64
+	var mergeCount int
+	for _, pr := range result.RecentMerged {
+		if pr.MergedAt != nil && !pr.MergedAt.IsZero() {
+			totalMergeHours += pr.MergedAt.Sub(pr.CreatedAt).Hours()
+			mergeCount++
+		}
+	}
+	if mergeCount > 0 {
+		snapshot.AvgMergeHours = totalMergeHours / float64(mergeCount)
+	}
+
+	// Health indicators from open PRs.
+	for _, pr := range result.MyPRs {
+		if pr.ChecksStatus == "FAILURE" || pr.ChecksStatus == "ERROR" {
+			snapshot.CIFailures++
+		}
+		if pr.Mergeable == "CONFLICTING" {
+			snapshot.Conflicts++
+		}
+		if pr.ReviewDecision == "CHANGES_REQUESTED" {
+			snapshot.ChangesRequested++
+		}
+		if time.Since(pr.UpdatedAt).Hours() > 7*24 {
+			snapshot.StalePRs++
+		}
+		snapshot.TotalAdditions += pr.Additions
+		snapshot.TotalDeletions += pr.Deletions
+	}
+
+	if err := p.db.InsertMetricsSnapshot(snapshot); err != nil {
+		log.Printf("poller: record metrics: %v", err)
+	}
+
+	// Prune old snapshots (keep 90 days).
+	if _, err := p.db.PruneMetricsSnapshots(time.Now().AddDate(0, 0, -90)); err != nil {
+		log.Printf("poller: prune metrics: %v", err)
+	}
 }
 
 // itoa converts an int to a string without importing strconv.

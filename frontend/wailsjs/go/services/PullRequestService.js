@@ -10,6 +10,10 @@ export function GetCachedPRs(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetCachedPRs'](arg1, arg2);
 }
 
+export function GetMetricsHistory(arg1) {
+  return window['go']['services']['PullRequestService']['GetMetricsHistory'](arg1);
+}
+
 export function GetMyPRs(arg1) {
   return window['go']['services']['PullRequestService']['GetMyPRs'](arg1);
 }

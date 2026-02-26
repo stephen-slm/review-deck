@@ -230,6 +230,23 @@ function applyCachedPage(
   };
 }
 
+/**
+ * Returns ALL items for a category by collecting items from every page in the
+ * page cache. This gives the complete dataset (populated by the poller) rather
+ * than just the currently displayed page.
+ */
+export function getAllItems(key: CacheKey): github.PullRequest[] {
+  const pg = usePRStore.getState().pages[key];
+  const cache = pg.pageCache;
+  const pageNumbers = Object.keys(cache).map(Number).sort((a, b) => a - b);
+  if (pageNumbers.length === 0) return pg.items;
+  const all: github.PullRequest[] = [];
+  for (const p of pageNumbers) {
+    all.push(...cache[p].items);
+  }
+  return all;
+}
+
 export const usePRStore = create<PRState>((set, get) => ({
   pages: { ...defaultPages },
   isLoading: { ...defaultLoading },

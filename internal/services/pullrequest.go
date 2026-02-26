@@ -361,3 +361,11 @@ func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error
 	}
 	return comments, nil
 }
+
+// ---- Metrics ----
+
+// GetMetricsHistory returns historical metrics snapshots for the given number of days back.
+func (s *PullRequestService) GetMetricsHistory(daysBack int) ([]storage.MetricsSnapshot, error) {
+	since := time.Now().AddDate(0, 0, -daysBack)
+	return s.db.GetMetricsSnapshots(since)
+}
