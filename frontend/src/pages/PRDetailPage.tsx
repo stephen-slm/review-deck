@@ -335,7 +335,7 @@ export function PRDetailPage() {
           <SidebarSection title="Actions">
             <div className="space-y-2">
               {pr.state === "OPEN" && (
-                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} />
+                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} />
               )}
               {pr.state === "OPEN" && (
                 <DetailMergeButton
@@ -559,9 +559,11 @@ function DetailMergeButton({
 function DetailApproveButton({
   prNodeId,
   reviews,
+  author,
 }: {
   prNodeId: string;
   reviews: github.Review[] | null;
+  author: string;
 }) {
   const [isApproving, setIsApproving] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -569,10 +571,12 @@ function DetailApproveButton({
   const { approvePR } = usePRStore();
   const viewerLogin = useAuthStore((s) => s.user?.login);
 
+  // You cannot approve your own PR
+  const isOwnPR = !!viewerLogin && viewerLogin === author;
+
   // Check if the viewer has already approved this PR
   const alreadyApproved = useMemo(() => {
     if (!reviews || !viewerLogin) return false;
-    // Find the viewer's latest review
     const viewerReviews = reviews.filter((r) => r.author === viewerLogin);
     if (viewerReviews.length === 0) return false;
     const latest = viewerReviews.reduce((a, b) => {
@@ -605,12 +609,18 @@ function DetailApproveButton({
     );
   }
 
+  const disabled = isApproving || isOwnPR;
+  const title = isOwnPR
+    ? "You cannot approve your own pull request"
+    : "Approve this pull request";
+
   return (
     <div>
       <button
         onClick={handleApprove}
-        disabled={isApproving}
-        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-600 bg-transparent px-3 py-2 text-sm font-medium text-green-400 transition-colors hover:bg-green-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        title={title}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-600 bg-transparent px-3 py-2 text-sm font-medium text-green-400 transition-colors hover:bg-green-600/20 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <ThumbsUp className={`h-4 w-4 ${isApproving ? "animate-pulse" : ""}`} />
         {isApproving ? "Approving..." : "Approve"}
