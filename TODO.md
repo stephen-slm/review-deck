@@ -7,9 +7,56 @@
 
 ---
 
----
+### Single PR Refresh / Backend Detail Fetch
+**Priority:** Medium
+
+Currently the PR detail page reads from the in-memory zustand store (populated by list fetches). If the user navigates directly to `/pr/:nodeId` or the data is stale, there's no way to fetch a single PR.
+
+**What's needed:**
+- Backend `GetPRDetail(nodeId)` method — single-PR GraphQL query, optionally cache in SQLite.
+- Frontend refresh button on the detail page that re-fetches just that PR.
 
 ---
+
+### Autocomplete for Excluded Repos
+**Priority:** Low
+
+The "Excluded Repositories" input in Settings currently requires the user to type the exact repo name. Adding autocomplete from repos seen in cached PR data would improve UX.
+
+---
+
+### Client-Side Fallback for Repo Exclusions
+**Priority:** Low
+
+If the exclusion list exceeds GitHub's query length limit (~256 chars), the query-time `-repo:` filtering silently truncates. A client-side fallback filter should catch any that leak through.
+
+---
+
+### Autocomplete for Priority Reviewers
+**Priority:** Low
+
+The "Priority Reviewers" input in Settings currently requires exact user/team names. Adding autocomplete from cached org members and viewer teams would improve UX.
+
+---
+
+### Drag-and-Drop Priority Reordering
+**Priority:** Low
+
+Priority reviewers currently use up/down arrow buttons for reordering. Drag-and-drop would be more intuitive.
+
+---
+
+### Priority Highlighting in My PRs View
+**Priority:** Low
+
+Extend the priority reviewer highlighting (yellow border + star) to the My PRs view — highlight PRs where a priority reviewer was requested but hasn't responded yet.
+
+---
+
+### Configurable Bot Author List
+**Priority:** Low
+
+Bot filtering currently uses a hard-coded list of 4 bots (Dependabot, Renovate, GitHub Actions, Snyk). Allow users to add/remove bot usernames in Settings.
 
 ---
 
@@ -77,16 +124,135 @@ Add a theme engine inspired by opencode's approach. The app currently has a sing
 
 ## Done
 
+### Clickable Notification Links
+Toast notifications from the poller now navigate to the PR detail page when clicked.
+
+**What was done:**
+- `internal/services/poller.go` -- Added `NodeID` field to `Notification` struct. Populated in all 6 notification construction sites (new-review-request, pr-approved, changes-requested, ci-failed, ci-passed, pr-merged).
+- `frontend/src/components/ui/Toast.tsx` -- Added optional `onClick` prop to `Toast` interface and `addToast` signature. Clickable toasts show cursor pointer, hover highlight, and "Click to view" hint. X button uses `stopPropagation`.
+- `frontend/src/hooks/usePollerEvents.ts` -- Added `useNavigate`. Each notification toast gets `onClick` that navigates to `/pr/${nodeId}`.
+
+---
+
+### Collapsible Details/Summary in Markdown
+Support GitHub-style `<details>`/`<summary>` collapsible sections in all markdown rendering.
+
+**What was done:**
+- `frontend/package.json` -- Added `rehype-raw` dependency.
+- `frontend/src/pages/PRDetailPage.tsx` -- Imported `rehypeRaw`, added `rehypePlugins={[rehypeRaw]}` to all 3 ReactMarkdown instances. Added styled `details` and `summary` components to `mdComponents`.
+
+---
+
+### Pagination Page Cache
+Previously fetched pages are cached in-memory so stepping back is instant without re-fetching from GitHub.
+
+**What was done:**
+- `frontend/src/stores/prStore.ts` -- Added `CachedPage` type and `pageCache` to `PaginationState`. `applyPageResult` stores each page with a timestamp. `getCachedPage` checks TTL (2 min). `applyCachedPage` applies a cache hit. All `goToPage*` methods check cache first. All `fetch*` and poller updates clear the cache.
+- `frontend/src/hooks/usePollerEvents.ts` -- `pollerPage` helper includes `pageCache: {}`.
+
+---
+
+### PR Detail Page Approve and Merge Buttons
+Dedicated, prominent Approve and Merge buttons in the PR detail page sidebar.
+
+**What was done:**
+- `internal/github/mutations.go` -- Added `ApprovePR(ctx, prNodeID, body)` using `addPullRequestReview` GraphQL mutation with `APPROVE` event.
+- `internal/services/pullrequest.go` -- Added `ApprovePR(prNodeID, body)` service method.
+- `frontend/src/stores/prStore.ts` -- Added `approvePR` action.
+- `frontend/src/pages/PRDetailPage.tsx`:
+  - `DetailApproveButton` -- Full-width outlined green button. Checks viewer login against PR author; disabled (grayed out, `opacity-40`) with tooltip when viewer is the author. Shows "Approved" badge if already approved or after approving.
+  - `DetailMergeButton` -- Full-width solid green button with dropdown (merge/squash/rebase). Disabled with tooltip when PR is draft, has conflicts, or is not mergeable.
+  - Replaced old icon-only `MergeButton` in sidebar with these dedicated buttons.
+
+---
+
+### PR Detail Page Tabs (Description / Checks / Comments)
+Restructured the PR detail page main column into three tabs with lazy-loaded data.
+
+**What was done:**
+- `internal/github/queries.go` -- Added `checkRunsQuery` struct and `GetPRCheckRuns` method; `prCommentsQuery` struct and `GetPRComments` method (both use `node(id:)` GraphQL pattern).
+- `internal/github/models.go` -- Added `DetailsURL` to `CheckRun`; added `ReviewComment`, `ReviewThread`, `IssueComment`, `PRComments` types.
+- `internal/services/pullrequest.go` -- Added `GetPRCheckRuns(nodeID)` and `GetPRComments(nodeID)` service methods.
+- `frontend/src/pages/PRDetailPage.tsx`:
+  - Tab bar with Description, Checks, Comments tabs.
+  - `useEffect` hooks lazy-load check runs and comments on first tab activation.
+  - `ChecksTab` -- summary bar (pass/fail/pending counts), individual checks with status icons, conclusion text, external link.
+  - `CommentsTab` -- issue comments as markdown cards, review threads with file path/line header, resolved/unresolved badges, nested replies.
+  - `CommentCard` -- shared component with ReactMarkdown rendering.
+  - Description tab contains the existing body + reviews sections.
+
+---
+
+### Clipboard Copy Utility
+Per-row copy button and bulk copy dropdown with grouping options in PRTable.
+
+**What was done:**
+- `frontend/src/lib/clipboard.ts` -- NEW file. `formatSinglePR`, `formatPRs` (grouping: none, repo, size), `copyToClipboard`.
+- `frontend/src/components/pr/PRTable.tsx` -- Per-row copy button (Copy/Check icon swap), "Copy" dropdown with three grouping options. Fixed stale closure bug by adding `copiedKey`, `handleCopyRow` to useMemo deps.
+
+---
+
+### Stacked PR Filter
+Global setting and per-table toggle to hide stacked PRs (PRs whose base ref is not main/master/develop/development).
+
+**What was done:**
+- `frontend/src/stores/settingsStore.ts` -- Added `hideStackedPRs`, `loadHideStackedPRs`, `setHideStackedPRs`.
+- `frontend/src/pages/SettingsPage.tsx` -- Added toggle in Filters section.
+- `frontend/src/components/pr/PRTable.tsx` -- Per-table toggle button, `filteredData` filters against `DEFAULT_BRANCHES` set.
+- `frontend/src/App.tsx` -- Loads `loadHideStackedPRs` on startup.
+
+---
+
+### My PRs Open/Merged Tabs
+Rewrote My PRs page with tab switcher for open and recently merged PRs.
+
+**What was done:**
+- `frontend/src/pages/MyPRsPage.tsx` -- Full rewrite with Open/Merged tabs. Merged tab lazy-fetches via `fetchIfStale`. Each tab has independent pagination and page size.
+
+---
+
+### Markdown Rendering Improvements
+Review bodies, PR descriptions, and comments rendered as GitHub-flavored markdown with system browser link handling.
+
+**What was done:**
+- `frontend/src/pages/PRDetailPage.tsx` -- Changed `<p>` to `<ReactMarkdown>` with `remarkGfm` + `mdComponents` for review body and PR description. Custom `mdComponents` with `BrowserOpenURL` onClick handler. Added `font-sans text-[14px]` typography.
+
+---
+
+### Reviewer States in Sidebar
+Deduplicated reviewer display showing latest review state per author plus pending requests.
+
+**What was done:**
+- `frontend/src/pages/PRDetailPage.tsx` -- `ReviewersSidebar` component deduplicates reviews to latest per author, shows pending requests that haven't reviewed yet.
+
+---
+
+### Hide Pending Checks on Merged PRs
+Pending CI status shown as neutral (no spinner) on merged PRs.
+
+**What was done:**
+- `frontend/src/components/pr/ChecksStatusIcon.tsx` -- Added `isMerged` prop. PENDING -> neutral for merged PRs. Updated in all call sites (PRTable, DashboardPage, PRDetailPage).
+
+---
+
+### Dashboard PR Click Navigation
+PR rows on the dashboard navigate to the detail page.
+
+**What was done:**
+- `frontend/src/pages/DashboardPage.tsx` -- `PRRow` navigates to `/pr/${pr.nodeId}` on click. `e.stopPropagation()` on GitHub external link button.
+
+---
+
 ### Complete Assignee Implementation with Cached Org Members
 Replaced per-keystroke API calls in ReviewerAssign with client-side filtering over a locally cached member list.
 
 **What was done:**
-- `internal/storage/org_members.go` — Added `GetOrgMembers(org)` method that returns ALL cached members (the table, `UpsertOrgMembers`, `SearchOrgMembers`, `GetOrgMembersSyncedAt`, and `GetOrgMemberCount` already existed from prior work).
-- `internal/services/pullrequest.go` — Added `GetOrgMembers(org)` service method exposed via Wails.
-- `frontend/wailsjs/go/services/PullRequestService.d.ts` — Added `GetOrgMembers` binding (`.js` auto-generated).
-- `frontend/src/components/pr/ReviewerAssign.tsx` — Rewrote to use client-side filtering:
+- `internal/storage/org_members.go` -- Added `GetOrgMembers(org)` method that returns ALL cached members (the table, `UpsertOrgMembers`, `SearchOrgMembers`, `GetOrgMembersSyncedAt`, and `GetOrgMemberCount` already existed from prior work).
+- `internal/services/pullrequest.go` -- Added `GetOrgMembers(org)` service method exposed via Wails.
+- `frontend/wailsjs/go/services/PullRequestService.d.ts` -- Added `GetOrgMembers` binding (`.js` auto-generated).
+- `frontend/src/components/pr/ReviewerAssign.tsx` -- Rewrote to use client-side filtering:
   - On dropdown open: loads full member list from `GetOrgMembers(org)` (single Wails call to SQLite, no API hit).
-  - Filters locally with `useMemo` as user types — zero API/Wails calls per keystroke.
+  - Filters locally with `useMemo` as user types -- zero API/Wails calls per keystroke.
   - If cache is empty on first open, triggers `SyncOrgMembers` and reloads.
   - Removed debounce timer and `SearchOrgMembers` dependency entirely.
 
@@ -99,15 +265,15 @@ Replaced per-keystroke API calls in ReviewerAssign with client-side filtering ov
 Allow users to exclude specific repositories from all PR views via query-time filtering.
 
 **What was done:**
-- `internal/storage/migrations.go` — Migration 5: `excluded_repos` table (`org_name`, `repo_name`, unique constraint).
-- `internal/storage/excluded_repos.go` — NEW file: `GetExcludedRepos(org)`, `AddExcludedRepo(org, repo)`, `RemoveExcludedRepo(org, repo)`.
-- `internal/services/settings.go` — Added `GetExcludedRepos`, `AddExcludedRepo`, `RemoveExcludedRepo`.
-- `internal/github/queries.go` — Extended `buildQuery` to accept `excludedRepos []string` and append `-repo:org/name` qualifiers (Option A: query-time filtering). Updated all 10 client methods (5 fetch-all + 5 paginated) to accept and pass `excludedRepos`.
-- `internal/services/pullrequest.go` — Added `getExcludedRepos(org)` helper that reads from DB and formats as `org/repo`. All 10 service methods now pass excluded repos to the client.
-- `internal/services/poller.go` — Added `getExcludedRepos(org)` helper. All poller fetch calls now pass excluded repos per org.
+- `internal/storage/migrations.go` -- Migration 5: `excluded_repos` table (`org_name`, `repo_name`, unique constraint).
+- `internal/storage/excluded_repos.go` -- NEW file: `GetExcludedRepos(org)`, `AddExcludedRepo(org, repo)`, `RemoveExcludedRepo(org, repo)`.
+- `internal/services/settings.go` -- Added `GetExcludedRepos`, `AddExcludedRepo`, `RemoveExcludedRepo`.
+- `internal/github/queries.go` -- Extended `buildQuery` to accept `excludedRepos []string` and append `-repo:org/name` qualifiers (Option A: query-time filtering). Updated all 10 client methods (5 fetch-all + 5 paginated) to accept and pass `excludedRepos`.
+- `internal/services/pullrequest.go` -- Added `getExcludedRepos(org)` helper that reads from DB and formats as `org/repo`. All 10 service methods now pass excluded repos to the client.
+- `internal/services/poller.go` -- Added `getExcludedRepos(org)` helper. All poller fetch calls now pass excluded repos per org.
 - Wails bindings auto-generated for `GetExcludedRepos`, `AddExcludedRepo`, `RemoveExcludedRepo`.
-- `frontend/src/stores/settingsStore.ts` — Added `excludedReposByOrg` state, `loadExcludedRepos(org)`, `loadAllExcludedRepos()`, `addExcludedRepo(org, repo)`, `removeExcludedRepo(org, repo)`.
-- `frontend/src/pages/SettingsPage.tsx` — Added "Excluded Repositories" section: per-org list with text input + Exclude button. Each excluded repo shown as `org/repo` with a remove button.
+- `frontend/src/stores/settingsStore.ts` -- Added `excludedReposByOrg` state, `loadExcludedRepos(org)`, `loadAllExcludedRepos()`, `addExcludedRepo(org, repo)`, `removeExcludedRepo(org, repo)`.
+- `frontend/src/pages/SettingsPage.tsx` -- Added "Excluded Repositories" section: per-org list with text input + Exclude button. Each excluded repo shown as `org/repo` with a remove button.
 
 **Not done (future enhancements):**
 - Autocomplete from repos seen in cached PR data.
@@ -119,14 +285,14 @@ Allow users to exclude specific repositories from all PR views via query-time fi
 Configurable priority list of users/teams whose review requests are surfaced first with visual distinction.
 
 **What was done:**
-- `internal/storage/migrations.go` — Migration 4: `review_priorities` table (`org_name`, `name`, `type` with CHECK constraint, `priority`, `created_at`, unique on org+name+type).
-- `internal/storage/priorities.go` — NEW file: `ReviewPriority` struct, `GetReviewPriorities(org)` (ordered by priority DESC), `AddReviewPriority` (auto-assigns max+1), `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
-- `internal/services/settings.go` — Added `GetReviewPriorities`, `AddReviewPriority`, `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
+- `internal/storage/migrations.go` -- Migration 4: `review_priorities` table (`org_name`, `name`, `type` with CHECK constraint, `priority`, `created_at`, unique on org+name+type).
+- `internal/storage/priorities.go` -- NEW file: `ReviewPriority` struct, `GetReviewPriorities(org)` (ordered by priority DESC), `AddReviewPriority` (auto-assigns max+1), `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
+- `internal/services/settings.go` -- Added `GetReviewPriorities`, `AddReviewPriority`, `RemoveReviewPriority`, `UpdateReviewPriorityOrder`.
 - Wails bindings auto-generated for all 4 methods and `storage.ReviewPriority` model.
-- `frontend/src/stores/settingsStore.ts` — Added `prioritiesByOrg` state, `loadPriorities(org)`, `loadAllPriorities()`, `addPriority(org, name, type)`, `removePriority(org, name, type)`, `movePriority(org, name, type, direction)` (swaps priority values with adjacent item), `getPriorityNames()` (returns Set of all priority names for quick lookup).
-- `frontend/src/pages/SettingsPage.tsx` — Added "Priority Reviewers" section: per-org card with text input + user/team type selector + Add button. Priority list with up/down arrows for reordering and remove button per entry.
-- `frontend/src/components/pr/PRTable.tsx` — Added optional `priorityNames` prop (Set<string>). Matching rows (author or review requester in set) get a yellow left border, subtle yellow background tint, and a filled star icon on the first cell.
-- `frontend/src/pages/ReviewRequestsPage.tsx` — Loads priorities on mount. Sorts review requests so priority-matched PRs appear first (stable sort). Passes `priorityNames` to PRTable.
+- `frontend/src/stores/settingsStore.ts` -- Added `prioritiesByOrg` state, `loadPriorities(org)`, `loadAllPriorities()`, `addPriority(org, name, type)`, `removePriority(org, name, type)`, `movePriority(org, name, type, direction)` (swaps priority values with adjacent item), `getPriorityNames()` (returns Set of all priority names for quick lookup).
+- `frontend/src/pages/SettingsPage.tsx` -- Added "Priority Reviewers" section: per-org card with text input + user/team type selector + Add button. Priority list with up/down arrows for reordering and remove button per entry.
+- `frontend/src/components/pr/PRTable.tsx` -- Added optional `priorityNames` prop (Set<string>). Matching rows (author or review requester in set) get a yellow left border, subtle yellow background tint, and a filled star icon on the first cell.
+- `frontend/src/pages/ReviewRequestsPage.tsx` -- Loads priorities on mount. Sorts review requests so priority-matched PRs appear first (stable sort). Passes `priorityNames` to PRTable.
 
 **Not done (future enhancements):**
 - Autocomplete from cached org members and viewer teams in the add input.
@@ -139,7 +305,7 @@ Configurable priority list of users/teams whose review requests are surfaced fir
 Double-clicking the sidebar header toggles the window between maximised and normal size.
 
 **What was done:**
-- `frontend/src/components/layout/Sidebar.tsx` — Added `onDoubleClick` handler on the "Review Deck" heading container that calls `WindowToggleMaximise()` from the Wails runtime. Uses double-click to match macOS titlebar convention.
+- `frontend/src/components/layout/Sidebar.tsx` -- Added `onDoubleClick` handler on the "Review Deck" heading container that calls `WindowToggleMaximise()` from the Wails runtime. Uses double-click to match macOS titlebar convention.
 
 ---
 
@@ -147,22 +313,22 @@ Double-clicking the sidebar header toggles the window between maximised and norm
 Clicking a PR row now opens an in-app detail page with all important PR information at a glance.
 
 **What was done:**
-- `frontend/src/pages/PRDetailPage.tsx` — NEW file. Two-column layout (main + sidebar):
+- `frontend/src/pages/PRDetailPage.tsx` -- NEW file. Two-column layout (main + sidebar):
   - **Header:** back button, title, PR number, repo, state badge, review decision badge, CI status icon, conflict indicator.
   - **Author card:** avatar, login, created/updated/merged timestamps with relative time.
   - **Branch info:** head ref -> base ref with code-styled labels.
   - **Description:** PR body rendered as GitHub-flavored Markdown using `react-markdown` + `remark-gfm`. Falls back to "No description" placeholder.
   - **Reviews:** list of all reviews with author avatar, name, state badge (Approved/Changes requested/Commented/Dismissed/Pending), relative timestamp, and body preview.
-  - **Sidebar — Actions:** Open in GitHub button, Merge button (reuses existing `MergeButton` component), Request Review (reuses `ReviewerAssign`).
-  - **Sidebar — Stats:** additions, deletions, changed files, commits count, size badge.
-  - **Sidebar — Review Requests:** pending reviewers with user/team type badges.
-  - **Sidebar — Labels:** rendered with GitHub hex colours (tinted background + border).
-  - **Sidebar — Assignees:** avatar + name list.
-  - **Sidebar — Timestamps:** created, updated, merged, closed with relative and absolute times.
+  - **Sidebar -- Actions:** Open in GitHub button, Merge button (reuses existing `MergeButton` component), Request Review (reuses `ReviewerAssign`).
+  - **Sidebar -- Stats:** additions, deletions, changed files, commits count, size badge.
+  - **Sidebar -- Review Requests:** pending reviewers with user/team type badges.
+  - **Sidebar -- Labels:** rendered with GitHub hex colours (tinted background + border).
+  - **Sidebar -- Assignees:** avatar + name list.
+  - **Sidebar -- Timestamps:** created, updated, merged, closed with relative and absolute times.
   - PR data is looked up from the existing zustand store arrays (`useFindPR` hook searches myPRs, myRecentMerged, reviewRequests, teamReviewRequests, reviewedByMe). Not-found state shows a message with back button.
-- `frontend/src/App.tsx` — Added route `/pr/:nodeId` pointing to `PRDetailPage`.
-- `frontend/src/components/pr/PRTable.tsx` — Table rows are now clickable (`cursor-pointer`, `onClick` navigates to `/pr/:nodeId`). Actions column clicks are stopped from propagating so buttons still work independently. External link button retained.
-- `frontend/package.json` — Added `react-markdown` and `remark-gfm` dependencies.
+- `frontend/src/App.tsx` -- Added route `/pr/:nodeId` pointing to `PRDetailPage`.
+- `frontend/src/components/pr/PRTable.tsx` -- Table rows are now clickable (`cursor-pointer`, `onClick` navigates to `/pr/:nodeId`). Actions column clicks are stopped from propagating so buttons still work independently. External link button retained.
+- `frontend/package.json` -- Added `react-markdown` and `remark-gfm` dependencies.
 
 **Not done (future enhancements):**
 - Backend `GetPRDetail(nodeId)` method to load from SQLite cache (currently uses in-memory store data which is sufficient for navigation from table rows).
@@ -174,14 +340,14 @@ Clicking a PR row now opens an in-app detail page with all important PR informat
 Allow users to select which teams' review requests are tracked. Teams are synced from GitHub and can be individually enabled/disabled in Settings.
 
 **What was done:**
-- `internal/storage/migrations.go` — Migration 3: `tracked_teams` table (`org_name`, `team_slug`, `team_name`, `enabled`, unique constraint on org+slug).
-- `internal/storage/teams.go` — NEW file: `TrackedTeam` struct, `UpsertTrackedTeams`, `GetTrackedTeams`, `GetEnabledTeamSlugs`, `SetTeamEnabled`.
-- `internal/services/settings.go` — Added `GetTrackedTeams(org)` and `SetTeamEnabled(org, slug, enabled)`.
-- `internal/services/pullrequest.go` — Added `SyncTeamsForOrg(org)` which calls `client.GetViewerTeams()` and upserts into `tracked_teams`.
-- `internal/services/poller.go` — Added `TeamReviewRequests` to `PollResult`; poll loop fetches team review requests for each enabled team per org.
-- `frontend/src/stores/settingsStore.ts` — Added `teamsByOrg` state, `loadTeams(org)`, `loadAllTeams()`, `syncTeams(org)`, `setTeamEnabled(org, slug, enabled)`.
-- `frontend/src/pages/SettingsPage.tsx` — Added "Teams" section: per-org list with enable/disable toggle switches and a Sync button to re-fetch teams from GitHub.
-- `frontend/src/hooks/usePollerEvents.ts` — Added `teamReviewRequests` to `PollResult` interface and handler to push team review request data into `prStore`.
+- `internal/storage/migrations.go` -- Migration 3: `tracked_teams` table (`org_name`, `team_slug`, `team_name`, `enabled`, unique constraint on org+slug).
+- `internal/storage/teams.go` -- NEW file: `TrackedTeam` struct, `UpsertTrackedTeams`, `GetTrackedTeams`, `GetEnabledTeamSlugs`, `SetTeamEnabled`.
+- `internal/services/settings.go` -- Added `GetTrackedTeams(org)` and `SetTeamEnabled(org, slug, enabled)`.
+- `internal/services/pullrequest.go` -- Added `SyncTeamsForOrg(org)` which calls `client.GetViewerTeams()` and upserts into `tracked_teams`.
+- `internal/services/poller.go` -- Added `TeamReviewRequests` to `PollResult`; poll loop fetches team review requests for each enabled team per org.
+- `frontend/src/stores/settingsStore.ts` -- Added `teamsByOrg` state, `loadTeams(org)`, `loadAllTeams()`, `syncTeams(org)`, `setTeamEnabled(org, slug, enabled)`.
+- `frontend/src/pages/SettingsPage.tsx` -- Added "Teams" section: per-org list with enable/disable toggle switches and a Sync button to re-fetch teams from GitHub.
+- `frontend/src/hooks/usePollerEvents.ts` -- Added `teamReviewRequests` to `PollResult` interface and handler to push team review request data into `prStore`.
 - Wails bindings auto-generated for `SettingsService.GetTrackedTeams`, `SettingsService.SetTeamEnabled`, `PullRequestService.SyncTeamsForOrg`, and `storage.TrackedTeam` model.
 
 ---

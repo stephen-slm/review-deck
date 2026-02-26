@@ -8,100 +8,105 @@ import (
 	"github.com/shurcooL/githubv4"
 )
 
-// prSearchNode matches the shape of a PullRequest inside a search result.
-type prSearchNode struct {
-	PullRequest struct {
-		ID     string `graphql:"id"`
-		Number int
-		Title  string
-		URL    string `graphql:"url"`
-		State  githubv4.PullRequestState
-		Body   string
+// prFields contains the GraphQL field selections shared between the search
+// query and the single-PR query.  Extracted into a named type so both query
+// structs can embed it and reuse convertPRFields.
+type prFields struct {
+	ID     string `graphql:"id"`
+	Number int
+	Title  string
+	URL    string `graphql:"url"`
+	State  githubv4.PullRequestState
+	Body   string
 
-		IsDraft        bool
-		Mergeable      githubv4.MergeableState
-		ReviewDecision githubv4.PullRequestReviewDecision
+	IsDraft        bool
+	Mergeable      githubv4.MergeableState
+	ReviewDecision githubv4.PullRequestReviewDecision
 
-		Additions    int
-		Deletions    int
-		ChangedFiles int
+	Additions    int
+	Deletions    int
+	ChangedFiles int
 
-		HeadRefName string
-		BaseRefName string
+	HeadRefName string
+	BaseRefName string
 
-		CreatedAt time.Time
-		UpdatedAt time.Time
-		MergedAt  *time.Time
-		ClosedAt  *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	MergedAt  *time.Time
+	ClosedAt  *time.Time
 
-		Author struct {
-			Login     string
-			AvatarURL string `graphql:"avatarUrl(size: 64)"`
-		} `graphql:"author"`
+	Author struct {
+		Login     string
+		AvatarURL string `graphql:"avatarUrl(size: 64)"`
+	} `graphql:"author"`
 
-		MergedBy *struct {
+	MergedBy *struct {
+		Login string
+	} `graphql:"mergedBy"`
+
+	Repository struct {
+		Name  string
+		Owner struct {
 			Login string
-		} `graphql:"mergedBy"`
-
-		Repository struct {
-			Name  string
-			Owner struct {
-				Login string
-			}
 		}
+	}
 
-		Commits struct {
-			TotalCount int
-			Nodes      []struct {
-				Commit struct {
-					StatusCheckRollup *struct {
-						State githubv4.StatusState
-					}
+	Commits struct {
+		TotalCount int
+		Nodes      []struct {
+			Commit struct {
+				StatusCheckRollup *struct {
+					State githubv4.StatusState
 				}
 			}
-		} `graphql:"commits(last: 1)"`
+		}
+	} `graphql:"commits(last: 1)"`
 
-		Assignees struct {
-			Nodes []struct {
+	Assignees struct {
+		Nodes []struct {
+			Login     string
+			AvatarURL string `graphql:"avatarUrl(size: 32)"`
+		}
+	} `graphql:"assignees(first: 10)"`
+
+	Labels struct {
+		Nodes []struct {
+			Name  string
+			Color string
+		}
+	} `graphql:"labels(first: 20)"`
+
+	ReviewRequests struct {
+		Nodes []struct {
+			RequestedReviewer struct {
+				UserFragment struct {
+					Login string
+				} `graphql:"... on User"`
+				TeamFragment struct {
+					Name string
+					Slug string
+				} `graphql:"... on Team"`
+			}
+		}
+	} `graphql:"reviewRequests(first: 20)"`
+
+	Reviews struct {
+		Nodes []struct {
+			ID     string `graphql:"id"`
+			Author struct {
 				Login     string
 				AvatarURL string `graphql:"avatarUrl(size: 32)"`
 			}
-		} `graphql:"assignees(first: 10)"`
+			State       githubv4.PullRequestReviewState
+			Body        string
+			SubmittedAt time.Time
+		}
+	} `graphql:"reviews(first: 50)"`
+}
 
-		Labels struct {
-			Nodes []struct {
-				Name  string
-				Color string
-			}
-		} `graphql:"labels(first: 20)"`
-
-		ReviewRequests struct {
-			Nodes []struct {
-				RequestedReviewer struct {
-					UserFragment struct {
-						Login string
-					} `graphql:"... on User"`
-					TeamFragment struct {
-						Name string
-						Slug string
-					} `graphql:"... on Team"`
-				}
-			}
-		} `graphql:"reviewRequests(first: 20)"`
-
-		Reviews struct {
-			Nodes []struct {
-				ID     string `graphql:"id"`
-				Author struct {
-					Login     string
-					AvatarURL string `graphql:"avatarUrl(size: 32)"`
-				}
-				State       githubv4.PullRequestReviewState
-				Body        string
-				SubmittedAt time.Time
-			}
-		} `graphql:"reviews(first: 50)"`
-	} `graphql:"... on PullRequest"`
+// prSearchNode matches the shape of a PullRequest inside a search result.
+type prSearchNode struct {
+	PullRequest prFields `graphql:"... on PullRequest"`
 }
 
 // searchQuery is the generic search query shape used for all PR searches.
@@ -116,9 +121,8 @@ type searchQuery struct {
 	} `graphql:"search(query: $query, type: ISSUE, first: $first, after: $cursor)"`
 }
 
-// convertSearchNode converts a GraphQL search node to our domain PullRequest.
-func convertSearchNode(node prSearchNode) PullRequest {
-	pr := node.PullRequest
+// convertPRFields converts GraphQL PR fields to our domain PullRequest.
+func convertPRFields(pr prFields) PullRequest {
 	result := PullRequest{
 		NodeID:         pr.ID,
 		Number:         pr.Number,
@@ -210,7 +214,7 @@ func (c *Client) searchAllPRs(ctx context.Context, queryStr string) ([]PullReque
 		}
 
 		for _, node := range q.Search.Nodes {
-			allPRs = append(allPRs, convertSearchNode(node))
+			allPRs = append(allPRs, convertPRFields(node.PullRequest))
 		}
 
 		if !q.Search.PageInfo.HasNextPage {
@@ -251,7 +255,7 @@ func (c *Client) searchPRsPage(ctx context.Context, queryStr string, pageSize in
 		},
 	}
 	for _, node := range q.Search.Nodes {
-		page.PullRequests = append(page.PullRequests, convertSearchNode(node))
+		page.PullRequests = append(page.PullRequests, convertPRFields(node.PullRequest))
 	}
 
 	return page, nil
@@ -431,6 +435,31 @@ type prCommentsQuery struct {
 			} `graphql:"reviewThreads(first: 100)"`
 		} `graphql:"... on PullRequest"`
 	} `graphql:"node(id: $id)"`
+}
+
+// singlePRQuery fetches a single pull request by owner/repo/number using the
+// repository { pullRequest(number:) } pattern.
+type singlePRQuery struct {
+	Repository struct {
+		PullRequest prFields `graphql:"pullRequest(number: $number)"`
+	} `graphql:"repository(owner: $owner, name: $name)"`
+}
+
+// GetSinglePR fetches a single pull request by owner, repo name, and number.
+func (c *Client) GetSinglePR(ctx context.Context, owner, repoName string, number int) (*PullRequest, error) {
+	variables := map[string]interface{}{
+		"owner":  githubv4.String(owner),
+		"name":   githubv4.String(repoName),
+		"number": githubv4.Int(number),
+	}
+
+	var q singlePRQuery
+	if err := c.graphql.Query(ctx, &q, variables); err != nil {
+		return nil, fmt.Errorf("github graphql single PR: %w", err)
+	}
+
+	result := convertPRFields(q.Repository.PullRequest)
+	return &result, nil
 }
 
 // GetPRComments fetches all comments and review threads for a pull request.

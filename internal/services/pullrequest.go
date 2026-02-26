@@ -326,6 +326,18 @@ func (s *PullRequestService) SyncTeamsForOrg(org string) error {
 
 // ---- On-demand PR detail queries ----
 
+// GetSinglePR fetches a single pull request by owner, repo name, and number.
+func (s *PullRequestService) GetSinglePR(owner, repoName string, number int) (*gh.PullRequest, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	pr, err := s.client.GetSinglePR(context.Background(), owner, repoName, number)
+	if err != nil {
+		return nil, fmt.Errorf("fetch single PR: %w", err)
+	}
+	return pr, nil
+}
+
 // GetPRCheckRuns fetches individual CI check runs for a specific PR.
 func (s *PullRequestService) GetPRCheckRuns(nodeID string) ([]gh.CheckRun, error) {
 	if s.client == nil {

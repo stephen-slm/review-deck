@@ -29,7 +29,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments } from "../../wailsjs/go/services/PullRequestService";
+import { GetPRCheckRuns, GetPRComments, GetSinglePR } from "../../wailsjs/go/services/PullRequestService";
 
 /** Custom markdown components — opens links in the system browser via Wails. */
 const mdComponents: Components = {
@@ -96,7 +96,15 @@ function useFindPR(nodeId: string | undefined): github.PullRequest | undefined {
 export function PRDetailPage() {
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
-  const pr = useFindPR(nodeId);
+  const storePR = useFindPR(nodeId);
+
+  // Independently fetched PR (from refresh or when not in store).
+  const [fetchedPR, setFetchedPR] = useState<github.PullRequest | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+
+  // The PR to display: prefer the store version, fall back to independently fetched.
+  const pr = storePR ?? fetchedPR ?? undefined;
 
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
@@ -130,6 +138,26 @@ export function PRDetailPage() {
       .finally(() => setCommentsLoading(false));
   }, [activeTab, comments, commentsLoading, nodeId]);
 
+  /** Refresh the PR by re-fetching from GitHub. */
+  const handleRefresh = async () => {
+    if (!pr || refreshing) return;
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const fresh = await GetSinglePR(pr.repoOwner, pr.repoName, pr.number);
+      setFetchedPR(fresh);
+      // Also reset lazy-loaded tab data so they re-fetch on next view.
+      setCheckRuns(null);
+      setChecksError(null);
+      setComments(null);
+      setCommentsError(null);
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (!pr) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 py-24">
@@ -158,14 +186,28 @@ export function PRDetailPage() {
 
   return (
     <div className="max-w-5xl space-y-6">
-      {/* Back button */}
-      <button
-        onClick={() => navigate(-1)}
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+      {/* Back + Refresh */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          title="Refresh PR data from GitHub"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+        {refreshError && (
+          <span className="text-xs text-destructive">{refreshError}</span>
+        )}
+      </div>
 
       {/* Header */}
       <div className="space-y-2">

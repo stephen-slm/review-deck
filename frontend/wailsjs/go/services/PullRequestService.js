@@ -54,6 +54,10 @@ export function GetReviewedByMePage(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['GetReviewedByMePage'](arg1, arg2, arg3);
 }
 
+export function GetSinglePR(arg1, arg2, arg3) {
+  return window['go']['services']['PullRequestService']['GetSinglePR'](arg1, arg2, arg3);
+}
+
 export function GetTeamReviewRequests(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetTeamReviewRequests'](arg1, arg2);
 }
