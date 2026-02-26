@@ -22,6 +22,10 @@ export function GetMyRecentMergedPage(arg1, arg2, arg3, arg4) {
   return window['go']['services']['PullRequestService']['GetMyRecentMergedPage'](arg1, arg2, arg3, arg4);
 }
 
+export function GetOrgMembers(arg1) {
+  return window['go']['services']['PullRequestService']['GetOrgMembers'](arg1);
+}
+
 export function GetReviewRequests(arg1) {
   return window['go']['services']['PullRequestService']['GetReviewRequests'](arg1);
 }

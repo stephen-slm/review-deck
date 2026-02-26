@@ -246,6 +246,12 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 	return s.client.RequestReviews(context.Background(), prNodeID, userIDs, teamIDs)
 }
 
+// GetOrgMembers returns all cached members for an org.
+// Returns an empty list (not an error) if no members are cached.
+func (s *PullRequestService) GetOrgMembers(org string) ([]gh.User, error) {
+	return s.db.GetOrgMembers(org)
+}
+
 // SearchOrgMembers returns org members matching a search query.
 // Searches the local DB cache first; falls back to the GitHub API if the cache is empty.
 func (s *PullRequestService) SearchOrgMembers(org string, query string) ([]gh.User, error) {

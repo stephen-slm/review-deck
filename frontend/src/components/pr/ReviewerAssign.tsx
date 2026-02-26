@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { UserPlus, Search, X, Loader2 } from "lucide-react";
-import { SearchOrgMembers, RequestReviews } from "../../../wailsjs/go/services/PullRequestService";
+import { GetOrgMembers, RequestReviews } from "../../../wailsjs/go/services/PullRequestService";
 import { SyncOrgMembers } from "../../../wailsjs/go/main/App";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { github } from "../../../wailsjs/go/models";
@@ -18,16 +18,16 @@ export function ReviewerAssign({
 }: ReviewerAssignProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<github.User[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [allMembers, setAllMembers] = useState<github.User[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const { orgs } = useSettingsStore();
   const syncTriggered = useRef(false);
 
+  // Close on outside click.
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -44,44 +44,48 @@ export function ReviewerAssign({
     }
   }, [isOpen]);
 
+  // On dropdown open: focus input, load full member list, trigger sync if needed.
   useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-    // Trigger an org member cache sync the first time the dropdown opens.
-    if (isOpen && !syncTriggered.current && orgs.length > 0) {
-      syncTriggered.current = true;
-      SyncOrgMembers(orgs[0]).catch(() => {});
-    }
+    if (!isOpen) return;
+    if (inputRef.current) inputRef.current.focus();
+
+    if (orgs.length === 0) return;
+    const org = orgs[0];
+
+    setIsLoading(true);
+    GetOrgMembers(org)
+      .then((members) => {
+        setAllMembers(members || []);
+        // If cache was empty, trigger a sync and reload.
+        if (!members || members.length === 0) {
+          if (!syncTriggered.current) {
+            syncTriggered.current = true;
+            SyncOrgMembers(org)
+              .then(() => GetOrgMembers(org))
+              .then((m) => setAllMembers(m || []))
+              .catch(() => {});
+          }
+        }
+      })
+      .catch(() => setAllMembers([]))
+      .finally(() => setIsLoading(false));
   }, [isOpen, orgs]);
 
-  const search = useCallback(
-    (q: string) => {
-      if (q.length < 2 || orgs.length === 0) {
-        setResults([]);
-        return;
-      }
-      setIsSearching(true);
-      SearchOrgMembers(orgs[0], q)
-        .then((users) => {
-          // Filter out users who are already reviewers.
-          const filtered = (users || []).filter(
-            (u) => !currentReviewers.includes(u.login)
-          );
-          setResults(filtered);
-        })
-        .catch(() => setResults([]))
-        .finally(() => setIsSearching(false));
-    },
-    [orgs, currentReviewers]
-  );
+  // Client-side filtering: match login or name, exclude already-assigned reviewers.
+  const filteredMembers = useMemo(() => {
+    const q = query.toLowerCase();
+    return allMembers.filter((u) => {
+      if (currentReviewers.includes(u.login)) return false;
+      if (q.length < 1) return true;
+      return (
+        u.login.toLowerCase().includes(q) ||
+        (u.name && u.name.toLowerCase().includes(q))
+      );
+    });
+  }, [allMembers, query, currentReviewers]);
 
-  const handleQueryChange = (value: string) => {
-    setQuery(value);
-    setError(null);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => search(value), 300);
-  };
+  // Show at most 20 results.
+  const visibleMembers = filteredMembers.slice(0, 20);
 
   const handleAssign = async (user: github.User) => {
     setIsAssigning(true);
@@ -90,7 +94,6 @@ export function ReviewerAssign({
       await RequestReviews(prNodeId, [user.nodeId], []);
       setIsOpen(false);
       setQuery("");
-      setResults([]);
       onAssigned?.();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -118,16 +121,16 @@ export function ReviewerAssign({
               ref={inputRef}
               type="text"
               value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setError(null);
+              }}
               placeholder="Search users..."
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             {query && (
               <button
-                onClick={() => {
-                  setQuery("");
-                  setResults([]);
-                }}
+                onClick={() => setQuery("")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-3 w-3" />
@@ -136,18 +139,18 @@ export function ReviewerAssign({
           </div>
 
           <div className="max-h-48 overflow-auto p-1">
-            {isSearching ? (
+            {isLoading ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
-            ) : results.length === 0 ? (
+            ) : visibleMembers.length === 0 ? (
               <div className="py-4 text-center text-xs text-muted-foreground">
-                {query.length < 2
-                  ? "Type to search for users"
-                  : "No users found"}
+                {allMembers.length === 0
+                  ? "No cached members. Syncing..."
+                  : "No matching users"}
               </div>
             ) : (
-              results.map((user) => (
+              visibleMembers.map((user) => (
                 <button
                   key={user.login}
                   onClick={() => handleAssign(user)}

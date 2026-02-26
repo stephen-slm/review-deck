@@ -5,6 +5,8 @@ import {time} from '../models';
 
 export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
 
+export function GetOrgMembers(arg1:string):Promise<Array<github.User>>;
+
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
 
 export function GetMyPRsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
@@ -12,6 +14,8 @@ export function GetMyPRsPage(arg1:string,arg2:number,arg3:string):Promise<github
 export function GetMyRecentMerged(arg1:string,arg2:number):Promise<Array<github.PullRequest>>;
 
 export function GetMyRecentMergedPage(arg1:string,arg2:number,arg3:number,arg4:string):Promise<github.PRPage>;
+
+export function GetOrgMembers(arg1:string):Promise<Array<github.User>>;
 
 export function GetReviewRequests(arg1:string):Promise<Array<github.PullRequest>>;
 

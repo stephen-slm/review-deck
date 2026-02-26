@@ -11,29 +11,6 @@
 
 ---
 
-### Complete Assignee Implementation with Cached Org Members
-**Priority:** High
-
-The current `ReviewerAssign` component calls `SearchOrgMembers` on every keystroke (debounced 300ms), hitting the GitHub API each time. Replace this with a locally cached member list that refreshes weekly.
-
-**Tasks:**
-- [ ] New migration: `org_members` table -- `id`, `org_name`, `node_id TEXT`, `login TEXT`, `name TEXT`, `avatar_url TEXT`, `last_synced_at DATETIME`
-- [ ] Add storage methods: `UpsertOrgMembers(org, []User)`, `GetOrgMembers(org)`, `GetOrgMembersLastSync(org)`
-- [ ] New GitHub API call to fetch all org members -- use the REST API `GET /orgs/{org}/members` (paginated, up to 100 per page) or GraphQL `organization.membersWithRole`. Store the full list locally.
-- [ ] Add a `SyncOrgMembers(org)` method in `PullRequestService` (or a new `OrgService`) that:
-  - Checks `last_synced_at` -- if <7 days old, skip
-  - Fetches all members from GitHub API
-  - Upserts into `org_members`
-- [ ] Trigger the sync: on app startup (if stale), on org add, and optionally on a manual "Refresh members" button in Settings
-- [ ] Have the poller also trigger the sync once per cycle if stale
-- [ ] Update `ReviewerAssign.tsx` to:
-  - On dropdown open, load the full cached member list from `GetOrgMembers(org)` (via a new Wails-bound method)
-  - Filter client-side as the user types (no API calls per keystroke)
-  - Fall back to `SearchOrgMembers` API call only if the cache is empty
-- [ ] Expose `GetOrgMembers(org)` and `SyncOrgMembers(org)` via Wails bindings
-
----
-
 ---
 
 ### Theme Support
@@ -99,6 +76,24 @@ Add a theme engine inspired by opencode's approach. The app currently has a sing
 
 
 ## Done
+
+### Complete Assignee Implementation with Cached Org Members
+Replaced per-keystroke API calls in ReviewerAssign with client-side filtering over a locally cached member list.
+
+**What was done:**
+- `internal/storage/org_members.go` — Added `GetOrgMembers(org)` method that returns ALL cached members (the table, `UpsertOrgMembers`, `SearchOrgMembers`, `GetOrgMembersSyncedAt`, and `GetOrgMemberCount` already existed from prior work).
+- `internal/services/pullrequest.go` — Added `GetOrgMembers(org)` service method exposed via Wails.
+- `frontend/wailsjs/go/services/PullRequestService.d.ts` — Added `GetOrgMembers` binding (`.js` auto-generated).
+- `frontend/src/components/pr/ReviewerAssign.tsx` — Rewrote to use client-side filtering:
+  - On dropdown open: loads full member list from `GetOrgMembers(org)` (single Wails call to SQLite, no API hit).
+  - Filters locally with `useMemo` as user types — zero API/Wails calls per keystroke.
+  - If cache is empty on first open, triggers `SyncOrgMembers` and reloads.
+  - Removed debounce timer and `SearchOrgMembers` dependency entirely.
+
+**Already existed (no changes needed):**
+- `org_members` SQLite table (migration 2), `SyncOrgMembers`, `SyncOrgMembersIfStale` service methods, poller member sync (`syncOrgMembersIfNeeded`), and `SyncOrgMembers` Wails binding via `App`.
+
+---
 
 ### Filter Out Repositories
 Allow users to exclude specific repositories from all PR views via query-time filtering.

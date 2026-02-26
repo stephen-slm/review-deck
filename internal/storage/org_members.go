@@ -40,6 +40,28 @@ func (db *DB) UpsertOrgMembers(org string, members []gh.User) error {
 	return tx.Commit()
 }
 
+// GetOrgMembers returns ALL cached members for an org, ordered by login.
+func (db *DB) GetOrgMembers(org string) ([]gh.User, error) {
+	rows, err := db.conn.Query(
+		"SELECT node_id, login, name, avatar_url FROM org_members WHERE org_name = ? ORDER BY login ASC",
+		org,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get org members: %w", err)
+	}
+	defer rows.Close()
+
+	var users []gh.User
+	for rows.Next() {
+		var u gh.User
+		if err := rows.Scan(&u.NodeID, &u.Login, &u.Name, &u.AvatarURL); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
 // SearchOrgMembers searches cached org members by login or name prefix.
 // Returns up to 20 results ordered by login.
 func (db *DB) SearchOrgMembers(org string, query string) ([]gh.User, error) {
