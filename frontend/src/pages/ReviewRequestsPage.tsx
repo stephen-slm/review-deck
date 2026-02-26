@@ -20,6 +20,8 @@ export function ReviewRequestsPage() {
     setPageSize,
     fetchIfStale,
     clearError,
+    hiddenPRs,
+    hidePR,
   } = usePRStore();
 
   const pg = pages.reviewRequests;
@@ -147,6 +149,8 @@ export function ReviewRequestsPage() {
         onPageSizeChange={handlePageSizeChange}
         onRefresh={forceRefresh}
         priorityNames={priorityNames}
+        onHide={hidePR}
+        hiddenPRs={hiddenPRs}
       />
     </div>
   );

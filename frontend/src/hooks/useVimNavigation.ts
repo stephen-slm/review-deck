@@ -184,7 +184,7 @@ export function useVimNavigation() {
       }),
 
       // ---- Toggle pick individual row (Space) ----
-      " ": vim(() => {
+      "Space": vim(() => {
         store().togglePick();
       }),
 
@@ -192,6 +192,20 @@ export function useVimNavigation() {
       "c": vim(() => {
         const { onCopy } = store();
         if (onCopy) onCopy();
+      }),
+
+      // ---- Hide/dismiss PR (x) ----
+      "x": vim(() => {
+        const { selectedIndex, onHide } = store();
+        if (onHide && selectedIndex >= 0) onHide(selectedIndex);
+      }),
+
+      // ---- Smooth scroll: Shift+J (down) / Shift+K (up) ----
+      "Shift+j": vim(() => {
+        document.getElementById("scroll-region")?.scrollBy({ top: 150, behavior: "smooth" });
+      }),
+      "Shift+k": vim(() => {
+        document.getElementById("scroll-region")?.scrollBy({ top: -150, behavior: "smooth" });
       }),
     });
 

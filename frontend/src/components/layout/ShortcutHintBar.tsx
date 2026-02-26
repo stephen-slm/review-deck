@@ -8,6 +8,7 @@ interface Hint {
 
 const GLOBAL_HINTS: Hint[] = [
   { keys: "1-6", label: "tabs" },
+  { keys: "J/K", label: "scroll" },
   { keys: "?", label: "toggle hints" },
 ];
 
@@ -46,10 +47,13 @@ function getHintsForPath(pathname: string): Hint[] {
   if (pathname.startsWith("/pr/")) {
     return [...DETAIL_HINTS, ...GLOBAL_HINTS];
   }
-  // Pages with PRTable
+  // Review requests page has hide shortcut
+  if (pathname === "/review-requests") {
+    return [...LIST_HINTS, { keys: "x", label: "hide" }, ...GLOBAL_HINTS];
+  }
+  // Other pages with PRTable
   if (
     pathname === "/my-prs" ||
-    pathname === "/review-requests" ||
     pathname === "/reviewed"
   ) {
     return [...LIST_HINTS, ...GLOBAL_HINTS];

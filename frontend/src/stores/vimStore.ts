@@ -35,6 +35,8 @@ export interface VimState {
   onApprove: (() => void) | null;
   /** Copy selected PRs — called by 'c' keybinding. */
   onCopy: (() => void) | null;
+  /** Hide/dismiss PR at index — called by 'x' keybinding. */
+  onHide: ((index: number) => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -63,7 +65,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -85,6 +87,7 @@ const emptyActions = {
   onMerge: null,
   onApprove: null,
   onCopy: null,
+  onHide: null,
   onEscape: null,
 };
 
@@ -117,7 +120,11 @@ export const useVimStore = create<VimState>((set, get) => ({
       // Nothing selected yet — start at top or bottom depending on direction.
       next = delta > 0 ? 0 : listLength - 1;
     } else {
-      next = Math.max(0, Math.min(listLength - 1, selectedIndex + delta));
+      next = selectedIndex + delta;
+      // Allow moving past the edges to deselect (-1), rather than clamping.
+      if (next < 0 || next >= listLength) {
+        next = -1;
+      }
     }
     set({ selectedIndex: next });
   },

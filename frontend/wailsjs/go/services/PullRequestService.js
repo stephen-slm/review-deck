@@ -46,6 +46,10 @@ export function GetPRComments(arg1) {
   return window['go']['services']['PullRequestService']['GetPRComments'](arg1);
 }
 
+export function GetPRFiles(arg1, arg2, arg3) {
+  return window['go']['services']['PullRequestService']['GetPRFiles'](arg1, arg2, arg3);
+}
+
 export function GetRepoLabels(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetRepoLabels'](arg1, arg2);
 }

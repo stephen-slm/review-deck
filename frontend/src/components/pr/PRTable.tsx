@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -45,6 +45,10 @@ interface PRTableProps {
   onPageSizeChange?: (size: number) => void;
   /** Set of priority user/team names. Matching rows get a visual indicator. */
   priorityNames?: Set<string>;
+  /** Called when the user hides/dismisses a PR (by nodeId). */
+  onHide?: (nodeId: string) => void;
+  /** Set of hidden PR nodeIds — filtered out before display. */
+  hiddenPRs?: Set<string>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -76,6 +80,8 @@ export function PRTable({
   onPageChange,
   onPageSizeChange,
   priorityNames,
+  onHide,
+  hiddenPRs,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -93,14 +99,17 @@ export function PRTable({
   const visualAnchor = useVimStore((s) => s.visualAnchor);
   const pickedIndices = useVimStore((s) => s.pickedIndices);
 
-  // Filter out stacked PRs (baseRef not main/master) when toggle is on.
-  const filteredData = useMemo(
-    () =>
-      hideStacked
-        ? data.filter((pr) => DEFAULT_BRANCHES.has(pr.baseRef))
-        : data,
-    [data, hideStacked],
-  );
+  // Filter out stacked PRs and hidden PRs.
+  const filteredData = useMemo(() => {
+    let result = data;
+    if (hideStacked) {
+      result = result.filter((pr) => DEFAULT_BRANCHES.has(pr.baseRef));
+    }
+    if (hiddenPRs && hiddenPRs.size > 0) {
+      result = result.filter((pr) => !hiddenPRs.has(pr.nodeId));
+    }
+    return result;
+  }, [data, hideStacked, hiddenPRs]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -139,6 +148,10 @@ export function PRTable({
       onPrevPage: pagination.currentPage > 1 ? () => onPageChange("prev") : null,
       onFocusSearch: () => searchInputRef.current?.focus(),
       onCopy: () => handleCopySelection(),
+      onHide: onHide ? (index: number) => {
+        const pr = getRows()[index];
+        if (pr) onHide(pr.nodeId);
+      } : null,
     });
 
     return () => useVimStore.getState().clearActions();
@@ -344,6 +357,15 @@ export function PRTable({
                   onMerged={onRefresh}
                 />
               )}
+              {onHide && (
+                <button
+                  onClick={() => onHide(pr.nodeId)}
+                  className="rounded p-1 text-muted-foreground transition-colors hover:text-red-500"
+                  title="Hide this PR"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
                 onClick={() => handleCopyRow(pr)}
                 className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
@@ -365,10 +387,10 @@ export function PRTable({
             </div>
           );
         },
-        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + 70,
+        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + (onHide ? 30 : 0) + 70,
       }),
     ];
-  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, copiedKey, handleCopyRow]);
+  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, onHide, copiedKey, handleCopyRow]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({

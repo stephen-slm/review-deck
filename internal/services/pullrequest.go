@@ -421,6 +421,18 @@ func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error
 	return comments, nil
 }
 
+// GetPRFiles fetches the list of changed files with diff patches for a PR.
+func (s *PullRequestService) GetPRFiles(owner, repo string, number int) ([]gh.PRFile, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	files, err := s.client.GetPRFiles(context.Background(), owner, repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("fetch PR files: %w", err)
+	}
+	return files, nil
+}
+
 // ---- Metrics ----
 
 // GetMetricsHistory returns historical metrics snapshots for the given number of days back.

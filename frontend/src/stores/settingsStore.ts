@@ -72,6 +72,11 @@ interface SettingsState {
   loadAllExcludedRepos: () => Promise<void>;
   addExcludedRepo: (org: string, repo: string) => Promise<void>;
   removeExcludedRepo: (org: string, repo: string) => Promise<void>;
+
+  /** Base path for local source code (used for Open in GoLand) */
+  sourceBasePath: string;
+  loadSourceBasePath: () => Promise<void>;
+  setSourceBasePath: (path: string) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -85,6 +90,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   teamsByOrg: {},
   prioritiesByOrg: {},
   excludedReposByOrg: {},
+  sourceBasePath: "",
   isLoading: false,
 
   loadOrgs: async () => {
@@ -316,5 +322,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   removeExcludedRepo: async (org: string, repo: string) => {
     await RemoveExcludedRepo(org, repo);
     await get().loadExcludedRepos(org);
+  },
+
+  loadSourceBasePath: async () => {
+    try {
+      const val = await GetSetting("source_base_path");
+      set({ sourceBasePath: val || "" });
+    } catch {
+      set({ sourceBasePath: "" });
+    }
+  },
+
+  setSourceBasePath: async (path: string) => {
+    await SetSetting("source_base_path", path);
+    set({ sourceBasePath: path });
   },
 }));

@@ -202,6 +202,30 @@ export namespace github {
 		    return a;
 		}
 	}
+	export class PRFile {
+	    filename: string;
+	    status: string;
+	    additions: number;
+	    deletions: number;
+	    changes: number;
+	    patch: string;
+	    previousFilename?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PRFile(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.filename = source["filename"];
+	        this.status = source["status"];
+	        this.additions = source["additions"];
+	        this.deletions = source["deletions"];
+	        this.changes = source["changes"];
+	        this.patch = source["patch"];
+	        this.previousFilename = source["previousFilename"];
+	    }
+	}
 	export class PageInfo {
 	    hasNextPage: boolean;
 	    endCursor: string;

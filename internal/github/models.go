@@ -133,6 +133,18 @@ type PullRequest struct {
 	MergedBy string `json:"mergedBy"`
 }
 
+// PRFile represents a single file changed in a pull request, including
+// the unified diff patch returned by the GitHub REST API.
+type PRFile struct {
+	Filename         string `json:"filename"`
+	Status           string `json:"status"` // added, removed, modified, renamed, copied
+	Additions        int    `json:"additions"`
+	Deletions        int    `json:"deletions"`
+	Changes          int    `json:"changes"`
+	Patch            string `json:"patch"`
+	PreviousFilename string `json:"previousFilename,omitempty"`
+}
+
 // Team represents a GitHub team.
 type Team struct {
 	Slug string `json:"slug"`

@@ -90,6 +90,9 @@ interface PRState {
   /** Cache TTL in milliseconds */
   cacheTTLMs: number;
 
+  /** Node IDs of PRs the user has explicitly hidden (e.g. dismissed review requests). */
+  hiddenPRs: Set<string>;
+
   error: string | null;
 
   // ---- Page navigation ----
@@ -126,6 +129,11 @@ interface PRState {
   loadCacheTimestamps: () => Promise<void>;
   setCacheTTL: (ms: number) => void;
   clearError: () => void;
+
+  // ---- Hidden PRs ----
+  hidePR: (nodeId: string) => void;
+  unhidePR: (nodeId: string) => void;
+  loadHiddenPRs: () => Promise<void>;
 }
 
 function isFresh(lastFetchedAt: number, ttl: number): boolean {
@@ -252,6 +260,7 @@ export const usePRStore = create<PRState>((set, get) => ({
   isLoading: { ...defaultLoading },
   lastFetchedAt: { ...defaultLastFetched },
   cacheTTLMs: DEFAULT_CACHE_TTL_MS,
+  hiddenPRs: new Set<string>(),
   error: null,
 
   // ---- First-page fetches (reset pagination to page 1) ----
@@ -540,4 +549,32 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),
   clearError: () => set({ error: null }),
+
+  // ---- Hidden PRs (persisted as JSON array of nodeIds) ----
+
+  hidePR: (nodeId: string) => {
+    const next = new Set(get().hiddenPRs);
+    next.add(nodeId);
+    set({ hiddenPRs: next });
+    SetSetting("hidden_prs", JSON.stringify(Array.from(next))).catch(() => {});
+  },
+
+  unhidePR: (nodeId: string) => {
+    const next = new Set(get().hiddenPRs);
+    next.delete(nodeId);
+    set({ hiddenPRs: next });
+    SetSetting("hidden_prs", JSON.stringify(Array.from(next))).catch(() => {});
+  },
+
+  loadHiddenPRs: async () => {
+    try {
+      const val = await GetSetting("hidden_prs");
+      const arr = JSON.parse(val);
+      if (Array.isArray(arr)) {
+        set({ hiddenPRs: new Set(arr) });
+      }
+    } catch {
+      // Setting doesn't exist yet — start with empty set.
+    }
+  },
 }));

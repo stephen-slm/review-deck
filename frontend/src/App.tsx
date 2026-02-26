@@ -24,6 +24,7 @@ function AppContent() {
   // Hydrate persisted settings and cache timestamps on startup.
   useEffect(() => {
     usePRStore.getState().loadCacheTimestamps();
+    usePRStore.getState().loadHiddenPRs();
     useSettingsStore.getState().loadHideStackedPRs();
   }, []);
 

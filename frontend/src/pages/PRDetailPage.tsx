@@ -29,7 +29,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
 function proxyImageSrc(src: string | undefined): string | undefined {
@@ -98,12 +98,13 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { github } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
-type DetailTab = "description" | "checks" | "comments";
+type DetailTab = "description" | "checks" | "comments" | "files";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
 import { ChecksStatusIcon } from "@/components/pr/ChecksStatusIcon";
 import { ReviewerAssign } from "@/components/pr/ReviewerAssign";
+import { DiffView } from "@/components/pr/DiffView";
 
 /** Search all PR store arrays for a PR by nodeId. */
 function useFindPR(nodeId: string | undefined): github.PullRequest | undefined {
@@ -132,8 +133,9 @@ export function PRDetailPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
 
-  // The PR to display: prefer the store version, fall back to independently fetched.
-  const pr = storePR ?? fetchedPR ?? undefined;
+  // The PR to display: prefer the independently fetched version (from manual refresh)
+  // over the store copy, since the store only updates on background poll cycles.
+  const pr = fetchedPR ?? storePR ?? undefined;
 
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
@@ -146,6 +148,11 @@ export function PRDetailPage() {
   const [comments, setComments] = useState<github.PRComments | null>(null);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
+
+  // Lazy-loaded files (diff view)
+  const [prFiles, setPRFiles] = useState<github.PRFile[] | null>(null);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState<string | null>(null);
 
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
@@ -172,25 +179,67 @@ export function PRDetailPage() {
       .finally(() => setCommentsLoading(false));
   }, [activeTab, comments, commentsLoading, nodeId]);
 
+  // Fetch files when the files tab is first selected
+  useEffect(() => {
+    if (activeTab !== "files" || prFiles !== null || filesLoading || !pr) return;
+    setFilesLoading(true);
+    GetPRFiles(pr.repoOwner, pr.repoName, pr.number)
+      .then(setPRFiles)
+      .catch((err) => setFilesError(String(err)))
+      .finally(() => setFilesLoading(false));
+  }, [activeTab, prFiles, filesLoading, pr]);
+
+  // Keep a ref to the latest PR info so the auto-refresh interval always
+  // has access to current owner/repo/number without stale closures.
+  const prRef = useRef<{ owner: string; repo: string; number: number } | null>(null);
+  useEffect(() => {
+    if (pr) prRef.current = { owner: pr.repoOwner, repo: pr.repoName, number: pr.number };
+  }, [pr]);
+
+  // Ref to track whether a refresh is in progress (avoids stale closure issues).
+  const refreshingRef = useRef(false);
+
   /** Refresh the PR by re-fetching from GitHub. */
   const handleRefresh = async () => {
-    if (!pr || refreshing) return;
+    const info = prRef.current;
+    if (!info || refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
     setRefreshError(null);
     try {
-      const fresh = await GetSinglePR(pr.repoOwner, pr.repoName, pr.number);
+      const fresh = await GetSinglePR(info.owner, info.repo, info.number);
       setFetchedPR(fresh);
       // Also reset lazy-loaded tab data so they re-fetch on next view.
       setCheckRuns(null);
       setChecksError(null);
       setComments(null);
       setCommentsError(null);
+      setPRFiles(null);
+      setFilesError(null);
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : String(err));
     } finally {
+      refreshingRef.current = false;
       setRefreshing(false);
     }
   };
+
+  // Auto-fetch fresh PR data on mount (the store copy may be stale).
+  useEffect(() => {
+    if (storePR && !fetchedPR) {
+      handleRefresh();
+    }
+  }, [storePR?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh every 30 seconds.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (prRef.current && !refreshingRef.current) {
+        handleRefresh();
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset selection when the active tab changes.
   useEffect(() => {
@@ -205,6 +254,8 @@ export function PRDetailPage() {
       const ic = comments?.issueComments?.length ?? 0;
       const rt = comments?.reviewThreads?.length ?? 0;
       useVimStore.getState().setListLength(ic + rt);
+    } else if (activeTab === "files") {
+      useVimStore.getState().setListLength(prFiles?.length ?? 0);
     } else {
       useVimStore.getState().setListLength(0);
     }
@@ -213,7 +264,7 @@ export function PRDetailPage() {
   // Register VIM actions for the detail page.
   // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
   useEffect(() => {
-    const tabKeys: DetailTab[] = ["description", "checks", "comments"];
+    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -287,10 +338,11 @@ export function PRDetailPage() {
     { key: "description", label: "Description", icon: <FileText className="h-4 w-4" /> },
     { key: "checks", label: "Checks", icon: <Activity className="h-4 w-4" /> },
     { key: "comments", label: "Comments", icon: <MessageSquare className="h-4 w-4" /> },
+    { key: "files", label: "Files", icon: <FileCode className="h-4 w-4" /> },
   ];
 
   return (
-    <div className="max-w-5xl space-y-4">
+    <div className="min-w-0 max-w-5xl space-y-4">
       {/* Back + Refresh */}
       <div className="flex items-center gap-3">
         <button
@@ -346,7 +398,7 @@ export function PRDetailPage() {
       {/* Two-column layout */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         {/* Main column */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/* Author + timestamps */}
           <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
             {pr.authorAvatar ? (
@@ -510,6 +562,16 @@ export function PRDetailPage() {
               }}
             />
           )}
+
+          {activeTab === "files" && (
+            <DiffView
+              files={prFiles}
+              loading={filesLoading}
+              error={filesError}
+              owner={pr.repoOwner}
+              repo={pr.repoName}
+            />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -518,7 +580,7 @@ export function PRDetailPage() {
           <SidebarSection title="Actions">
             <div className="space-y-2">
               {pr.state === "OPEN" && (
-                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} triggerRef={approveRef} />
+                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} triggerRef={approveRef} onApproved={handleRefresh} />
               )}
               {pr.state === "OPEN" && (
                 <DetailMergeButton
@@ -526,7 +588,7 @@ export function PRDetailPage() {
                   mergeable={pr.mergeable}
                   isDraft={pr.isDraft}
                   isInMergeQueue={pr.isInMergeQueue}
-                  onMerged={() => navigate(-1)}
+                  onMerged={async () => { await handleRefresh(); navigate(-1); }}
                   triggerRef={mergeToggleRef}
                 />
               )}
@@ -537,6 +599,7 @@ export function PRDetailPage() {
                 <ExternalLink className="h-4 w-4" />
                 Open in GitHub
               </button>
+              <OpenInGoLandButton org={pr.repoOwner} repo={pr.repoName} />
             </div>
           </SidebarSection>
 
@@ -570,7 +633,7 @@ export function PRDetailPage() {
           </SidebarSection>
 
           {/* Reviewers: completed reviews + pending requests */}
-          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} />
+          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} onAssigned={handleRefresh} />
 
           {/* Labels */}
           {pr.labels && pr.labels.length > 0 && (
@@ -697,7 +760,7 @@ function DetailMergeButton({
       const result = await mergePR(prNodeId, method);
       setMergeResult(result);
       setIsOpen(false);
-      if (result === "merged") onMerged?.();
+      onMerged?.();
     } catch (err: unknown) {
       setMergeError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -921,20 +984,16 @@ function ChecksTab({
     );
   }
 
-  // Group by conclusion for a summary
+  // Group by conclusion for a summary and sort: failures first, then pending, then passed.
   const passed = checkRuns.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "NEUTRAL" || c.conclusion === "SKIPPED");
   const failed = checkRuns.filter((c) => c.conclusion === "FAILURE" || c.conclusion === "TIMED_OUT" || c.conclusion === "CANCELLED" || c.conclusion === "STARTUP_FAILURE");
   const pending = checkRuns.filter((c) => !c.conclusion || c.status === "IN_PROGRESS" || c.status === "QUEUED" || c.status === "PENDING" || c.status === "WAITING");
+  const sorted = [...failed, ...pending, ...passed];
 
   return (
     <section className="space-y-3">
       {/* Summary bar */}
       <div className="flex items-center gap-4 text-sm">
-        {passed.length > 0 && (
-          <span className="flex items-center gap-1 text-green-600 dark:text-green-300">
-            <CheckCircle className="h-4 w-4" /> {passed.length} passed
-          </span>
-        )}
         {failed.length > 0 && (
           <span className="flex items-center gap-1 text-red-600 dark:text-red-300">
             <XCircle className="h-4 w-4" /> {failed.length} failed
@@ -945,11 +1004,16 @@ function ChecksTab({
             <Loader2 className="h-4 w-4" /> {pending.length} pending
           </span>
         )}
+        {passed.length > 0 && (
+          <span className="flex items-center gap-1 text-green-600 dark:text-green-300">
+            <CheckCircle className="h-4 w-4" /> {passed.length} passed
+          </span>
+        )}
       </div>
 
-      {/* Individual checks */}
+      {/* Individual checks — failures first, then pending, then passed */}
       <div className="space-y-1">
-        {checkRuns.map((check, i) => (
+        {sorted.map((check, i) => (
           <div
             key={check.name + i}
             ref={(el) => { itemRefs.current[i] = el; }}
@@ -1298,12 +1362,14 @@ function ReviewersSidebar({
   prNodeId,
   isOpen,
   triggerRef,
+  onAssigned,
 }: {
   reviews: github.Review[] | null;
   reviewRequests: github.ReviewRequest[] | null;
   prNodeId: string;
   isOpen: boolean;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
+  onAssigned?: () => void;
 }) {
   const latestReviews = useMemo(() => {
     if (!reviews || reviews.length === 0) return [];
@@ -1381,9 +1447,41 @@ function ReviewersSidebar({
             prNodeId={prNodeId}
             currentReviewers={(reviewRequests || []).map((rr) => rr.reviewer)}
             triggerRef={triggerRef}
+            onAssigned={onAssigned}
           />
         )}
       </div>
     </SidebarSection>
+  );
+}
+
+/** "Open in GoLand" button — only rendered when a source base path is configured. */
+function OpenInGoLandButton({ org, repo, filePath, line }: { org: string; repo: string; filePath?: string; line?: number }) {
+  const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
+
+  if (!sourceBasePath) return null;
+
+  const handleClick = () => {
+    // jetbrains://goland/navigate/reference?project=<repo>&path=<filePath>&line=<line>
+    const project = repo;
+    let url = `jetbrains://goland/navigate/reference?project=${encodeURIComponent(project)}`;
+    if (filePath) {
+      url += `&path=${encodeURIComponent(filePath)}`;
+      if (line && line > 0) {
+        url += `&line=${encodeURIComponent(String(line))}`;
+      }
+    }
+    BrowserOpenURL(url);
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      title={filePath ? `Open ${filePath} in GoLand` : `Open ${org}/${repo} in GoLand`}
+    >
+      <FileCode className="h-4 w-4" />
+      Open in GoLand
+    </button>
   );
 }

@@ -3,14 +3,14 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
 import { themeChoices, getTheme, ThemeChoice } from "@/theme";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette, Code } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -31,7 +31,8 @@ export function SettingsPage() {
     loadTheme();
     loadCacheTTL();
     loadPollInterval();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval]);
+    loadSourceBasePath();
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadSourceBasePath]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -795,6 +796,37 @@ export function SettingsPage() {
               />
               <span className="text-sm text-muted-foreground">min</span>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* IDE Integration Section */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Code className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">IDE Integration</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Configure a local source base path to enable "Open in GoLand" buttons
+          throughout the app. Repos are expected at{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">{"<base>/<org>/<repo>"}</code>.
+        </p>
+
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">Source base path</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Absolute path where your Git repositories are cloned.
+              </p>
+            </div>
+            <input
+              type="text"
+              value={sourceBasePath}
+              onChange={(e) => setSourceBasePath(e.target.value)}
+              placeholder="~/source"
+              className="w-56 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
           </div>
         </div>
       </section>
