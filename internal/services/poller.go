@@ -28,6 +28,7 @@ type Notification struct {
 	Title   string `json:"title"` // PR title
 	Repo    string `json:"repo"`  // owner/name
 	Number  int    `json:"number"`
+	NodeID  string `json:"nodeId"` // GraphQL node ID — used by the frontend to link to the PR detail page
 	URL     string `json:"url"`
 	Author  string `json:"author"`
 	Message string `json:"message"` // Human-readable summary
@@ -424,6 +425,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 				Title:   pr.Title,
 				Repo:    pr.RepoOwner + "/" + pr.RepoName,
 				Number:  pr.Number,
+				NodeID:  pr.NodeID,
 				URL:     pr.URL,
 				Author:  pr.Author,
 				Message: pr.Author + " requested your review on " + pr.RepoName + "#" + itoa(pr.Number),
@@ -450,6 +452,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 					Title:   pr.Title,
 					Repo:    pr.RepoOwner + "/" + pr.RepoName,
 					Number:  pr.Number,
+					NodeID:  pr.NodeID,
 					URL:     pr.URL,
 					Message: repo + " has been approved",
 				})
@@ -459,6 +462,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 					Title:   pr.Title,
 					Repo:    pr.RepoOwner + "/" + pr.RepoName,
 					Number:  pr.Number,
+					NodeID:  pr.NodeID,
 					URL:     pr.URL,
 					Message: "Changes requested on " + repo,
 				})
@@ -474,6 +478,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 					Title:   pr.Title,
 					Repo:    pr.RepoOwner + "/" + pr.RepoName,
 					Number:  pr.Number,
+					NodeID:  pr.NodeID,
 					URL:     pr.URL,
 					Message: "CI failed on " + repo,
 				})
@@ -484,6 +489,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 						Title:   pr.Title,
 						Repo:    pr.RepoOwner + "/" + pr.RepoName,
 						Number:  pr.Number,
+						NodeID:  pr.NodeID,
 						URL:     pr.URL,
 						Message: "CI passed on " + repo,
 					})
@@ -503,6 +509,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 					Title:   pr.Title,
 					Repo:    pr.RepoOwner + "/" + pr.RepoName,
 					Number:  pr.Number,
+					NodeID:  pr.NodeID,
 					URL:     pr.URL,
 					Message: pr.RepoName + "#" + itoa(pr.Number) + " has been merged",
 				})

@@ -7,10 +7,11 @@ interface Toast {
   message: string;
   type: "success" | "error" | "info";
   duration?: number;
+  onClick?: () => void;
 }
 
 interface ToastContextValue {
-  addToast: (message: string, type?: Toast["type"], duration?: number) => void;
+  addToast: (message: string, type?: Toast["type"], duration?: number, onClick?: () => void) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -27,9 +28,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = useCallback(
-    (message: string, type: Toast["type"] = "info", duration = 4000) => {
+    (message: string, type: Toast["type"] = "info", duration = 4000, onClick?: () => void) => {
       const id = String(++nextId);
-      setToasts((prev) => [...prev, { id, message, type, duration }]);
+      setToasts((prev) => [...prev, { id, message, type, duration, onClick }]);
     },
     []
   );
@@ -82,17 +83,33 @@ function ToastItem({
       ? "text-destructive"
       : "text-blue-500";
 
+  const handleClick = toast.onClick
+    ? () => {
+        toast.onClick?.();
+        setIsExiting(true);
+        setTimeout(() => onDismiss(toast.id), 200);
+      }
+    : undefined;
+
   return (
     <div
       className={cn(
         "flex w-80 items-start gap-2 rounded-lg border border-border bg-card px-3 py-2.5 shadow-lg transition-all duration-200",
-        isExiting ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"
+        isExiting ? "translate-x-full opacity-0" : "translate-x-0 opacity-100",
+        handleClick && "cursor-pointer hover:bg-accent/50"
       )}
+      onClick={handleClick}
     >
       <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", iconColor)} />
-      <p className="flex-1 text-sm text-foreground">{toast.message}</p>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-foreground">{toast.message}</p>
+        {handleClick && (
+          <p className="mt-0.5 text-xs text-muted-foreground">Click to view</p>
+        )}
+      </div>
       <button
-        onClick={() => {
+        onClick={(e) => {
+          e.stopPropagation();
           setIsExiting(true);
           setTimeout(() => onDismiss(toast.id), 200);
         }}

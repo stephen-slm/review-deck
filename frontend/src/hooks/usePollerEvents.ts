@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
 import { SetSetting } from "../../wailsjs/go/services/SettingsService";
 import { usePRStore } from "@/stores/prStore";
@@ -20,6 +21,7 @@ interface Notification {
   title: string;
   repo: string;
   number: number;
+  nodeId: string;
   url: string;
   author: string;
   message: string;
@@ -38,6 +40,7 @@ function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
     endCursor: "",
     totalCount: prs.length,
     cursorStack: [""],
+    pageCache: {},
   };
 }
 
@@ -48,6 +51,7 @@ function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
  */
 export function usePollerEvents() {
   const { addToast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleUpdate = (result: PollResult) => {
@@ -108,7 +112,10 @@ export function usePollerEvents() {
     const handleNotifications = (notifications: Notification[]) => {
       for (const n of notifications) {
         const toastType = notificationToastType(n.type);
-        addToast(n.message, toastType, 6000);
+        const onClick = n.nodeId
+          ? () => navigate(`/pr/${n.nodeId}`)
+          : undefined;
+        addToast(n.message, toastType, 6000, onClick);
       }
     };
 
@@ -118,7 +125,7 @@ export function usePollerEvents() {
       EventsOff("poller:update");
       EventsOff("poller:notifications");
     };
-  }, [addToast]);
+  }, [addToast, navigate]);
 }
 
 function notificationToastType(type: string): "success" | "error" | "info" {

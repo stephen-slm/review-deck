@@ -18,6 +18,9 @@ import {
 /** Default cache TTL: 5 minutes in milliseconds */
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
+/** How long a cached page stays valid (ms). */
+const PAGE_CACHE_TTL_MS = 2 * 60 * 1000;
+
 /** Default number of items per page */
 const DEFAULT_PAGE_SIZE = 15;
 
@@ -31,6 +34,13 @@ function persistCacheTs(key: CacheKey, ts: number): void {
 }
 
 export type PageDirection = "next" | "prev" | "first";
+
+/** A single cached page of results. */
+interface CachedPage {
+  items: github.PullRequest[];
+  pageInfo: github.PageInfo;
+  fetchedAt: number;
+}
 
 export interface PaginationState {
   /** Items currently displayed (one page worth) */
@@ -51,6 +61,8 @@ export interface PaginationState {
    * Length always equals currentPage.
    */
   cursorStack: string[];
+  /** In-memory cache of previously fetched pages, keyed by page number. */
+  pageCache: Record<number, CachedPage>;
 }
 
 function emptyPagination(pageSize: number = DEFAULT_PAGE_SIZE): PaginationState {
@@ -62,6 +74,7 @@ function emptyPagination(pageSize: number = DEFAULT_PAGE_SIZE): PaginationState 
     endCursor: "",
     totalCount: 0,
     cursorStack: [""],
+    pageCache: {},
   };
 }
 
@@ -168,7 +181,7 @@ function resolveNavigation(
   }
 }
 
-/** Apply a server response to produce an updated PaginationState. */
+/** Apply a server response to produce an updated PaginationState, caching the page. */
 function applyPageResult(
   prev: PaginationState,
   prs: github.PullRequest[],
@@ -184,6 +197,36 @@ function applyPageResult(
     hasNextPage: info.hasNextPage,
     endCursor: info.endCursor,
     totalCount: info.totalCount,
+    pageCache: {
+      ...prev.pageCache,
+      [newPage]: { items: prs, pageInfo: info, fetchedAt: Date.now() },
+    },
+  };
+}
+
+/** Look up a cached page; returns it only if it exists and hasn't expired. */
+function getCachedPage(pg: PaginationState, page: number): CachedPage | null {
+  const cached = pg.pageCache[page];
+  if (!cached) return null;
+  if (Date.now() - cached.fetchedAt > PAGE_CACHE_TTL_MS) return null;
+  return cached;
+}
+
+/** Apply a cached page hit (no server fetch needed). */
+function applyCachedPage(
+  prev: PaginationState,
+  cached: CachedPage,
+  newPage: number,
+  newStack: string[],
+): PaginationState {
+  return {
+    ...prev,
+    items: cached.items,
+    currentPage: newPage,
+    cursorStack: newStack,
+    hasNextPage: cached.pageInfo.hasNextPage,
+    endCursor: cached.pageInfo.endCursor,
+    totalCount: cached.pageInfo.totalCount,
   };
 }
 
@@ -205,7 +248,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       const info = page.pageInfo;
       const now = Date.now();
       set((s) => ({
-        pages: { ...s.pages, myPRs: applyPageResult(s.pages.myPRs, prs, info, 1, [""]) },
+        pages: { ...s.pages, myPRs: { ...applyPageResult({ ...s.pages.myPRs, pageCache: {} }, prs, info, 1, [""]) } },
         isLoading: { ...s.isLoading, myPRs: false },
         lastFetchedAt: { ...s.lastFetchedAt, myPRs: now },
       }));
@@ -225,7 +268,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       const info = page.pageInfo;
       const now = Date.now();
       set((s) => ({
-        pages: { ...s.pages, myRecentMerged: applyPageResult(s.pages.myRecentMerged, prs, info, 1, [""]) },
+        pages: { ...s.pages, myRecentMerged: { ...applyPageResult({ ...s.pages.myRecentMerged, pageCache: {} }, prs, info, 1, [""]) } },
         isLoading: { ...s.isLoading, myRecentMerged: false },
         lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: now },
       }));
@@ -245,7 +288,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       const info = page.pageInfo;
       const now = Date.now();
       set((s) => ({
-        pages: { ...s.pages, reviewRequests: applyPageResult(s.pages.reviewRequests, prs, info, 1, [""]) },
+        pages: { ...s.pages, reviewRequests: { ...applyPageResult({ ...s.pages.reviewRequests, pageCache: {} }, prs, info, 1, [""]) } },
         isLoading: { ...s.isLoading, reviewRequests: false },
         lastFetchedAt: { ...s.lastFetchedAt, reviewRequests: now },
       }));
@@ -265,7 +308,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       const info = page.pageInfo;
       const now = Date.now();
       set((s) => ({
-        pages: { ...s.pages, teamReviewRequests: applyPageResult(s.pages.teamReviewRequests, prs, info, 1, [""]) },
+        pages: { ...s.pages, teamReviewRequests: { ...applyPageResult({ ...s.pages.teamReviewRequests, pageCache: {} }, prs, info, 1, [""]) } },
         isLoading: { ...s.isLoading, teamReviewRequests: false },
         lastFetchedAt: { ...s.lastFetchedAt, teamReviewRequests: now },
       }));
@@ -285,7 +328,7 @@ export const usePRStore = create<PRState>((set, get) => ({
       const info = page.pageInfo;
       const now = Date.now();
       set((s) => ({
-        pages: { ...s.pages, reviewedByMe: applyPageResult(s.pages.reviewedByMe, prs, info, 1, [""]) },
+        pages: { ...s.pages, reviewedByMe: { ...applyPageResult({ ...s.pages.reviewedByMe, pageCache: {} }, prs, info, 1, [""]) } },
         isLoading: { ...s.isLoading, reviewedByMe: false },
         lastFetchedAt: { ...s.lastFetchedAt, reviewedByMe: now },
       }));
@@ -302,6 +345,11 @@ export const usePRStore = create<PRState>((set, get) => ({
     const pg = get().pages.myPRs;
     const nav = resolveNavigation(pg, direction);
     if (!nav) return;
+    const cached = getCachedPage(pg, nav.newPage);
+    if (cached) {
+      set((s) => ({ pages: { ...s.pages, myPRs: applyCachedPage(s.pages.myPRs, cached, nav.newPage, nav.newStack) } }));
+      return;
+    }
     set((s) => ({ isLoading: { ...s.isLoading, myPRs: true }, error: null }));
     try {
       const page = await GetMyPRsPage(org, pg.pageSize, nav.cursor);
@@ -320,6 +368,11 @@ export const usePRStore = create<PRState>((set, get) => ({
     const pg = get().pages.myRecentMerged;
     const nav = resolveNavigation(pg, direction);
     if (!nav) return;
+    const cached = getCachedPage(pg, nav.newPage);
+    if (cached) {
+      set((s) => ({ pages: { ...s.pages, myRecentMerged: applyCachedPage(s.pages.myRecentMerged, cached, nav.newPage, nav.newStack) } }));
+      return;
+    }
     set((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true }, error: null }));
     try {
       const page = await GetMyRecentMergedPage(org, daysBack, pg.pageSize, nav.cursor);
@@ -338,6 +391,11 @@ export const usePRStore = create<PRState>((set, get) => ({
     const pg = get().pages.reviewRequests;
     const nav = resolveNavigation(pg, direction);
     if (!nav) return;
+    const cached = getCachedPage(pg, nav.newPage);
+    if (cached) {
+      set((s) => ({ pages: { ...s.pages, reviewRequests: applyCachedPage(s.pages.reviewRequests, cached, nav.newPage, nav.newStack) } }));
+      return;
+    }
     set((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true }, error: null }));
     try {
       const page = await GetReviewRequestsPage(org, pg.pageSize, nav.cursor);
@@ -356,6 +414,11 @@ export const usePRStore = create<PRState>((set, get) => ({
     const pg = get().pages.reviewedByMe;
     const nav = resolveNavigation(pg, direction);
     if (!nav) return;
+    const cached = getCachedPage(pg, nav.newPage);
+    if (cached) {
+      set((s) => ({ pages: { ...s.pages, reviewedByMe: applyCachedPage(s.pages.reviewedByMe, cached, nav.newPage, nav.newStack) } }));
+      return;
+    }
     set((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true }, error: null }));
     try {
       const page = await GetReviewedByMePage(org, pg.pageSize, nav.cursor);
