@@ -303,6 +303,7 @@ export namespace github {
 	    baseRef: string;
 	    state: string;
 	    isDraft: boolean;
+	    isInMergeQueue: boolean;
 	    mergeable: string;
 	    reviewDecision: string;
 	    author: string;
@@ -343,6 +344,7 @@ export namespace github {
 	        this.baseRef = source["baseRef"];
 	        this.state = source["state"];
 	        this.isDraft = source["isDraft"];
+	        this.isInMergeQueue = source["isInMergeQueue"];
 	        this.mergeable = source["mergeable"];
 	        this.reviewDecision = source["reviewDecision"];
 	        this.author = source["author"];

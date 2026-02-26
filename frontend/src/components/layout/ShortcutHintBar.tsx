@@ -19,6 +19,9 @@ const LIST_HINTS: Hint[] = [
   { keys: "gg/G", label: "top/bottom" },
   { keys: "n/N", label: "page" },
   { keys: "r", label: "refresh" },
+  { keys: "v", label: "visual select" },
+  { keys: "Space", label: "toggle pick" },
+  { keys: "c", label: "copy" },
 ];
 
 const DETAIL_HINTS: Hint[] = [
@@ -68,7 +71,7 @@ export function ShortcutHintBar() {
   const hints = getHintsForPath(pathname);
 
   return (
-    <div className="flex shrink-0 items-center gap-4 border-t border-border bg-card/80 px-4 py-1.5">
+    <div className="flex shrink-0 items-center gap-3 border-t border-border bg-card/80 px-3 py-1">
       {hints.map((hint) => (
         <span key={hint.keys} className="flex items-center gap-1 text-[11px] text-muted-foreground">
           <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] font-medium text-foreground">

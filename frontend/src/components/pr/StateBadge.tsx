@@ -1,11 +1,21 @@
-import { GitPullRequest, GitMerge, CircleDot, FileEdit } from "lucide-react";
+import { GitPullRequest, GitMerge, CircleDot, FileEdit, ListOrdered } from "lucide-react";
 
 interface StateBadgeProps {
   state: string;
   isDraft: boolean;
+  isInMergeQueue?: boolean;
 }
 
-export function StateBadge({ state, isDraft }: StateBadgeProps) {
+export function StateBadge({ state, isDraft, isInMergeQueue }: StateBadgeProps) {
+  if (isInMergeQueue) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/60 dark:text-blue-200">
+        <ListOrdered className="h-3 w-3" />
+        Queued
+      </span>
+    );
+  }
+
   if (isDraft) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium text-slate-800 dark:bg-slate-800/70 dark:text-slate-200">

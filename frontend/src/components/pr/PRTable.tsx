@@ -89,6 +89,9 @@ export function PRTable({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef<Map<number, HTMLTableRowElement>>(new Map());
   const selectedIndex = useVimStore((s) => s.selectedIndex);
+  const visualMode = useVimStore((s) => s.visualMode);
+  const visualAnchor = useVimStore((s) => s.visualAnchor);
+  const pickedIndices = useVimStore((s) => s.pickedIndices);
 
   // Filter out stacked PRs (baseRef not main/master) when toggle is on.
   const filteredData = useMemo(
@@ -135,6 +138,7 @@ export function PRTable({
       onNextPage: pagination.hasNextPage ? () => onPageChange("next") : null,
       onPrevPage: pagination.currentPage > 1 ? () => onPageChange("prev") : null,
       onFocusSearch: () => searchInputRef.current?.focus(),
+      onCopy: () => handleCopySelection(),
     });
 
     return () => useVimStore.getState().clearActions();
@@ -165,6 +169,34 @@ export function PRTable({
     },
     [filteredData, flash],
   );
+
+  /** Copy handler for the 'c' keybinding — copies visual range + picked rows (or single cursor row), grouped by repo. */
+  const handleCopySelection = useCallback(async () => {
+    const vim = useVimStore.getState();
+    const rows = tableRowsRef.current;
+
+    // Gather all selected indices (visual range + individually picked).
+    const indices = vim.getAllSelectedIndices();
+
+    let prsToCopy: github.PullRequest[];
+    if (indices.length > 0) {
+      prsToCopy = indices.map((i) => rows[i]).filter(Boolean);
+    } else if (vim.selectedIndex >= 0 && rows[vim.selectedIndex]) {
+      // Nothing selected via visual/pick — fall back to single cursor row.
+      prsToCopy = [rows[vim.selectedIndex]];
+    } else {
+      return;
+    }
+
+    if (prsToCopy.length === 0) return;
+
+    const text = formatPRs(prsToCopy, "repo");
+    const ok = await copyToClipboard(text);
+    if (ok) flash("__all__");
+
+    // Exit visual mode and clear picks after copying.
+    vim.exitVisualMode();
+  }, [flash]);
 
   const columns = useMemo(() => {
     const authorCol = columnHelper.accessor("author", {
@@ -220,7 +252,7 @@ export function PRTable({
       columnHelper.accessor("state", {
         header: "State",
         cell: (info) => (
-          <StateBadge state={info.getValue()} isDraft={info.row.original.isDraft} />
+          <StateBadge state={info.getValue()} isDraft={info.row.original.isDraft} isInMergeQueue={info.row.original.isInMergeQueue} />
         ),
         size: 90,
       }),
@@ -308,6 +340,7 @@ export function PRTable({
                   mergeable={pr.mergeable}
                   state={pr.state}
                   isDraft={pr.isDraft}
+                  isInMergeQueue={pr.isInMergeQueue}
                   onMerged={onRefresh}
                 />
               )}
@@ -365,7 +398,7 @@ export function PRTable({
   const onLastPage = !pagination.hasNextPage;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Toolbar: search + copy dropdown */}
       <div className="flex items-center gap-2">
         <input
@@ -429,6 +462,33 @@ export function PRTable({
         )}
       </div>
 
+      {/* Selection indicator (visual range and/or picked rows) */}
+      {(() => {
+        // Compute total selected count (union of visual range + picks).
+        const allIndices = new Set<number>(pickedIndices);
+        if (visualMode && visualAnchor >= 0 && selectedIndex >= 0) {
+          const lo = Math.min(visualAnchor, selectedIndex);
+          const hi = Math.max(visualAnchor, selectedIndex);
+          for (let i = lo; i <= hi; i++) allIndices.add(i);
+        }
+        const count = allIndices.size;
+        if (count === 0) return null;
+        const modeLabel = visualMode ? "VISUAL" : "SELECT";
+        return (
+          <div className="flex items-center gap-2 rounded-md border border-blue-500/50 bg-blue-500/10 px-3 py-1.5 text-xs text-blue-600 dark:text-blue-300">
+            <span className="font-medium">{modeLabel}</span>
+            <span className="text-blue-500/70 dark:text-blue-400/70">
+              {count} row{count !== 1 ? "s" : ""} selected
+            </span>
+            <span className="ml-auto text-blue-500/50 dark:text-blue-400/50">
+              <kbd className="rounded bg-blue-500/15 px-1 py-0.5 font-mono text-[10px]">c</kbd> copy
+              <span className="mx-1.5">&middot;</span>
+              <kbd className="rounded bg-blue-500/15 px-1 py-0.5 font-mono text-[10px]">Esc</kbd> cancel
+            </span>
+          </div>
+        );
+      })()}
+
       {/* Table */}
       <div className="rounded-md border border-border">
         <table className="w-full">
@@ -438,7 +498,7 @@ export function PRTable({
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-3 py-2 text-left text-xs font-medium text-muted-foreground"
+                    className="px-3 py-1.5 text-left text-xs font-medium text-muted-foreground"
                     style={{ width: header.getSize() }}
                   >
                     {header.isPlaceholder ? null : (
@@ -469,7 +529,7 @@ export function PRTable({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-3 py-12 text-center text-sm text-muted-foreground"
+                  className="px-3 py-8 text-center text-sm text-muted-foreground"
                 >
                   Loading...
                 </td>
@@ -478,7 +538,7 @@ export function PRTable({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-3 py-12 text-center text-sm text-muted-foreground"
+                  className="px-3 py-8 text-center text-sm text-muted-foreground"
                 >
                   {emptyMessage}
                 </td>
@@ -491,6 +551,11 @@ export function PRTable({
                   (pr.reviewRequests || []).some((rr) => priorityNames.has(rr.reviewer))
                 );
                 const isVimSelected = rowIndex === selectedIndex;
+                const isInVisualRange = visualMode && visualAnchor >= 0 && selectedIndex >= 0
+                  && rowIndex >= Math.min(visualAnchor, selectedIndex)
+                  && rowIndex <= Math.max(visualAnchor, selectedIndex);
+                const isPicked = pickedIndices.has(rowIndex);
+                const isHighlighted = isInVisualRange || isPicked;
                 return (
                   <tr
                     key={row.id}
@@ -499,12 +564,18 @@ export function PRTable({
                       else rowRefs.current.delete(rowIndex);
                     }}
                     onClick={() => navigate(`/pr/${pr.nodeId}`)}
-                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${isVimSelected ? "ring-1 ring-primary bg-accent/40" : ""}`}
+                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${
+                      isHighlighted
+                        ? "ring-1 ring-blue-500 bg-blue-500/15"
+                        : isVimSelected
+                          ? "ring-1 ring-primary bg-accent/40"
+                          : ""
+                    }`}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td
                         key={cell.id}
-                        className="px-3 py-2"
+                        className="px-3 py-1.5"
                         onClick={
                           cell.column.id === "actions"
                             ? (e) => e.stopPropagation()

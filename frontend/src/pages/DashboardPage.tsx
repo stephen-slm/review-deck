@@ -36,14 +36,14 @@ function StatCard({ label, value, icon, href, sublabel }: StatCardProps) {
   return (
     <div
       onClick={handleClick}
-      className={`rounded-lg border border-border bg-card p-4 ${
+      className={`rounded-lg border border-border bg-card p-3 ${
         href ? "cursor-pointer transition-colors hover:bg-accent/50" : ""
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="text-muted-foreground">{icon}</div>
       </div>
-      <div className="mt-3">
+      <div className="mt-2">
         <p className="text-3xl font-bold text-foreground">{value}</p>
         <p className="mt-1 text-sm font-medium text-muted-foreground">
           {label}
@@ -66,14 +66,14 @@ function PRRow({ pr, showAuthor }: PRRowProps) {
   return (
     <div
       onClick={() => navigate(`/pr/${pr.nodeId}`)}
-      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/30"
+      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-1.5 transition-colors hover:bg-muted/30"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground">
             {pr.repoOwner}/{pr.repoName}#{pr.number}
           </span>
-          <StateBadge state={pr.state} isDraft={pr.isDraft} />
+          <StateBadge state={pr.state} isDraft={pr.isDraft} isInMergeQueue={pr.isInMergeQueue} />
           <ChecksStatusIcon status={pr.checksStatus} isMerged={pr.state === "MERGED"} />
         </div>
         <p className="mt-0.5 truncate text-sm font-medium text-foreground">
@@ -137,7 +137,7 @@ function PRListSection({
 
   return (
     <div className="rounded-lg border border-border bg-card">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           {icon}
           <h3 className="text-sm font-semibold text-foreground">{title}</h3>
@@ -262,7 +262,7 @@ export function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -298,7 +298,7 @@ export function DashboardPage() {
       )}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-4 gap-3">
         <StatCard
           label="Open PRs"
           value={pages.myPRs.totalCount || myPRs.length}
@@ -329,7 +329,7 @@ export function DashboardPage() {
       </div>
 
       {/* PR lists */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-2 gap-4">
         {/* Needs your attention - review requests that aren't approved yet */}
         <PRListSection
           title="Needs Your Review"

@@ -57,8 +57,15 @@ export function useVimNavigation() {
       "5": vim(() => navigate(TAB_ROUTES[4])),
       "6": vim(() => navigate(TAB_ROUTES[5])),
 
-      // ---- Global: Escape — close dropdown > blur input > go back ----
+      // ---- Global: Escape — exit visual/pick mode > close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {
+        // 0. If in visual mode or have picks, clear selection first.
+        const { visualMode, pickedIndices } = store();
+        if (visualMode || pickedIndices.size > 0) {
+          event.preventDefault();
+          store().exitVisualMode();
+          return;
+        }
         // 1. If a dropdown/modal registered an escape handler, let it close first.
         const { onEscape } = store();
         if (onEscape) {
@@ -169,6 +176,22 @@ export function useVimNavigation() {
       "Shift+A": vim(() => {
         const { onApprove } = store();
         if (onApprove) onApprove();
+      }),
+
+      // ---- Visual selection mode (v) ----
+      "v": vim(() => {
+        store().toggleVisualMode();
+      }),
+
+      // ---- Toggle pick individual row (Space) ----
+      " ": vim(() => {
+        store().togglePick();
+      }),
+
+      // ---- Copy selected PRs (c) ----
+      "c": vim(() => {
+        const { onCopy } = store();
+        if (onCopy) onCopy();
       }),
     });
 

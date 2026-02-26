@@ -19,12 +19,13 @@ func (db *DB) UpsertPullRequest(pr gh.PullRequest) error {
 	_, err = tx.Exec(`
 		INSERT INTO pull_requests (
 			node_id, number, repo_owner, repo_name, title, state, author_login, author_avatar,
-			is_draft, additions, deletions, changed_files, commits_count,
+			is_draft, is_in_merge_queue, additions, deletions, changed_files, commits_count,
 			mergeable, review_decision, head_ref, base_ref, url, body, checks_status, merged_by,
 			created_at, updated_at, merged_at, closed_at, last_synced_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(node_id) DO UPDATE SET
 			title=excluded.title, state=excluded.state, is_draft=excluded.is_draft,
+			is_in_merge_queue=excluded.is_in_merge_queue,
 			additions=excluded.additions, deletions=excluded.deletions, changed_files=excluded.changed_files,
 			commits_count=excluded.commits_count, mergeable=excluded.mergeable,
 			review_decision=excluded.review_decision, checks_status=excluded.checks_status,
@@ -32,7 +33,7 @@ func (db *DB) UpsertPullRequest(pr gh.PullRequest) error {
 			merged_at=excluded.merged_at, closed_at=excluded.closed_at,
 			last_synced_at=excluded.last_synced_at`,
 		pr.NodeID, pr.Number, pr.RepoOwner, pr.RepoName, pr.Title, pr.State,
-		pr.Author, pr.AuthorAvatar, pr.IsDraft,
+		pr.Author, pr.AuthorAvatar, pr.IsDraft, pr.IsInMergeQueue,
 		pr.Additions, pr.Deletions, pr.ChangedFiles, pr.CommitCount,
 		pr.Mergeable, pr.ReviewDecision, pr.HeadRef, pr.BaseRef, pr.URL, pr.Body,
 		pr.ChecksStatus, pr.MergedBy,
@@ -85,7 +86,7 @@ func (db *DB) UpsertPullRequests(prs []gh.PullRequest) error {
 
 // GetPullRequests returns cached pull requests as JSON (for the frontend).
 func (db *DB) GetPullRequests(authorLogin string, state string) ([]gh.PullRequest, error) {
-	query := "SELECT node_id, number, repo_owner, repo_name, title, state, author_login, author_avatar, is_draft, additions, deletions, changed_files, commits_count, mergeable, review_decision, head_ref, base_ref, url, body, checks_status, merged_by, created_at, updated_at, merged_at, closed_at FROM pull_requests WHERE 1=1"
+	query := "SELECT node_id, number, repo_owner, repo_name, title, state, author_login, author_avatar, is_draft, is_in_merge_queue, additions, deletions, changed_files, commits_count, mergeable, review_decision, head_ref, base_ref, url, body, checks_status, merged_by, created_at, updated_at, merged_at, closed_at FROM pull_requests WHERE 1=1"
 	var args []interface{}
 
 	if authorLogin != "" {
@@ -109,7 +110,7 @@ func (db *DB) GetPullRequests(authorLogin string, state string) ([]gh.PullReques
 		var pr gh.PullRequest
 		err := rows.Scan(
 			&pr.NodeID, &pr.Number, &pr.RepoOwner, &pr.RepoName, &pr.Title, &pr.State,
-			&pr.Author, &pr.AuthorAvatar, &pr.IsDraft,
+			&pr.Author, &pr.AuthorAvatar, &pr.IsDraft, &pr.IsInMergeQueue,
 			&pr.Additions, &pr.Deletions, &pr.ChangedFiles, &pr.CommitCount,
 			&pr.Mergeable, &pr.ReviewDecision, &pr.HeadRef, &pr.BaseRef, &pr.URL, &pr.Body,
 			&pr.ChecksStatus, &pr.MergedBy,

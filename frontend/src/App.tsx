@@ -33,7 +33,7 @@ function AppContent() {
       <main className="flex flex-1 flex-col overflow-hidden">
         {/* macOS titlebar spacer — drag region */}
         <div className="wails-drag h-[38px] shrink-0" />
-        <div id="scroll-region" className="flex-1 overflow-auto p-6">
+        <div id="scroll-region" className="flex-1 overflow-auto p-4">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<DashboardPage />} />

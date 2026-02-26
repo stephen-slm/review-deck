@@ -59,7 +59,7 @@ function MetricCard({
   sub?: string;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent">
         {icon}
       </div>
@@ -84,8 +84,8 @@ function SectionHeader({ title }: { title: string }) {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <h4 className="mb-3 text-sm font-semibold text-foreground">{title}</h4>
+    <div className="rounded-lg border border-border bg-card p-3">
+      <h4 className="mb-2 text-sm font-semibold text-foreground">{title}</h4>
       {children}
     </div>
   );
@@ -192,7 +192,7 @@ export function MetricsPage() {
   );
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <div className="max-w-6xl space-y-4">
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Metrics</h2>

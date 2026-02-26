@@ -20,6 +20,7 @@ type prFields struct {
 	Body   string
 
 	IsDraft        bool
+	IsInMergeQueue bool `graphql:"isInMergeQueue"`
 	Mergeable      githubv4.MergeableState
 	ReviewDecision githubv4.PullRequestReviewDecision
 
@@ -136,6 +137,7 @@ func convertPRFields(pr prFields) PullRequest {
 		BaseRef:        pr.BaseRefName,
 		State:          string(pr.State),
 		IsDraft:        pr.IsDraft,
+		IsInMergeQueue: pr.IsInMergeQueue,
 		Mergeable:      string(pr.Mergeable),
 		ReviewDecision: string(pr.ReviewDecision),
 		Author:         pr.Author.Login,

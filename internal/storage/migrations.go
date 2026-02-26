@@ -162,6 +162,9 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_metrics_recorded_at ON metrics_snapshots(recorded_at);`,
+
+	// Migration 7: Add merge queue tracking to pull requests.
+	`ALTER TABLE pull_requests ADD COLUMN is_in_merge_queue INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Migrate runs all pending migrations.

@@ -8,6 +8,7 @@ interface MergeButtonProps {
   mergeable: string;
   state: string;
   isDraft: boolean;
+  isInMergeQueue?: boolean;
   onMerged?: () => void;
 }
 
@@ -22,6 +23,7 @@ export function MergeButton({
   mergeable,
   state,
   isDraft,
+  isInMergeQueue,
   onMerged,
 }: MergeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -76,10 +78,10 @@ export function MergeButton({
     }
   };
 
-  // Show enqueued indicator
-  if (mergeResult === "enqueued") {
+  // Show enqueued indicator (persistent from API or ephemeral from merge action)
+  if (isInMergeQueue || mergeResult === "enqueued") {
     return (
-      <span className="inline-flex items-center gap-1 rounded p-1 text-xs text-green-600 dark:text-green-300" title="Added to merge queue">
+      <span className="inline-flex items-center gap-1 rounded p-1 text-xs text-blue-600 dark:text-blue-300" title="In merge queue">
         <CheckCircle className="h-3.5 w-3.5" />
         Queued
       </span>

@@ -118,7 +118,7 @@ export function SettingsPage() {
   );
 
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-6">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -134,7 +134,7 @@ export function SettingsPage() {
         </div>
 
         {isAuthenticated && user ? (
-          <div className="rounded-lg border border-border bg-card p-4">
+          <div className="rounded-lg border border-border bg-card p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {user.avatarUrl ? (
@@ -339,7 +339,7 @@ export function SettingsPage() {
           <h3 className="text-lg font-semibold">Filters</h3>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="rounded-lg border border-border bg-card p-3 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">
@@ -745,7 +745,7 @@ export function SettingsPage() {
           <h3 className="text-lg font-semibold">Cache</h3>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+        <div className="rounded-lg border border-border bg-card p-3 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">

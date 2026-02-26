@@ -8,6 +8,13 @@ export interface VimState {
   /** Whether the shortcut hint bar is visible. */
   showHints: boolean;
 
+  /** Whether visual (multi-select) mode is active. */
+  visualMode: boolean;
+  /** The anchor index where visual mode was entered. */
+  visualAnchor: number;
+  /** Individually picked row indices (toggled via Space). */
+  pickedIndices: Set<number>;
+
   /** Callbacks registered by the active page for context-specific actions. */
   onOpen: ((index: number) => void) | null;
   onOpenExternal: ((index: number) => void) | null;
@@ -26,6 +33,8 @@ export interface VimState {
   onAssignReviewer: (() => void) | null;
   onMerge: (() => void) | null;
   onApprove: (() => void) | null;
+  /** Copy selected PRs — called by 'c' keybinding. */
+  onCopy: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -38,13 +47,23 @@ export interface VimState {
   moveSelection: (delta: number) => void;
   resetSelection: () => void;
   toggleHints: () => void;
+  toggleVisualMode: () => void;
+  exitVisualMode: () => void;
+  /** Get the range of indices currently selected in visual mode. */
+  getVisualRange: () => [number, number] | null;
+  /** Toggle the current cursor row in/out of the picked set. */
+  togglePick: () => void;
+  /** Clear all individually picked rows. */
+  clearPicks: () => void;
+  /** Get all selected indices (union of visual range + picked). Sorted ascending. */
+  getAllSelectedIndices: () => number[];
 
   /** Pages call this to register their context-specific handlers. */
   registerActions: (actions: Partial<Pick<VimState,
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -65,6 +84,7 @@ const emptyActions = {
   onAssignReviewer: null,
   onMerge: null,
   onApprove: null,
+  onCopy: null,
   onEscape: null,
 };
 
@@ -72,6 +92,9 @@ export const useVimStore = create<VimState>((set, get) => ({
   selectedIndex: -1,
   listLength: 0,
   showHints: true,
+  visualMode: false,
+  visualAnchor: -1,
+  pickedIndices: new Set<number>(),
   ...emptyActions,
 
   setSelectedIndex: (i) => set({ selectedIndex: i }),
@@ -99,9 +122,59 @@ export const useVimStore = create<VimState>((set, get) => ({
     set({ selectedIndex: next });
   },
 
-  resetSelection: () => set({ selectedIndex: -1, listLength: 0 }),
+  resetSelection: () => set({ selectedIndex: -1, listLength: 0, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() }),
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
+
+  toggleVisualMode: () => {
+    const { visualMode, selectedIndex, listLength } = get();
+    if (visualMode) {
+      // Exit visual mode
+      set({ visualMode: false, visualAnchor: -1 });
+    } else {
+      // Enter visual mode — anchor at current cursor position.
+      // If nothing is selected yet, start at 0.
+      const anchor = selectedIndex >= 0 ? selectedIndex : (listLength > 0 ? 0 : -1);
+      if (anchor < 0) return; // no rows to select
+      set({ visualMode: true, visualAnchor: anchor, selectedIndex: anchor });
+    }
+  },
+
+  exitVisualMode: () => set({ visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() }),
+
+  getVisualRange: () => {
+    const { visualMode, visualAnchor, selectedIndex } = get();
+    if (!visualMode || visualAnchor < 0 || selectedIndex < 0) return null;
+    const lo = Math.min(visualAnchor, selectedIndex);
+    const hi = Math.max(visualAnchor, selectedIndex);
+    return [lo, hi];
+  },
+
+  togglePick: () => {
+    const { selectedIndex, listLength } = get();
+    if (selectedIndex < 0 || selectedIndex >= listLength) return;
+    const next = new Set(get().pickedIndices);
+    if (next.has(selectedIndex)) {
+      next.delete(selectedIndex);
+    } else {
+      next.add(selectedIndex);
+    }
+    set({ pickedIndices: next });
+  },
+
+  clearPicks: () => set({ pickedIndices: new Set<number>() }),
+
+  getAllSelectedIndices: () => {
+    const { visualMode, visualAnchor, selectedIndex, pickedIndices } = get();
+    const indices = new Set<number>(pickedIndices);
+    // Merge in the visual range if active.
+    if (visualMode && visualAnchor >= 0 && selectedIndex >= 0) {
+      const lo = Math.min(visualAnchor, selectedIndex);
+      const hi = Math.max(visualAnchor, selectedIndex);
+      for (let i = lo; i <= hi; i++) indices.add(i);
+    }
+    return Array.from(indices).sort((a, b) => a - b);
+  },
 
   registerActions: (actions) => set(actions),
   clearActions: () => set(emptyActions),

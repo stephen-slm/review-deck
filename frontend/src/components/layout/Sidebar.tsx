@@ -63,7 +63,7 @@ export function Sidebar() {
       >
         <h1 className="text-lg font-semibold text-foreground">Review Deck</h1>
       </div>
-      <nav className="flex-1 space-y-1 p-2">
+      <nav className="flex-1 space-y-1 p-1.5">
         {navItems.map((item) => {
           const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
           return (
@@ -72,7 +72,7 @@ export function Sidebar() {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                  "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
                   isActive
                     ? "bg-accent text-accent-foreground"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
@@ -97,7 +97,7 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-border p-3">
+      <div className="border-t border-border p-2">
         {isAuthenticated && user ? (
           <div className="flex items-center gap-2">
             {user.avatarUrl ? (

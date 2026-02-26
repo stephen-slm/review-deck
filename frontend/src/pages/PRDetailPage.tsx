@@ -290,7 +290,7 @@ export function PRDetailPage() {
   ];
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <div className="max-w-5xl space-y-4">
       {/* Back + Refresh */}
       <div className="flex items-center gap-3">
         <button
@@ -331,7 +331,7 @@ export function PRDetailPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <StateBadge state={pr.state} isDraft={pr.isDraft} />
+          <StateBadge state={pr.state} isDraft={pr.isDraft} isInMergeQueue={pr.isInMergeQueue} />
           <ReviewStatusBadge reviewDecision={pr.reviewDecision} />
           <ChecksStatusIcon status={pr.checksStatus} isMerged={pr.state === "MERGED"} />
           {pr.mergeable === "CONFLICTING" && (
@@ -344,11 +344,11 @@ export function PRDetailPage() {
       </div>
 
       {/* Two-column layout */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_280px]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">
         {/* Main column */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Author + timestamps */}
-          <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
+          <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-3 py-2">
             {pr.authorAvatar ? (
               <img
                 src={pr.authorAvatar}
@@ -393,7 +393,7 @@ export function PRDetailPage() {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
-                className={`inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-sm font-medium transition-colors ${
                   activeTab === tab.key
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
@@ -414,7 +414,7 @@ export function PRDetailPage() {
                   Description
                 </h3>
                 {pr.body ? (
-                  <div className="prose prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-4 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                       {pr.body}
                     </ReactMarkdown>
@@ -436,7 +436,7 @@ export function PRDetailPage() {
                     {pr.reviews.map((review, i) => (
                       <div
                         key={review.id || i}
-                        className="rounded-lg border border-border bg-card px-4 py-3"
+                        className="rounded-lg border border-border bg-card px-3 py-2"
                       >
                         <div className="flex items-center gap-2">
                           {review.authorAvatar ? (
@@ -461,7 +461,7 @@ export function PRDetailPage() {
                           )}
                         </div>
                         {review.body && (
-                          <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+                          <div className="prose dark:prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
                             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                               {review.body}
                             </ReactMarkdown>
@@ -513,7 +513,7 @@ export function PRDetailPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Actions */}
           <SidebarSection title="Actions">
             <div className="space-y-2">
@@ -525,6 +525,7 @@ export function PRDetailPage() {
                   prNodeId={pr.nodeId}
                   mergeable={pr.mergeable}
                   isDraft={pr.isDraft}
+                  isInMergeQueue={pr.isInMergeQueue}
                   onMerged={() => navigate(-1)}
                   triggerRef={mergeToggleRef}
                 />
@@ -656,12 +657,14 @@ function DetailMergeButton({
   prNodeId,
   mergeable,
   isDraft,
+  isInMergeQueue,
   onMerged,
   triggerRef,
 }: {
   prNodeId: string;
   mergeable: string;
   isDraft: boolean;
+  isInMergeQueue?: boolean;
   onMerged?: () => void;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
@@ -702,12 +705,12 @@ function DetailMergeButton({
     }
   };
 
-  // Show enqueued state
-  if (mergeResult === "enqueued") {
+  // Show enqueued state (persistent from API or ephemeral from merge action)
+  if (isInMergeQueue || mergeResult === "enqueued") {
     return (
-      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-100 px-3 py-2 text-sm font-medium text-green-700 dark:bg-green-900/40 dark:text-green-300">
+      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-blue-100 px-3 py-2 text-sm font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
         <CheckCircle className="h-4 w-4" />
-        Added to merge queue
+        In merge queue
       </div>
     );
   }
@@ -765,11 +768,13 @@ function DetailApproveButton({
   reviews,
   author,
   triggerRef,
+  onApproved,
 }: {
   prNodeId: string;
   reviews: github.Review[] | null;
   author: string;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
+  onApproved?: () => void;
 }) {
   const [isApproving, setIsApproving] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -799,6 +804,7 @@ function DetailApproveButton({
     try {
       await approvePR(prNodeId);
       setApproved(true);
+      onApproved?.();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -947,7 +953,7 @@ function ChecksTab({
           <div
             key={check.name + i}
             ref={(el) => { itemRefs.current[i] = el; }}
-            className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 transition-colors ${
+            className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
               i === selectedIndex
                 ? "ring-1 ring-primary bg-accent/40 border-primary/50"
                 : "border-border bg-card"
@@ -1169,7 +1175,7 @@ function CommentCard({
         )}
       </div>
       {body && (
-        <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+        <div className="prose dark:prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
             {body}
           </ReactMarkdown>
@@ -1189,7 +1195,7 @@ function SidebarSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3">
+    <div className="rounded-lg border border-border bg-card p-2.5">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </h4>

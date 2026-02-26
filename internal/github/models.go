@@ -98,6 +98,7 @@ type PullRequest struct {
 	// State
 	State          string `json:"state"` // OPEN, CLOSED, MERGED
 	IsDraft        bool   `json:"isDraft"`
+	IsInMergeQueue bool   `json:"isInMergeQueue"`
 	Mergeable      string `json:"mergeable"`      // MERGEABLE, CONFLICTING, UNKNOWN
 	ReviewDecision string `json:"reviewDecision"` // APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, ""
 
