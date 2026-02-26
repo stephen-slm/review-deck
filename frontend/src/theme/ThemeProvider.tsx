@@ -41,7 +41,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     applyThemeTokens(themeDef.tokens);
-    document.body.classList.toggle("dark", resolvedTheme === "nord");
+    const isDark = resolvedTheme === "nord";
+    document.body.classList.toggle("dark", isDark);
+    // Tell the browser how to render native form controls (select, scrollbars, etc.)
+    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
   }, [themeDef.tokens, resolvedTheme]);
 
   const setTheme = useCallback(
