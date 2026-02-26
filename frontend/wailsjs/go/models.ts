@@ -32,6 +32,7 @@ export namespace github {
 	}
 	export class IssueComment {
 	    id: string;
+	    url: string;
 	    author: string;
 	    authorAvatar: string;
 	    body: string;
@@ -45,6 +46,7 @@ export namespace github {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.url = source["url"];
 	        this.author = source["author"];
 	        this.authorAvatar = source["authorAvatar"];
 	        this.body = source["body"];
@@ -128,6 +130,7 @@ export namespace github {
 	}
 	export class ReviewThread {
 	    id: string;
+	    url: string;
 	    isResolved: boolean;
 	    path: string;
 	    line: number;
@@ -140,6 +143,7 @@ export namespace github {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.url = source["url"];
 	        this.isResolved = source["isResolved"];
 	        this.path = source["path"];
 	        this.line = source["line"];

@@ -46,6 +46,15 @@ const mdComponents: Components = {
       {children}
     </a>
   ),
+  img: ({ src, alt, ...props }) => (
+    <img
+      {...props}
+      src={src}
+      alt={alt || ""}
+      className="my-2 max-w-full rounded-md border border-border"
+      loading="lazy"
+    />
+  ),
   details: ({ children, ...props }) => (
     <details
       {...props}
@@ -207,8 +216,20 @@ export function PRDetailPage() {
           BrowserOpenURL(pr.url);
         }
       };
-    } else {
+    } else if (activeTab === "comments") {
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+      actions.onOpen = (idx: number) => {
+        const issueComments = comments?.issueComments || [];
+        const reviewThreads = comments?.reviewThreads || [];
+        if (idx < issueComments.length) {
+          const url = issueComments[idx]?.url;
+          if (url) BrowserOpenURL(url);
+        } else {
+          const threadIdx = idx - issueComments.length;
+          const url = reviewThreads[threadIdx]?.url;
+          if (url) BrowserOpenURL(url);
+        }
+      };
     }
 
     useVimStore.getState().registerActions(actions);
@@ -926,7 +947,8 @@ function CommentsTab({
               <div
                 key={comment.id}
                 ref={(el) => { itemRefs.current[i] = el; }}
-                className={`rounded-lg transition-colors ${
+                onClick={() => { if (comment.url) BrowserOpenURL(comment.url); }}
+                className={`cursor-pointer rounded-lg transition-colors hover:ring-1 hover:ring-muted-foreground/30 ${
                   i === selectedIndex ? "ring-1 ring-primary ring-offset-1 ring-offset-background" : ""
                 }`}
               >
@@ -962,7 +984,10 @@ function CommentsTab({
                 }`}
               >
                 {/* Thread header */}
-                <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+                <div
+                  onClick={() => { if (thread.url) BrowserOpenURL(thread.url); }}
+                  className="flex cursor-pointer items-center gap-2 border-b border-border px-4 py-2 hover:bg-muted/30"
+                >
                   <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
                   <code className="truncate text-xs text-muted-foreground">
                     {thread.path}

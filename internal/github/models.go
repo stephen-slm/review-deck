@@ -38,6 +38,7 @@ type ReviewComment struct {
 // ReviewThread represents a threaded conversation on a pull request diff.
 type ReviewThread struct {
 	ID         string          `json:"id"`
+	URL        string          `json:"url"` // URL of the first comment in the thread
 	IsResolved bool            `json:"isResolved"`
 	Path       string          `json:"path"`
 	Line       int             `json:"line"`
@@ -47,6 +48,7 @@ type ReviewThread struct {
 // IssueComment represents a top-level (non-review) comment on a pull request.
 type IssueComment struct {
 	ID           string    `json:"id"`
+	URL          string    `json:"url"`
 	Author       string    `json:"author"`
 	AuthorAvatar string    `json:"authorAvatar"`
 	Body         string    `json:"body"`

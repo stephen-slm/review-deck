@@ -403,6 +403,7 @@ type prCommentsQuery struct {
 			Comments struct {
 				Nodes []struct {
 					ID     string `graphql:"id"`
+					URL    string `graphql:"url"`
 					Author struct {
 						Login     string
 						AvatarURL string `graphql:"avatarUrl(size: 32)"`
@@ -421,6 +422,7 @@ type prCommentsQuery struct {
 					Comments   struct {
 						Nodes []struct {
 							ID     string `graphql:"id"`
+							URL    string `graphql:"url"`
 							Author struct {
 								Login     string
 								AvatarURL string `graphql:"avatarUrl(size: 32)"`
@@ -478,6 +480,7 @@ func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments,
 	for _, c := range q.Node.PullRequest.Comments.Nodes {
 		result.IssueComments = append(result.IssueComments, IssueComment{
 			ID:           c.ID,
+			URL:          c.URL,
 			Author:       c.Author.Login,
 			AuthorAvatar: c.Author.AvatarURL,
 			Body:         c.Body,
@@ -502,6 +505,10 @@ func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments,
 				Line:         c.Line,
 				CreatedAt:    c.CreatedAt,
 			})
+		}
+		// Use the first comment's URL as the thread's permalink.
+		if len(thread.Comments) > 0 && t.Comments.Nodes[0].URL != "" {
+			thread.URL = t.Comments.Nodes[0].URL
 		}
 		result.ReviewThreads = append(result.ReviewThreads, thread)
 	}

@@ -72,8 +72,7 @@ export function useVimNavigation() {
       },
 
       // ---- Global: Toggle hint bar ----
-      "Shift+/": vim(() => {
-        // Shift+/ = "?" on US keyboard layout
+      "Shift+?": vim(() => {
         store().toggleHints();
       }),
 
