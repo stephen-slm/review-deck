@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments } from "../../wailsjs/go/services/PullRequestService";
 
@@ -44,6 +45,22 @@ const mdComponents: Components = {
     >
       {children}
     </a>
+  ),
+  details: ({ children, ...props }) => (
+    <details
+      {...props}
+      className="group rounded-md border border-border my-2"
+    >
+      {children}
+    </details>
+  ),
+  summary: ({ children, ...props }) => (
+    <summary
+      {...props}
+      className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-foreground hover:bg-muted/50 rounded-md list-none [&::-webkit-details-marker]:hidden"
+    >
+      {children}
+    </summary>
   ),
 };
 
@@ -251,7 +268,7 @@ export function PRDetailPage() {
                 </h3>
                 {pr.body ? (
                   <div className="prose prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-4 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                       {pr.body}
                     </ReactMarkdown>
                   </div>
@@ -298,7 +315,7 @@ export function PRDetailPage() {
                         </div>
                         {review.body && (
                           <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                               {review.body}
                             </ReactMarkdown>
                           </div>
@@ -891,7 +908,7 @@ function CommentCard({
       </div>
       {body && (
         <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
             {body}
           </ReactMarkdown>
         </div>
