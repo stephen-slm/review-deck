@@ -125,6 +125,13 @@ interface PRState {
   approvePR: (prNodeID: string, body?: string) => Promise<void>;
   requestReviews: (prNodeID: string, userIDs: string[], teamIDs: string[]) => Promise<void>;
 
+  /**
+   * Fetch the next server page and APPEND its items to the current page's items.
+   * Used to backfill when client-side filters (drafts, stacked, hidden) reduce
+   * the visible row count below the page size.
+   */
+  appendNextPage: (key: CacheKey, fetcher: (pageSize: number, cursor: string) => Promise<github.PRPage>) => Promise<void>;
+
   /** Load persisted cache timestamps from the DB so fetchIfStale works across restarts */
   loadCacheTimestamps: () => Promise<void>;
   setCacheTTL: (ms: number) => void;
@@ -545,6 +552,36 @@ export const usePRStore = create<PRState>((set, get) => ({
     set((s) => ({
       lastFetchedAt: { ...s.lastFetchedAt, ...timestamps },
     }));
+  },
+
+  appendNextPage: async (key, fetcher) => {
+    const pg = get().pages[key];
+    if (!pg.hasNextPage || get().isLoading[key]) return;
+    set((s) => ({ isLoading: { ...s.isLoading, [key]: true } }));
+    try {
+      const page = await fetcher(pg.pageSize, pg.endCursor);
+      const prs = page.pullRequests || [];
+      set((s) => {
+        const cur = s.pages[key];
+        return {
+          pages: {
+            ...s.pages,
+            [key]: {
+              ...cur,
+              // Append new items, deduplicating by nodeId.
+              items: [...cur.items, ...prs.filter((p) => !cur.items.some((e) => e.nodeId === p.nodeId))],
+              hasNextPage: page.pageInfo.hasNextPage,
+              endCursor: page.pageInfo.endCursor,
+              totalCount: page.pageInfo.totalCount,
+            },
+          },
+          isLoading: { ...s.isLoading, [key]: false },
+        };
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set((s) => ({ isLoading: { ...s.isLoading, [key]: false }, error: message }));
+    }
   },
 
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),

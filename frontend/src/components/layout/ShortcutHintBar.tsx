@@ -13,7 +13,7 @@ interface HintGroup {
 }
 
 const GLOBAL_HINTS: Hint[] = [
-  { keys: "\u2318+1-6", label: "switch sidebar tabs" },
+  { keys: "\u2318+1-5", label: "switch sidebar tabs" },
   { keys: "Shift+J/K", label: "smooth scroll" },
   { keys: "?", label: "toggle this popup" },
 ];
@@ -30,6 +30,7 @@ const LIST_HINTS: Hint[] = [
   { keys: "Space", label: "toggle pick" },
   { keys: "c", label: "copy selection" },
   { keys: "t", label: "toggle drafts" },
+  { keys: "s", label: "toggle stacked" },
 ];
 
 const REVIEW_REQUEST_HINTS: Hint[] = [
@@ -75,7 +76,7 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }
-  if (pathname === "/metrics" || pathname === "/settings") {
+  if (pathname === "/settings") {
     return [
       { title: "Page", hints: SCROLL_HINTS },
       { title: "Global", hints: GLOBAL_HINTS },

@@ -43,6 +43,8 @@ export interface VimState {
   onTabDirect: ((index: number) => void) | null;
   /** Toggle draft PR visibility — called by 't' keybinding. */
   onToggleDrafts: (() => void) | null;
+  /** Toggle stacked PR visibility — called by 's' keybinding. */
+  onToggleStacked: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -71,7 +73,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -97,6 +99,7 @@ const emptyActions = {
   onSpace: null,
   onTabDirect: null,
   onToggleDrafts: null,
+  onToggleStacked: null,
   onEscape: null,
 };
 

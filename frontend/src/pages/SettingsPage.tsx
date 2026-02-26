@@ -10,7 +10,7 @@ import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -32,7 +32,8 @@ export function SettingsPage() {
     loadCacheTTL();
     loadPollInterval();
     loadSourceBasePath();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadSourceBasePath]);
+    loadHideDraftPRs();
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadSourceBasePath]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -388,6 +389,32 @@ export function SettingsPage() {
               <span
                 className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
                   hideStackedPRs ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Hide draft pull requests
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Hide PRs marked as draft. Can also be toggled per table with{" "}
+                <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">t</kbd>.
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={hideDraftPRs}
+              onClick={() => setHideDraftPRs(!hideDraftPRs)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
+                hideDraftPRs ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                  hideDraftPRs ? "translate-x-4" : "translate-x-0.5"
                 }`}
               />
             </button>

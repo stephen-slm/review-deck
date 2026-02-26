@@ -8,7 +8,6 @@ import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PRDetailPage } from "./pages/PRDetailPage";
-import { MetricsPage } from "./pages/MetricsPage";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { usePollerEvents } from "./hooks/usePollerEvents";
 import { useVimNavigation } from "./hooks/useVimNavigation";
@@ -45,7 +44,6 @@ function AppContent() {
               element={<ReviewRequestsPage />}
             />
             <Route path="/reviewed" element={<ReviewedByMePage />} />
-            <Route path="/metrics" element={<MetricsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/pr/:nodeId" element={<PRDetailPage />} />
           </Routes>

@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { GetReviewedByMePage } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewedByMePage() {
   const { isAuthenticated } = useAuthStore();
@@ -19,6 +20,7 @@ export function ReviewedByMePage() {
     setPageSize,
     fetchIfStale,
     clearError,
+    appendNextPage,
   } = usePRStore();
 
   const pg = pages.reviewedByMe;
@@ -51,6 +53,14 @@ export function ReviewedByMePage() {
     },
     [orgs, fetchReviewedByMe, setPageSize],
   );
+
+  const handleFetchMore = useCallback(() => {
+    const org = orgs[0];
+    if (!org) return;
+    appendNextPage("reviewedByMe", (pageSize, cursor) =>
+      GetReviewedByMePage(org, pageSize, cursor),
+    );
+  }, [orgs, appendNextPage]);
 
   useEffect(() => {
     loadOrgs();
@@ -128,6 +138,7 @@ export function ReviewedByMePage() {
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
         onRefresh={forceRefresh}
+        onFetchMore={handleFetchMore}
       />
     </div>
   );

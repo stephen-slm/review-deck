@@ -6,6 +6,7 @@ import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
 import { github } from "../../wailsjs/go/models";
+import { GetReviewRequestsPage } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
@@ -22,6 +23,7 @@ export function ReviewRequestsPage() {
     clearError,
     hiddenPRs,
     hidePR,
+    appendNextPage,
   } = usePRStore();
 
   const pg = pages.reviewRequests;
@@ -54,6 +56,14 @@ export function ReviewRequestsPage() {
     },
     [orgs, fetchReviewRequests, setPageSize],
   );
+
+  const handleFetchMore = useCallback(() => {
+    const org = orgs[0];
+    if (!org) return;
+    appendNextPage("reviewRequests", (pageSize, cursor) =>
+      GetReviewRequestsPage(org, pageSize, cursor),
+    );
+  }, [orgs, appendNextPage]);
 
   useEffect(() => {
     loadOrgs();
@@ -151,6 +161,7 @@ export function ReviewRequestsPage() {
         priorityNames={priorityNames}
         onHide={hidePR}
         hiddenPRs={hiddenPRs}
+        onFetchMore={handleFetchMore}
       />
     </div>
   );

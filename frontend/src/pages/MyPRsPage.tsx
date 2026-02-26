@@ -5,6 +5,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { GetMyPRsPage, GetMyRecentMergedPage } from "../../wailsjs/go/services/PullRequestService";
 
 type Tab = "open" | "merged";
 
@@ -23,6 +24,7 @@ export function MyPRsPage() {
     setPageSize,
     fetchIfStale,
     clearError,
+    appendNextPage,
   } = usePRStore();
 
   const [activeTab, setActiveTab] = useState<Tab>("open");
@@ -87,6 +89,22 @@ export function MyPRsPage() {
     },
     [orgs, fetchMyRecentMerged, setPageSize],
   );
+
+  const handleFetchMoreOpen = useCallback(() => {
+    const org = orgs[0];
+    if (!org) return;
+    appendNextPage("myPRs", (pageSize, cursor) =>
+      GetMyPRsPage(org, pageSize, cursor),
+    );
+  }, [orgs, appendNextPage]);
+
+  const handleFetchMoreMerged = useCallback(() => {
+    const org = orgs[0];
+    if (!org) return;
+    appendNextPage("myRecentMerged", (pageSize, cursor) =>
+      GetMyRecentMergedPage(org, 14, pageSize, cursor),
+    );
+  }, [orgs, appendNextPage]);
 
   useEffect(() => {
     loadOrgs();
@@ -212,6 +230,7 @@ export function MyPRsPage() {
           pagination={pgOpen}
           onPageChange={handlePageChangeOpen}
           onPageSizeChange={handlePageSizeChangeOpen}
+          onFetchMore={handleFetchMoreOpen}
         />
       ) : (
         <PRTable
@@ -222,6 +241,7 @@ export function MyPRsPage() {
           pagination={pgMerged}
           onPageChange={handlePageChangeMerged}
           onPageSizeChange={handlePageSizeChangeMerged}
+          onFetchMore={handleFetchMoreMerged}
         />
       )}
     </div>

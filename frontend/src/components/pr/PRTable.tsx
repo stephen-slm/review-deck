@@ -49,6 +49,8 @@ interface PRTableProps {
   onHide?: (nodeId: string) => void;
   /** Set of hidden PR nodeIds — filtered out before display. */
   hiddenPRs?: Set<string>;
+  /** Called when client-side filters reduce visible rows below page size and more data is available. */
+  onFetchMore?: () => void;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -82,6 +84,7 @@ export function PRTable({
   priorityNames,
   onHide,
   hiddenPRs,
+  onFetchMore,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -116,6 +119,22 @@ export function PRTable({
     }
     return result;
   }, [data, hideStacked, hideDrafts, hiddenPRs]);
+
+  // Auto-fill: when filtering reduces visible rows below page size and the
+  // server has more pages, request additional items to fill the table.
+  const anyFilterActive = hideStacked || hideDrafts || (hiddenPRs && hiddenPRs.size > 0);
+  useEffect(() => {
+    if (
+      anyFilterActive &&
+      !isLoading &&
+      onFetchMore &&
+      pagination.hasNextPage &&
+      filteredData.length < pagination.pageSize &&
+      data.length > 0
+    ) {
+      onFetchMore();
+    }
+  }, [anyFilterActive, filteredData.length, pagination.pageSize, pagination.hasNextPage, isLoading, data.length, onFetchMore]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -159,6 +178,7 @@ export function PRTable({
         if (pr) onHide(pr.nodeId);
       } : null,
       onToggleDrafts: () => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts)),
+      onToggleStacked: () => setLocalHideStacked((prev) => !(prev ?? globalHideStacked)),
     });
 
     return () => useVimStore.getState().clearActions();
@@ -299,34 +319,6 @@ export function PRTable({
         header: "CI",
         cell: (info) => <ChecksStatusIcon status={info.getValue()} isMerged={info.row.original.state === "MERGED"} />,
         size: 40,
-      }),
-      columnHelper.display({
-        id: "reviewers",
-        header: "Reviewers",
-        cell: (info) => {
-          const requests = info.row.original.reviewRequests;
-          if (!requests || requests.length === 0) {
-            return <span className="text-xs text-muted-foreground">-</span>;
-          }
-          return (
-            <div className="flex flex-wrap gap-1">
-              {requests.slice(0, 3).map((rr, i) => (
-                <span
-                  key={i}
-                  className="rounded bg-secondary px-1.5 py-0.5 text-xs text-secondary-foreground"
-                >
-                  {rr.reviewer}
-                </span>
-              ))}
-              {requests.length > 3 && (
-                <span className="text-xs text-muted-foreground">
-                  +{requests.length - 3}
-                </span>
-              )}
-            </div>
-          );
-        },
-        size: 180,
       }),
       columnHelper.accessor("updatedAt", {
         header: "Updated",
