@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo } from "react";
-import { usePRStore } from "@/stores/prStore";
+import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
@@ -10,15 +10,18 @@ export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs, loadAllPriorities, getPriorityNames } = useSettingsStore();
   const {
-    reviewRequests,
-    pageState,
-    isLoadingReviewRequests,
+    pages,
+    isLoading,
     error,
     fetchReviewRequests,
-    loadMoreReviewRequests,
+    goToPageReviewRequests,
+    setPageSize,
     fetchIfStale,
     clearError,
   } = usePRStore();
+
+  const pg = pages.reviewRequests;
+  const loading = isLoading.reviewRequests;
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -27,11 +30,26 @@ export function ReviewRequestsPage() {
     }
   }, [orgs, fetchReviewRequests, clearError]);
 
-  const handleLoadMore = useCallback(() => {
-    for (const org of orgs) {
-      loadMoreReviewRequests(org);
-    }
-  }, [orgs, loadMoreReviewRequests]);
+  const handlePageChange = useCallback(
+    (direction: PageDirection) => {
+      for (const org of orgs) {
+        goToPageReviewRequests(org, direction);
+      }
+    },
+    [orgs, goToPageReviewRequests],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      setPageSize("reviewRequests", size, () => {
+        for (const org of orgs) {
+          return fetchReviewRequests(org);
+        }
+        return Promise.resolve();
+      });
+    },
+    [orgs, fetchReviewRequests, setPageSize],
+  );
 
   useEffect(() => {
     loadOrgs();
@@ -41,17 +59,18 @@ export function ReviewRequestsPage() {
   // Build priority set and sort PRs so priority items come first.
   const priorityNames = useMemo(() => getPriorityNames(), [getPriorityNames]);
 
-  const sortedReviewRequests = useMemo(() => {
-    if (priorityNames.size === 0) return reviewRequests;
+  const sortedItems = useMemo(() => {
+    const items = pg.items;
+    if (priorityNames.size === 0) return items;
     const isPriority = (pr: github.PullRequest) =>
       priorityNames.has(pr.author) ||
       (pr.reviewRequests || []).some((rr) => priorityNames.has(rr.reviewer));
-    return [...reviewRequests].sort((a, b) => {
+    return [...items].sort((a, b) => {
       const aPri = isPriority(a) ? 1 : 0;
       const bPri = isPriority(b) ? 1 : 0;
       return bPri - aPri; // priority items first
     });
-  }, [reviewRequests, priorityNames]);
+  }, [pg.items, priorityNames]);
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
@@ -98,10 +117,10 @@ export function ReviewRequestsPage() {
         </div>
         <button
           onClick={forceRefresh}
-          disabled={isLoadingReviewRequests}
+          disabled={loading}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoadingReviewRequests ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
@@ -114,12 +133,13 @@ export function ReviewRequestsPage() {
       )}
 
       <PRTable
-        data={sortedReviewRequests}
-        isLoading={isLoadingReviewRequests}
+        data={sortedItems}
+        isLoading={loading}
         showAuthor
         emptyMessage="No pending review requests."
-        serverPageInfo={pageState.reviewRequests}
-        onLoadMore={handleLoadMore}
+        pagination={pg}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
         priorityNames={priorityNames}
       />
     </div>

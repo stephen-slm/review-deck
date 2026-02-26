@@ -30,6 +30,33 @@ func (c *Client) MergePR(ctx context.Context, prNodeID string, method githubv4.P
 	return nil
 }
 
+// ApprovePR submits an approving review on a pull request.
+func (c *Client) ApprovePR(ctx context.Context, prNodeID string, body string) error {
+	var mutation struct {
+		AddPullRequestReview struct {
+			PullRequestReview struct {
+				ID string `graphql:"id"`
+			}
+		} `graphql:"addPullRequestReview(input: $input)"`
+	}
+
+	event := githubv4.PullRequestReviewEventApprove
+	input := githubv4.AddPullRequestReviewInput{
+		PullRequestID: githubv4.ID(prNodeID),
+		Event:         &event,
+	}
+	if body != "" {
+		b := githubv4.String(body)
+		input.Body = &b
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return fmt.Errorf("approve pull request: %w", err)
+	}
+	return nil
+}
+
 // RequestReviews adds reviewers to a pull request.
 func (c *Client) RequestReviews(ctx context.Context, prNodeID string, userIDs []string, teamIDs []string) error {
 	var mutation struct {

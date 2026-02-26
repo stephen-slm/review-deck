@@ -61,9 +61,11 @@ interface PRRowProps {
 }
 
 function PRRow({ pr, showAuthor }: PRRowProps) {
+  const navigate = useNavigate();
   return (
     <div
-      className="flex items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/30"
+      onClick={() => navigate(`/pr/${pr.nodeId}`)}
+      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 transition-colors hover:bg-muted/30"
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -71,7 +73,7 @@ function PRRow({ pr, showAuthor }: PRRowProps) {
             {pr.repoOwner}/{pr.repoName}#{pr.number}
           </span>
           <StateBadge state={pr.state} isDraft={pr.isDraft} />
-          <ChecksStatusIcon status={pr.checksStatus} />
+          <ChecksStatusIcon status={pr.checksStatus} isMerged={pr.state === "MERGED"} />
         </div>
         <p className="mt-0.5 truncate text-sm font-medium text-foreground">
           {pr.title}
@@ -97,7 +99,7 @@ function PRRow({ pr, showAuthor }: PRRowProps) {
         </div>
       </div>
       <button
-        onClick={() => BrowserOpenURL(pr.url)}
+        onClick={(e) => { e.stopPropagation(); BrowserOpenURL(pr.url); }}
         className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
         title="Open in GitHub"
       >
@@ -188,25 +190,23 @@ export function DashboardPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
   const {
-    myPRs,
-    myRecentMerged,
-    reviewRequests,
-    reviewedByMe,
-    pageState,
-    isLoadingMyPRs,
-    isLoadingRecentMerged,
-    isLoadingReviewRequests,
-    isLoadingReviewedByMe,
+    pages,
+    isLoading: loadingFlags,
     fetchAll,
     error,
     clearError,
   } = usePRStore();
 
+  const myPRs = pages.myPRs.items;
+  const myRecentMerged = pages.myRecentMerged.items;
+  const reviewRequests = pages.reviewRequests.items;
+  const reviewedByMe = pages.reviewedByMe.items;
+
   const isLoading =
-    isLoadingMyPRs ||
-    isLoadingRecentMerged ||
-    isLoadingReviewRequests ||
-    isLoadingReviewedByMe;
+    loadingFlags.myPRs ||
+    loadingFlags.myRecentMerged ||
+    loadingFlags.reviewRequests ||
+    loadingFlags.reviewedByMe;
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -292,28 +292,28 @@ export function DashboardPage() {
       <div className="grid grid-cols-4 gap-4">
         <StatCard
           label="Open PRs"
-          value={pageState.myPRs.totalCount || myPRs.length}
+          value={pages.myPRs.totalCount || myPRs.length}
           icon={<GitPullRequest className="h-5 w-5" />}
           href="/my-prs"
           sublabel="Authored by you"
         />
         <StatCard
           label="Review Requests"
-          value={pageState.reviewRequests.totalCount || reviewRequests.length}
+          value={pages.reviewRequests.totalCount || reviewRequests.length}
           icon={<Eye className="h-5 w-5" />}
           href="/review-requests"
           sublabel="Waiting for your review"
         />
         <StatCard
           label="Reviewed"
-          value={pageState.reviewedByMe.totalCount || reviewedByMe.length}
+          value={pages.reviewedByMe.totalCount || reviewedByMe.length}
           icon={<CheckCircle className="h-5 w-5" />}
           href="/reviewed"
           sublabel="Open PRs you reviewed"
         />
         <StatCard
           label="Recently Merged"
-          value={pageState.myRecentMerged.totalCount || myRecentMerged.length}
+          value={pages.myRecentMerged.totalCount || myRecentMerged.length}
           icon={<GitMerge className="h-5 w-5" />}
           sublabel="Last 14 days"
         />
@@ -326,7 +326,7 @@ export function DashboardPage() {
           title="Needs Your Review"
           icon={<Eye className="h-4 w-4 text-yellow-500" />}
           prs={needsAttention}
-          isLoading={isLoadingReviewRequests}
+          isLoading={loadingFlags.reviewRequests}
           emptyMessage="No pending reviews. You're all caught up!"
           showAuthor
           href="/review-requests"
@@ -337,7 +337,7 @@ export function DashboardPage() {
           title="Your PRs Needing Work"
           icon={<AlertCircle className="h-4 w-4 text-orange-500" />}
           prs={myPRsNeedingWork}
-          isLoading={isLoadingMyPRs}
+          isLoading={loadingFlags.myPRs}
           emptyMessage="All your PRs are looking good!"
           href="/my-prs"
         />
@@ -347,7 +347,7 @@ export function DashboardPage() {
           title="Your Open PRs"
           icon={<GitPullRequest className="h-4 w-4 text-green-500" />}
           prs={myPRs}
-          isLoading={isLoadingMyPRs}
+          isLoading={loadingFlags.myPRs}
           emptyMessage="No open pull requests."
           href="/my-prs"
         />
@@ -357,7 +357,7 @@ export function DashboardPage() {
           title="Recently Merged"
           icon={<GitMerge className="h-4 w-4 text-purple-500" />}
           prs={myRecentMerged}
-          isLoading={isLoadingRecentMerged}
+          isLoading={loadingFlags.myRecentMerged}
           emptyMessage="No recently merged PRs."
         />
       </div>

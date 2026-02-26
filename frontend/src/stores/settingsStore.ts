@@ -16,15 +16,19 @@ import {
   RemoveExcludedRepo,
 } from "../../wailsjs/go/services/SettingsService";
 import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
+import { SetPollInterval } from "../../wailsjs/go/main/App";
 import { storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
 
 const DEFAULT_CACHE_TTL_MINUTES = 5;
+const DEFAULT_POLL_INTERVAL_MINUTES = 5;
 
 interface SettingsState {
   orgs: string[];
   filterBots: boolean;
+  hideStackedPRs: boolean;
   cacheTTLMinutes: number;
+  pollIntervalMinutes: number;
   /** Tracked teams keyed by org name */
   teamsByOrg: Record<string, storage.TrackedTeam[]>;
   /** Review priorities keyed by org name */
@@ -36,8 +40,12 @@ interface SettingsState {
   removeOrg: (org: string) => Promise<void>;
   loadFilterBots: () => Promise<void>;
   setFilterBots: (enabled: boolean) => Promise<void>;
+  loadHideStackedPRs: () => Promise<void>;
+  setHideStackedPRs: (enabled: boolean) => Promise<void>;
   loadCacheTTL: () => Promise<void>;
   setCacheTTL: (minutes: number) => Promise<void>;
+  loadPollInterval: () => Promise<void>;
+  setPollInterval: (minutes: number) => Promise<void>;
   loadTeams: (org: string) => Promise<void>;
   loadAllTeams: () => Promise<void>;
   syncTeams: (org: string) => Promise<void>;
@@ -60,7 +68,9 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
   filterBots: false,
+  hideStackedPRs: false,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
+  pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
   teamsByOrg: {},
   prioritiesByOrg: {},
   excludedReposByOrg: {},
@@ -100,6 +110,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ filterBots: enabled });
   },
 
+  loadHideStackedPRs: async () => {
+    try {
+      const val = await GetSetting("hide_stacked_prs");
+      set({ hideStackedPRs: val === "true" });
+    } catch {
+      set({ hideStackedPRs: false });
+    }
+  },
+
+  setHideStackedPRs: async (enabled: boolean) => {
+    await SetSetting("hide_stacked_prs", enabled ? "true" : "false");
+    set({ hideStackedPRs: enabled });
+  },
+
   loadCacheTTL: async () => {
     try {
       const val = await GetSetting("cache_ttl_minutes");
@@ -118,6 +142,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await SetSetting("cache_ttl_minutes", String(clamped));
     set({ cacheTTLMinutes: clamped });
     usePRStore.getState().setCacheTTL(clamped * 60 * 1000);
+  },
+
+  loadPollInterval: async () => {
+    try {
+      const val = await GetSetting("poll_interval_minutes");
+      const minutes = parseInt(val, 10);
+      if (!isNaN(minutes) && minutes >= 1) {
+        set({ pollIntervalMinutes: minutes });
+      }
+    } catch {
+      // Setting doesn't exist yet — use default.
+    }
+  },
+
+  setPollInterval: async (minutes: number) => {
+    const clamped = Math.max(1, Math.min(60, Math.round(minutes)));
+    await SetPollInterval(clamped);
+    set({ pollIntervalMinutes: clamped });
   },
 
   loadTeams: async (org: string) => {

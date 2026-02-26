@@ -7,67 +7,110 @@ import {
   GetReviewedByMePage,
   GetTeamReviewRequestsPage,
   MergePR,
+  ApprovePR,
   RequestReviews,
 } from "../../wailsjs/go/services/PullRequestService";
+import {
+  GetSetting,
+  SetSetting,
+} from "../../wailsjs/go/services/SettingsService";
 
 /** Default cache TTL: 5 minutes in milliseconds */
 const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 
-/** Number of items to fetch from the server per request */
-const SERVER_PAGE_SIZE = 25;
+/** Default number of items per page */
+const DEFAULT_PAGE_SIZE = 15;
 
-type CacheKey = "myPRs" | "myRecentMerged" | "reviewRequests" | "teamReviewRequests" | "reviewedByMe";
+export type CacheKey = "myPRs" | "myRecentMerged" | "reviewRequests" | "teamReviewRequests" | "reviewedByMe";
 
-interface ServerPageState {
-  endCursor: string;
-  hasNextPage: boolean;
-  totalCount: number;
+const CACHE_KEYS: CacheKey[] = ["myPRs", "myRecentMerged", "reviewRequests", "teamReviewRequests", "reviewedByMe"];
+
+/** Persist a cache timestamp to the settings DB (fire-and-forget). */
+function persistCacheTs(key: CacheKey, ts: number): void {
+  SetSetting(`cache_ts:${key}`, String(ts)).catch(() => {});
 }
 
-const emptyPageState: ServerPageState = { endCursor: "", hasNextPage: false, totalCount: 0 };
+export type PageDirection = "next" | "prev" | "first";
+
+export interface PaginationState {
+  /** Items currently displayed (one page worth) */
+  items: github.PullRequest[];
+  /** Current 1-based page number */
+  currentPage: number;
+  /** Page size for this category */
+  pageSize: number;
+  /** Whether the server has more pages after the current one */
+  hasNextPage: boolean;
+  /** End cursor from the most recent server response */
+  endCursor: string;
+  /** Total result count reported by the server */
+  totalCount: number;
+  /**
+   * Stack of cursors used to reach each page.
+   * cursorStack[0] = "" (page 1), cursorStack[1] = endCursor after page 1, etc.
+   * Length always equals currentPage.
+   */
+  cursorStack: string[];
+}
+
+function emptyPagination(pageSize: number = DEFAULT_PAGE_SIZE): PaginationState {
+  return {
+    items: [],
+    currentPage: 1,
+    pageSize,
+    hasNextPage: false,
+    endCursor: "",
+    totalCount: 0,
+    cursorStack: [""],
+  };
+}
 
 interface PRState {
-  myPRs: github.PullRequest[];
-  myRecentMerged: github.PullRequest[];
-  reviewRequests: github.PullRequest[];
-  teamReviewRequests: github.PullRequest[];
-  reviewedByMe: github.PullRequest[];
+  /** Per-category pagination state */
+  pages: Record<CacheKey, PaginationState>;
 
-  /** Server-side pagination state per category */
-  pageState: Record<CacheKey, ServerPageState>;
-
-  isLoadingMyPRs: boolean;
-  isLoadingRecentMerged: boolean;
-  isLoadingReviewRequests: boolean;
-  isLoadingReviewedByMe: boolean;
+  /** Loading flags */
+  isLoading: Record<CacheKey, boolean>;
 
   /** Per-category timestamp of last successful fetch */
   lastFetchedAt: Record<CacheKey, number>;
-  /** Cache TTL in milliseconds (default 15 min) */
+  /** Cache TTL in milliseconds */
   cacheTTLMs: number;
 
   error: string | null;
 
-  /** Fetch first page (resets loaded data) */
+  // ---- Page navigation ----
+
+  /** Fetch first page (resets pagination) */
   fetchMyPRs: (org: string) => Promise<void>;
   fetchMyRecentMerged: (org: string, daysBack?: number) => Promise<void>;
   fetchReviewRequests: (org: string) => Promise<void>;
   fetchTeamReviewRequests: (org: string, team: string) => Promise<void>;
   fetchReviewedByMe: (org: string) => Promise<void>;
 
-  /** Fetch next server page and append results */
-  loadMoreMyPRs: (org: string) => Promise<void>;
-  loadMoreMyRecentMerged: (org: string, daysBack?: number) => Promise<void>;
-  loadMoreReviewRequests: (org: string) => Promise<void>;
-  loadMoreReviewedByMe: (org: string) => Promise<void>;
+  /** Navigate to a different page */
+  goToPageMyPRs: (org: string, direction: PageDirection) => Promise<void>;
+  goToPageMyRecentMerged: (org: string, direction: PageDirection, daysBack?: number) => Promise<void>;
+  goToPageReviewRequests: (org: string, direction: PageDirection) => Promise<void>;
+  goToPageReviewedByMe: (org: string, direction: PageDirection) => Promise<void>;
+
+  /** Change page size and re-fetch from page 1 */
+  setPageSize: (key: CacheKey, size: number, refetch?: () => Promise<void>) => void;
+
+  // ---- Shared helpers ----
 
   /** Fetch only if cache is stale for the given category */
   fetchIfStale: (key: CacheKey, fetcher: () => Promise<void>) => Promise<void>;
-
   /** Force-fetch all categories (serialized for rate limits) */
   fetchAll: (orgs: string[], force?: boolean) => Promise<void>;
+
+  // ---- Actions ----
   mergePR: (prNodeID: string, method: string) => Promise<void>;
+  approvePR: (prNodeID: string, body?: string) => Promise<void>;
   requestReviews: (prNodeID: string, userIDs: string[], teamIDs: string[]) => Promise<void>;
+
+  /** Load persisted cache timestamps from the DB so fetchIfStale works across restarts */
+  loadCacheTimestamps: () => Promise<void>;
   setCacheTTL: (ms: number) => void;
   clearError: () => void;
 }
@@ -76,196 +119,266 @@ function isFresh(lastFetchedAt: number, ttl: number): boolean {
   return Date.now() - lastFetchedAt < ttl;
 }
 
-const defaultPageStates: Record<CacheKey, ServerPageState> = {
-  myPRs: { ...emptyPageState },
-  myRecentMerged: { ...emptyPageState },
-  reviewRequests: { ...emptyPageState },
-  teamReviewRequests: { ...emptyPageState },
-  reviewedByMe: { ...emptyPageState },
+const defaultPages: Record<CacheKey, PaginationState> = {
+  myPRs: emptyPagination(),
+  myRecentMerged: emptyPagination(),
+  reviewRequests: emptyPagination(),
+  teamReviewRequests: emptyPagination(),
+  reviewedByMe: emptyPagination(),
 };
 
+const defaultLoading: Record<CacheKey, boolean> = {
+  myPRs: false,
+  myRecentMerged: false,
+  reviewRequests: false,
+  teamReviewRequests: false,
+  reviewedByMe: false,
+};
+
+const defaultLastFetched: Record<CacheKey, number> = {
+  myPRs: 0,
+  myRecentMerged: 0,
+  reviewRequests: 0,
+  teamReviewRequests: 0,
+  reviewedByMe: 0,
+};
+
+/**
+ * Helper: given the current pagination state and a direction, return the
+ * cursor to use for the next fetch and the new cursorStack / currentPage.
+ */
+function resolveNavigation(
+  pg: PaginationState,
+  direction: PageDirection,
+): { cursor: string; newPage: number; newStack: string[] } | null {
+  switch (direction) {
+    case "first":
+      return { cursor: "", newPage: 1, newStack: [""] };
+    case "next": {
+      if (!pg.hasNextPage) return null;
+      const newStack = [...pg.cursorStack, pg.endCursor];
+      return { cursor: pg.endCursor, newPage: pg.currentPage + 1, newStack };
+    }
+    case "prev": {
+      if (pg.currentPage <= 1) return null;
+      const newStack = pg.cursorStack.slice(0, -1);
+      const cursor = newStack[newStack.length - 1] ?? "";
+      return { cursor, newPage: pg.currentPage - 1, newStack };
+    }
+  }
+}
+
+/** Apply a server response to produce an updated PaginationState. */
+function applyPageResult(
+  prev: PaginationState,
+  prs: github.PullRequest[],
+  info: github.PageInfo,
+  newPage: number,
+  newStack: string[],
+): PaginationState {
+  return {
+    ...prev,
+    items: prs,
+    currentPage: newPage,
+    cursorStack: newStack,
+    hasNextPage: info.hasNextPage,
+    endCursor: info.endCursor,
+    totalCount: info.totalCount,
+  };
+}
+
 export const usePRStore = create<PRState>((set, get) => ({
-  myPRs: [],
-  myRecentMerged: [],
-  reviewRequests: [],
-  teamReviewRequests: [],
-  reviewedByMe: [],
-  pageState: { ...defaultPageStates },
-  isLoadingMyPRs: false,
-  isLoadingRecentMerged: false,
-  isLoadingReviewRequests: false,
-  isLoadingReviewedByMe: false,
-  lastFetchedAt: { myPRs: 0, myRecentMerged: 0, reviewRequests: 0, teamReviewRequests: 0, reviewedByMe: 0 },
+  pages: { ...defaultPages },
+  isLoading: { ...defaultLoading },
+  lastFetchedAt: { ...defaultLastFetched },
   cacheTTLMs: DEFAULT_CACHE_TTL_MS,
   error: null,
 
-  // ---- First-page fetches (reset + load page 1) ----
+  // ---- First-page fetches (reset pagination to page 1) ----
 
   fetchMyPRs: async (org: string) => {
-    set({ isLoadingMyPRs: true, error: null });
+    const pageSize = get().pages.myPRs.pageSize;
+    set((s) => ({ isLoading: { ...s.isLoading, myPRs: true }, error: null }));
     try {
-      const page = await GetMyPRsPage(org, SERVER_PAGE_SIZE, "");
+      const page = await GetMyPRsPage(org, pageSize, "");
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
+      const now = Date.now();
       set((s) => ({
-        myPRs: prs,
-        isLoadingMyPRs: false,
-        lastFetchedAt: { ...s.lastFetchedAt, myPRs: Date.now() },
-        pageState: { ...s.pageState, myPRs: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, myPRs: applyPageResult(s.pages.myPRs, prs, info, 1, [""]) },
+        isLoading: { ...s.isLoading, myPRs: false },
+        lastFetchedAt: { ...s.lastFetchedAt, myPRs: now },
       }));
+      persistCacheTs("myPRs", now);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingMyPRs: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, myPRs: false }, error: message }));
     }
   },
 
   fetchMyRecentMerged: async (org: string, daysBack = 14) => {
-    set({ isLoadingRecentMerged: true, error: null });
+    const pageSize = get().pages.myRecentMerged.pageSize;
+    set((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true }, error: null }));
     try {
-      const page = await GetMyRecentMergedPage(org, daysBack, SERVER_PAGE_SIZE, "");
+      const page = await GetMyRecentMergedPage(org, daysBack, pageSize, "");
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
+      const now = Date.now();
       set((s) => ({
-        myRecentMerged: prs,
-        isLoadingRecentMerged: false,
-        lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: Date.now() },
-        pageState: { ...s.pageState, myRecentMerged: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, myRecentMerged: applyPageResult(s.pages.myRecentMerged, prs, info, 1, [""]) },
+        isLoading: { ...s.isLoading, myRecentMerged: false },
+        lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: now },
       }));
+      persistCacheTs("myRecentMerged", now);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingRecentMerged: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false }, error: message }));
     }
   },
 
   fetchReviewRequests: async (org: string) => {
-    set({ isLoadingReviewRequests: true, error: null });
+    const pageSize = get().pages.reviewRequests.pageSize;
+    set((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true }, error: null }));
     try {
-      const page = await GetReviewRequestsPage(org, SERVER_PAGE_SIZE, "");
+      const page = await GetReviewRequestsPage(org, pageSize, "");
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
+      const now = Date.now();
       set((s) => ({
-        reviewRequests: prs,
-        isLoadingReviewRequests: false,
-        lastFetchedAt: { ...s.lastFetchedAt, reviewRequests: Date.now() },
-        pageState: { ...s.pageState, reviewRequests: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, reviewRequests: applyPageResult(s.pages.reviewRequests, prs, info, 1, [""]) },
+        isLoading: { ...s.isLoading, reviewRequests: false },
+        lastFetchedAt: { ...s.lastFetchedAt, reviewRequests: now },
       }));
+      persistCacheTs("reviewRequests", now);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingReviewRequests: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false }, error: message }));
     }
   },
 
   fetchTeamReviewRequests: async (org: string, team: string) => {
-    set({ error: null });
+    const pageSize = get().pages.teamReviewRequests.pageSize;
+    set((s) => ({ isLoading: { ...s.isLoading, teamReviewRequests: true }, error: null }));
     try {
-      const page = await GetTeamReviewRequestsPage(org, team, SERVER_PAGE_SIZE, "");
+      const page = await GetTeamReviewRequestsPage(org, team, pageSize, "");
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
+      const now = Date.now();
       set((s) => ({
-        teamReviewRequests: prs,
-        lastFetchedAt: { ...s.lastFetchedAt, teamReviewRequests: Date.now() },
-        pageState: { ...s.pageState, teamReviewRequests: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, teamReviewRequests: applyPageResult(s.pages.teamReviewRequests, prs, info, 1, [""]) },
+        isLoading: { ...s.isLoading, teamReviewRequests: false },
+        lastFetchedAt: { ...s.lastFetchedAt, teamReviewRequests: now },
       }));
+      persistCacheTs("teamReviewRequests", now);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, teamReviewRequests: false }, error: message }));
     }
   },
 
   fetchReviewedByMe: async (org: string) => {
-    set({ isLoadingReviewedByMe: true, error: null });
+    const pageSize = get().pages.reviewedByMe.pageSize;
+    set((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true }, error: null }));
     try {
-      const page = await GetReviewedByMePage(org, SERVER_PAGE_SIZE, "");
+      const page = await GetReviewedByMePage(org, pageSize, "");
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
+      const now = Date.now();
       set((s) => ({
-        reviewedByMe: prs,
-        isLoadingReviewedByMe: false,
-        lastFetchedAt: { ...s.lastFetchedAt, reviewedByMe: Date.now() },
-        pageState: { ...s.pageState, reviewedByMe: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, reviewedByMe: applyPageResult(s.pages.reviewedByMe, prs, info, 1, [""]) },
+        isLoading: { ...s.isLoading, reviewedByMe: false },
+        lastFetchedAt: { ...s.lastFetchedAt, reviewedByMe: now },
       }));
+      persistCacheTs("reviewedByMe", now);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingReviewedByMe: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false }, error: message }));
     }
   },
 
-  // ---- Load-more (append next server page) ----
+  // ---- Page navigation ----
 
-  loadMoreMyPRs: async (org: string) => {
-    const { pageState } = get();
-    if (!pageState.myPRs.hasNextPage) return;
-    set({ isLoadingMyPRs: true, error: null });
+  goToPageMyPRs: async (org: string, direction: PageDirection) => {
+    const pg = get().pages.myPRs;
+    const nav = resolveNavigation(pg, direction);
+    if (!nav) return;
+    set((s) => ({ isLoading: { ...s.isLoading, myPRs: true }, error: null }));
     try {
-      const page = await GetMyPRsPage(org, SERVER_PAGE_SIZE, pageState.myPRs.endCursor);
+      const page = await GetMyPRsPage(org, pg.pageSize, nav.cursor);
       const prs = page.pullRequests || [];
-      const info = page.pageInfo;
       set((s) => ({
-        myPRs: [...s.myPRs, ...prs],
-        isLoadingMyPRs: false,
-        pageState: { ...s.pageState, myPRs: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, myPRs: applyPageResult(s.pages.myPRs, prs, page.pageInfo, nav.newPage, nav.newStack) },
+        isLoading: { ...s.isLoading, myPRs: false },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingMyPRs: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, myPRs: false }, error: message }));
     }
   },
 
-  loadMoreMyRecentMerged: async (org: string, daysBack = 14) => {
-    const { pageState } = get();
-    if (!pageState.myRecentMerged.hasNextPage) return;
-    set({ isLoadingRecentMerged: true, error: null });
+  goToPageMyRecentMerged: async (org: string, direction: PageDirection, daysBack = 14) => {
+    const pg = get().pages.myRecentMerged;
+    const nav = resolveNavigation(pg, direction);
+    if (!nav) return;
+    set((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true }, error: null }));
     try {
-      const page = await GetMyRecentMergedPage(org, daysBack, SERVER_PAGE_SIZE, pageState.myRecentMerged.endCursor);
+      const page = await GetMyRecentMergedPage(org, daysBack, pg.pageSize, nav.cursor);
       const prs = page.pullRequests || [];
-      const info = page.pageInfo;
       set((s) => ({
-        myRecentMerged: [...s.myRecentMerged, ...prs],
-        isLoadingRecentMerged: false,
-        pageState: { ...s.pageState, myRecentMerged: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, myRecentMerged: applyPageResult(s.pages.myRecentMerged, prs, page.pageInfo, nav.newPage, nav.newStack) },
+        isLoading: { ...s.isLoading, myRecentMerged: false },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingRecentMerged: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false }, error: message }));
     }
   },
 
-  loadMoreReviewRequests: async (org: string) => {
-    const { pageState } = get();
-    if (!pageState.reviewRequests.hasNextPage) return;
-    set({ isLoadingReviewRequests: true, error: null });
+  goToPageReviewRequests: async (org: string, direction: PageDirection) => {
+    const pg = get().pages.reviewRequests;
+    const nav = resolveNavigation(pg, direction);
+    if (!nav) return;
+    set((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true }, error: null }));
     try {
-      const page = await GetReviewRequestsPage(org, SERVER_PAGE_SIZE, pageState.reviewRequests.endCursor);
+      const page = await GetReviewRequestsPage(org, pg.pageSize, nav.cursor);
       const prs = page.pullRequests || [];
-      const info = page.pageInfo;
       set((s) => ({
-        reviewRequests: [...s.reviewRequests, ...prs],
-        isLoadingReviewRequests: false,
-        pageState: { ...s.pageState, reviewRequests: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, reviewRequests: applyPageResult(s.pages.reviewRequests, prs, page.pageInfo, nav.newPage, nav.newStack) },
+        isLoading: { ...s.isLoading, reviewRequests: false },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingReviewRequests: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false }, error: message }));
     }
   },
 
-  loadMoreReviewedByMe: async (org: string) => {
-    const { pageState } = get();
-    if (!pageState.reviewedByMe.hasNextPage) return;
-    set({ isLoadingReviewedByMe: true, error: null });
+  goToPageReviewedByMe: async (org: string, direction: PageDirection) => {
+    const pg = get().pages.reviewedByMe;
+    const nav = resolveNavigation(pg, direction);
+    if (!nav) return;
+    set((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true }, error: null }));
     try {
-      const page = await GetReviewedByMePage(org, SERVER_PAGE_SIZE, pageState.reviewedByMe.endCursor);
+      const page = await GetReviewedByMePage(org, pg.pageSize, nav.cursor);
       const prs = page.pullRequests || [];
-      const info = page.pageInfo;
       set((s) => ({
-        reviewedByMe: [...s.reviewedByMe, ...prs],
-        isLoadingReviewedByMe: false,
-        pageState: { ...s.pageState, reviewedByMe: { endCursor: info.endCursor, hasNextPage: info.hasNextPage, totalCount: info.totalCount } },
+        pages: { ...s.pages, reviewedByMe: applyPageResult(s.pages.reviewedByMe, prs, page.pageInfo, nav.newPage, nav.newStack) },
+        isLoading: { ...s.isLoading, reviewedByMe: false },
       }));
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      set({ isLoadingReviewedByMe: false, error: message });
+      set((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false }, error: message }));
     }
+  },
+
+  setPageSize: (key: CacheKey, size: number, refetch?: () => Promise<void>) => {
+    set((s) => ({
+      pages: {
+        ...s.pages,
+        [key]: { ...emptyPagination(size) },
+      },
+    }));
+    // Re-fetch from page 1 with new size if a refetch callback is provided.
+    if (refetch) refetch();
   },
 
   // ---- Shared ----
@@ -305,6 +418,16 @@ export const usePRStore = create<PRState>((set, get) => ({
     }
   },
 
+  approvePR: async (prNodeID: string, body = "") => {
+    try {
+      await ApprovePR(prNodeID, body);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message });
+      throw err;
+    }
+  },
+
   requestReviews: async (prNodeID: string, userIDs: string[], teamIDs: string[]) => {
     try {
       await RequestReviews(prNodeID, userIDs, teamIDs);
@@ -313,6 +436,26 @@ export const usePRStore = create<PRState>((set, get) => ({
       set({ error: message });
       throw err;
     }
+  },
+
+  loadCacheTimestamps: async () => {
+    const timestamps: Partial<Record<CacheKey, number>> = {};
+    await Promise.all(
+      CACHE_KEYS.map(async (key) => {
+        try {
+          const val = await GetSetting(`cache_ts:${key}`);
+          const ts = parseInt(val, 10);
+          if (!isNaN(ts) && ts > 0) {
+            timestamps[key] = ts;
+          }
+        } catch {
+          // Setting doesn't exist yet — leave at 0 (will trigger fetch).
+        }
+      }),
+    );
+    set((s) => ({
+      lastFetchedAt: { ...s.lastFetchedAt, ...timestamps },
+    }));
   },
 
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),

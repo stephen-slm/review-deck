@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ExternalLink,
   GitBranch,
   GitCommit,
+  GitMerge,
   FileCode,
   Plus,
   Minus,
@@ -14,45 +15,103 @@ import {
   Tag,
   AlertTriangle,
   RefreshCw,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  Circle,
+  MessageSquare,
+  FileText,
+  Activity,
+  ThumbsUp,
+  ChevronDown,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { GetPRCheckRuns, GetPRComments } from "../../wailsjs/go/services/PullRequestService";
+
+/** Custom markdown components — opens links in the system browser via Wails. */
+const mdComponents: Components = {
+  a: ({ href, children, ...props }) => (
+    <a
+      {...props}
+      href={href}
+      onClick={(e) => {
+        e.preventDefault();
+        if (href) BrowserOpenURL(href);
+      }}
+      className="cursor-pointer text-primary underline hover:text-primary/80"
+    >
+      {children}
+    </a>
+  ),
+};
+
 import { usePRStore } from "@/stores/prStore";
+import { useAuthStore } from "@/stores/authStore";
 import { github } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
+
+type DetailTab = "description" | "checks" | "comments";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
 import { ChecksStatusIcon } from "@/components/pr/ChecksStatusIcon";
-import { MergeButton } from "@/components/pr/MergeButton";
 import { ReviewerAssign } from "@/components/pr/ReviewerAssign";
 
 /** Search all PR store arrays for a PR by nodeId. */
 function useFindPR(nodeId: string | undefined): github.PullRequest | undefined {
-  const myPRs = usePRStore((s) => s.myPRs);
-  const myRecentMerged = usePRStore((s) => s.myRecentMerged);
-  const reviewRequests = usePRStore((s) => s.reviewRequests);
-  const teamReviewRequests = usePRStore((s) => s.teamReviewRequests);
-  const reviewedByMe = usePRStore((s) => s.reviewedByMe);
+  const pages = usePRStore((s) => s.pages);
 
   return useMemo(() => {
     if (!nodeId) return undefined;
     const all = [
-      ...myPRs,
-      ...myRecentMerged,
-      ...reviewRequests,
-      ...teamReviewRequests,
-      ...reviewedByMe,
+      ...pages.myPRs.items,
+      ...pages.myRecentMerged.items,
+      ...pages.reviewRequests.items,
+      ...pages.teamReviewRequests.items,
+      ...pages.reviewedByMe.items,
     ];
     return all.find((pr) => pr.nodeId === nodeId);
-  }, [nodeId, myPRs, myRecentMerged, reviewRequests, teamReviewRequests, reviewedByMe]);
+  }, [nodeId, pages]);
 }
 
 export function PRDetailPage() {
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
   const pr = useFindPR(nodeId);
+
+  const [activeTab, setActiveTab] = useState<DetailTab>("description");
+
+  // Lazy-loaded check runs
+  const [checkRuns, setCheckRuns] = useState<github.CheckRun[] | null>(null);
+  const [checksLoading, setChecksLoading] = useState(false);
+  const [checksError, setChecksError] = useState<string | null>(null);
+
+  // Lazy-loaded comments
+  const [comments, setComments] = useState<github.PRComments | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
+
+  // Fetch check runs when the checks tab is first selected
+  useEffect(() => {
+    if (activeTab !== "checks" || checkRuns !== null || checksLoading || !nodeId) return;
+    setChecksLoading(true);
+    GetPRCheckRuns(nodeId)
+      .then(setCheckRuns)
+      .catch((err) => setChecksError(String(err)))
+      .finally(() => setChecksLoading(false));
+  }, [activeTab, checkRuns, checksLoading, nodeId]);
+
+  // Fetch comments when the comments tab is first selected
+  useEffect(() => {
+    if (activeTab !== "comments" || comments !== null || commentsLoading || !nodeId) return;
+    setCommentsLoading(true);
+    GetPRComments(nodeId)
+      .then(setComments)
+      .catch((err) => setCommentsError(String(err)))
+      .finally(() => setCommentsLoading(false));
+  }, [activeTab, comments, commentsLoading, nodeId]);
 
   if (!pr) {
     return (
@@ -73,6 +132,12 @@ export function PRDetailPage() {
   }
 
   const repo = `${pr.repoOwner}/${pr.repoName}`;
+
+  const tabs: { key: DetailTab; label: string; icon: React.ReactNode }[] = [
+    { key: "description", label: "Description", icon: <FileText className="h-4 w-4" /> },
+    { key: "checks", label: "Checks", icon: <Activity className="h-4 w-4" /> },
+    { key: "comments", label: "Comments", icon: <MessageSquare className="h-4 w-4" /> },
+  ];
 
   return (
     <div className="max-w-5xl space-y-6">
@@ -104,7 +169,7 @@ export function PRDetailPage() {
         <div className="flex flex-wrap items-center gap-2">
           <StateBadge state={pr.state} isDraft={pr.isDraft} />
           <ReviewStatusBadge reviewDecision={pr.reviewDecision} />
-          <ChecksStatusIcon status={pr.checksStatus} />
+          <ChecksStatusIcon status={pr.checksStatus} isMerged={pr.state === "MERGED"} />
           {pr.mergeable === "CONFLICTING" && (
             <span className="inline-flex items-center gap-1 rounded-full bg-red-900/60 px-2 py-0.5 text-xs font-medium text-red-300">
               <AlertTriangle className="h-3 w-3" />
@@ -158,67 +223,109 @@ export function PRDetailPage() {
             </code>
           </div>
 
-          {/* Body */}
-          <section className="space-y-2">
-            <h3 className="text-sm font-semibold text-foreground">
-              Description
-            </h3>
-            {pr.body ? (
-              <div className="prose prose-invert prose-sm max-w-none rounded-lg border border-border bg-card p-4 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {pr.body}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
-                No description provided.
-              </p>
-            )}
-          </section>
+          {/* Tab bar */}
+          <div className="flex border-b border-border">
+            {tabs.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab.key
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-muted-foreground/40 hover:text-foreground"
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            ))}
+          </div>
 
-          {/* Reviews */}
-          {pr.reviews && pr.reviews.length > 0 && (
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold text-foreground">
-                Reviews
-              </h3>
-              <div className="space-y-2">
-                {pr.reviews.map((review, i) => (
-                  <div
-                    key={review.id || i}
-                    className="rounded-lg border border-border bg-card px-4 py-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      {review.authorAvatar ? (
-                        <img
-                          src={review.authorAvatar}
-                          alt={review.author}
-                          className="h-5 w-5 rounded-full"
-                        />
-                      ) : (
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs">
-                          {review.author?.[0]?.toUpperCase()}
-                        </div>
-                      )}
-                      <span className="text-sm font-medium text-foreground">
-                        {review.author}
-                      </span>
-                      <ReviewStateBadge state={review.state} />
-                      {review.submittedAt && (
-                        <span className="text-xs text-muted-foreground">
-                          {timeAgo(review.submittedAt)}
-                        </span>
-                      )}
-                    </div>
-                    {review.body && (
-                      <p className="mt-1.5 text-sm text-muted-foreground">
-                        {review.body}
-                      </p>
-                    )}
+          {/* Tab content */}
+          {activeTab === "description" && (
+            <>
+              {/* Body */}
+              <section className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Description
+                </h3>
+                {pr.body ? (
+                  <div className="prose prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-4 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                      {pr.body}
+                    </ReactMarkdown>
                   </div>
-                ))}
-              </div>
-            </section>
+                ) : (
+                  <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
+                    No description provided.
+                  </p>
+                )}
+              </section>
+
+              {/* Reviews */}
+              {pr.reviews && pr.reviews.length > 0 && (
+                <section className="space-y-2">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Reviews
+                  </h3>
+                  <div className="space-y-2">
+                    {pr.reviews.map((review, i) => (
+                      <div
+                        key={review.id || i}
+                        className="rounded-lg border border-border bg-card px-4 py-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          {review.authorAvatar ? (
+                            <img
+                              src={review.authorAvatar}
+                              alt={review.author}
+                              className="h-5 w-5 rounded-full"
+                            />
+                          ) : (
+                            <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs">
+                              {review.author?.[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <span className="text-sm font-medium text-foreground">
+                            {review.author}
+                          </span>
+                          <ReviewStateBadge state={review.state} />
+                          {review.submittedAt && (
+                            <span className="text-xs text-muted-foreground">
+                              {timeAgo(review.submittedAt)}
+                            </span>
+                          )}
+                        </div>
+                        {review.body && (
+                          <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                              {review.body}
+                            </ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )}
+
+          {activeTab === "checks" && (
+            <ChecksTab
+              checkRuns={checkRuns}
+              loading={checksLoading}
+              error={checksError}
+              isMerged={pr.state === "MERGED"}
+            />
+          )}
+
+          {activeTab === "comments" && (
+            <CommentsTab
+              comments={comments}
+              loading={commentsLoading}
+              error={commentsError}
+            />
           )}
         </div>
 
@@ -226,25 +333,25 @@ export function PRDetailPage() {
         <div className="space-y-4">
           {/* Actions */}
           <SidebarSection title="Actions">
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
+              {pr.state === "OPEN" && (
+                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} />
+              )}
+              {pr.state === "OPEN" && (
+                <DetailMergeButton
+                  prNodeId={pr.nodeId}
+                  mergeable={pr.mergeable}
+                  isDraft={pr.isDraft}
+                  onMerged={() => navigate(-1)}
+                />
+              )}
               <button
                 onClick={() => BrowserOpenURL(pr.url)}
-                className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
               >
-                <ExternalLink className="h-3.5 w-3.5" />
+                <ExternalLink className="h-4 w-4" />
                 Open in GitHub
               </button>
-              {pr.state === "OPEN" && (
-                <div className="flex items-center">
-                  <MergeButton
-                    prNodeId={pr.nodeId}
-                    mergeable={pr.mergeable}
-                    state={pr.state}
-                    isDraft={pr.isDraft}
-                    onMerged={() => navigate(-1)}
-                  />
-                </div>
-              )}
               {pr.state === "OPEN" && (
                 <ReviewerAssign
                   prNodeId={pr.nodeId}
@@ -285,28 +392,8 @@ export function PRDetailPage() {
             </div>
           </SidebarSection>
 
-          {/* Review requests */}
-          {pr.reviewRequests && pr.reviewRequests.length > 0 && (
-            <SidebarSection title="Review Requests">
-              <div className="space-y-1.5">
-                {pr.reviewRequests.map((rr, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    {rr.reviewerType === "team" ? (
-                      <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <User className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                    <span className="text-sm text-foreground">
-                      {rr.reviewer}
-                    </span>
-                    <span className="rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
-                      {rr.reviewerType}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </SidebarSection>
-          )}
+          {/* Reviewers: completed reviews + pending requests */}
+          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} />
 
           {/* Labels */}
           {pr.labels && pr.labels.length > 0 && (
@@ -376,6 +463,429 @@ export function PRDetailPage() {
           </SidebarSection>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---- Action button components (detail page) ----
+
+const mergeOptions = [
+  { method: "MERGE", label: "Create a merge commit" },
+  { method: "SQUASH", label: "Squash and merge" },
+  { method: "REBASE", label: "Rebase and merge" },
+] as const;
+
+/** Prominent merge button with method dropdown for the detail page sidebar. */
+function DetailMergeButton({
+  prNodeId,
+  mergeable,
+  isDraft,
+  onMerged,
+}: {
+  prNodeId: string;
+  mergeable: string;
+  isDraft: boolean;
+  onMerged?: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const { mergePR } = usePRStore();
+
+  const canMerge = !isDraft && mergeable === "MERGEABLE";
+
+  const handleMerge = async (method: string) => {
+    setIsMerging(true);
+    setMergeError(null);
+    try {
+      await mergePR(prNodeId, method);
+      setIsOpen(false);
+      onMerged?.();
+    } catch (err: unknown) {
+      setMergeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  const title = !canMerge
+    ? isDraft
+      ? "Cannot merge draft PRs"
+      : mergeable === "CONFLICTING"
+        ? "This branch has conflicts"
+        : "Cannot merge this PR"
+    : "Merge this pull request";
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={!canMerge || isMerging}
+        title={title}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <GitMerge className={`h-4 w-4 ${isMerging ? "animate-pulse" : ""}`} />
+        Merge
+        <ChevronDown className="ml-auto h-3.5 w-3.5" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover shadow-md">
+          <div className="p-1">
+            {mergeOptions.map((opt) => (
+              <button
+                key={opt.method}
+                onClick={() => handleMerge(opt.method)}
+                disabled={isMerging}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent disabled:opacity-50"
+              >
+                <GitMerge className="h-3.5 w-3.5 text-green-500" />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {mergeError && (
+            <div className="border-t border-border px-2 py-1.5 text-xs text-destructive">
+              {mergeError}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Prominent approve button for the detail page sidebar. */
+function DetailApproveButton({
+  prNodeId,
+  reviews,
+}: {
+  prNodeId: string;
+  reviews: github.Review[] | null;
+}) {
+  const [isApproving, setIsApproving] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { approvePR } = usePRStore();
+  const viewerLogin = useAuthStore((s) => s.user?.login);
+
+  // Check if the viewer has already approved this PR
+  const alreadyApproved = useMemo(() => {
+    if (!reviews || !viewerLogin) return false;
+    // Find the viewer's latest review
+    const viewerReviews = reviews.filter((r) => r.author === viewerLogin);
+    if (viewerReviews.length === 0) return false;
+    const latest = viewerReviews.reduce((a, b) => {
+      const aTs = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const bTs = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      return bTs > aTs ? b : a;
+    });
+    return latest.state === "APPROVED";
+  }, [reviews, viewerLogin]);
+
+  const handleApprove = async () => {
+    setIsApproving(true);
+    setError(null);
+    try {
+      await approvePR(prNodeId);
+      setApproved(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  if (approved || alreadyApproved) {
+    return (
+      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-900/40 px-3 py-2 text-sm font-medium text-green-400">
+        <CheckCircle className="h-4 w-4" />
+        Approved
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <button
+        onClick={handleApprove}
+        disabled={isApproving}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-green-600 bg-transparent px-3 py-2 text-sm font-medium text-green-400 transition-colors hover:bg-green-600/20 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <ThumbsUp className={`h-4 w-4 ${isApproving ? "animate-pulse" : ""}`} />
+        {isApproving ? "Approving..." : "Approve"}
+      </button>
+      {error && (
+        <p className="mt-1 text-xs text-destructive">{error}</p>
+      )}
+    </div>
+  );
+}
+
+// ---- Tab components ----
+
+/** Icon for a check run based on its status + conclusion. */
+function CheckRunIcon({ status, conclusion, isMerged }: { status: string; conclusion: string; isMerged: boolean }) {
+  // In-progress
+  if (status === "IN_PROGRESS" || status === "QUEUED" || status === "PENDING" || status === "WAITING") {
+    if (isMerged) return <Circle className="h-4 w-4 text-muted-foreground" />;
+    return <Loader2 className="h-4 w-4 animate-spin text-yellow-400" />;
+  }
+  // Completed — check conclusion
+  if (conclusion === "SUCCESS" || conclusion === "NEUTRAL" || conclusion === "SKIPPED") {
+    return <CheckCircle className="h-4 w-4 text-green-400" />;
+  }
+  if (conclusion === "FAILURE" || conclusion === "TIMED_OUT" || conclusion === "CANCELLED" || conclusion === "STARTUP_FAILURE") {
+    return <XCircle className="h-4 w-4 text-red-400" />;
+  }
+  if (conclusion === "ACTION_REQUIRED") {
+    return <Circle className="h-4 w-4 text-yellow-400" />;
+  }
+  // Fallback
+  return <Circle className="h-4 w-4 text-muted-foreground" />;
+}
+
+function ChecksTab({
+  checkRuns,
+  loading,
+  error,
+  isMerged,
+}: {
+  checkRuns: github.CheckRun[] | null;
+  loading: boolean;
+  error: string | null;
+  isMerged: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading checks...</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+        Failed to load checks: {error}
+      </div>
+    );
+  }
+  if (!checkRuns || checkRuns.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
+        No check runs found for this pull request.
+      </p>
+    );
+  }
+
+  // Group by conclusion for a summary
+  const passed = checkRuns.filter((c) => c.conclusion === "SUCCESS" || c.conclusion === "NEUTRAL" || c.conclusion === "SKIPPED");
+  const failed = checkRuns.filter((c) => c.conclusion === "FAILURE" || c.conclusion === "TIMED_OUT" || c.conclusion === "CANCELLED" || c.conclusion === "STARTUP_FAILURE");
+  const pending = checkRuns.filter((c) => !c.conclusion || c.status === "IN_PROGRESS" || c.status === "QUEUED" || c.status === "PENDING" || c.status === "WAITING");
+
+  return (
+    <section className="space-y-3">
+      {/* Summary bar */}
+      <div className="flex items-center gap-4 text-sm">
+        {passed.length > 0 && (
+          <span className="flex items-center gap-1 text-green-400">
+            <CheckCircle className="h-4 w-4" /> {passed.length} passed
+          </span>
+        )}
+        {failed.length > 0 && (
+          <span className="flex items-center gap-1 text-red-400">
+            <XCircle className="h-4 w-4" /> {failed.length} failed
+          </span>
+        )}
+        {pending.length > 0 && (
+          <span className="flex items-center gap-1 text-yellow-400">
+            <Loader2 className="h-4 w-4" /> {pending.length} pending
+          </span>
+        )}
+      </div>
+
+      {/* Individual checks */}
+      <div className="space-y-1">
+        {checkRuns.map((check, i) => (
+          <div
+            key={check.name + i}
+            className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5"
+          >
+            <CheckRunIcon status={check.status} conclusion={check.conclusion} isMerged={isMerged} />
+            <span className="min-w-0 flex-1 truncate text-sm text-foreground">{check.name}</span>
+            <span className="text-xs text-muted-foreground capitalize">
+              {check.conclusion ? check.conclusion.toLowerCase().replace("_", " ") : check.status.toLowerCase().replace("_", " ")}
+            </span>
+            {check.detailsUrl && (
+              <button
+                onClick={() => BrowserOpenURL(check.detailsUrl)}
+                className="ml-1 text-muted-foreground transition-colors hover:text-foreground"
+                title="View details"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CommentsTab({
+  comments,
+  loading,
+  error,
+}: {
+  comments: github.PRComments | null;
+  loading: boolean;
+  error: string | null;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading comments...</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-900/50 bg-red-950/20 px-4 py-3 text-sm text-red-400">
+        Failed to load comments: {error}
+      </div>
+    );
+  }
+
+  const issueComments = comments?.issueComments || [];
+  const reviewThreads = comments?.reviewThreads || [];
+  const hasContent = issueComments.length > 0 || reviewThreads.length > 0;
+
+  if (!hasContent) {
+    return (
+      <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
+        No comments found for this pull request.
+      </p>
+    );
+  }
+
+  return (
+    <section className="space-y-6">
+      {/* Issue comments (top-level conversation) */}
+      {issueComments.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            Conversation ({issueComments.length})
+          </h3>
+          <div className="space-y-2">
+            {issueComments.map((comment) => (
+              <CommentCard
+                key={comment.id}
+                author={comment.author}
+                authorAvatar={comment.authorAvatar}
+                body={comment.body}
+                createdAt={comment.createdAt}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Review threads (inline code comments) */}
+      {reviewThreads.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            Review threads ({reviewThreads.length})
+          </h3>
+          <div className="space-y-3">
+            {reviewThreads.map((thread) => (
+              <div
+                key={thread.id}
+                className="rounded-lg border border-border bg-card"
+              >
+                {/* Thread header */}
+                <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+                  <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
+                  <code className="truncate text-xs text-muted-foreground">
+                    {thread.path}
+                    {thread.line > 0 && `:${thread.line}`}
+                  </code>
+                  {thread.isResolved && (
+                    <span className="ml-auto rounded-full bg-green-900/60 px-1.5 py-0.5 text-[10px] font-medium text-green-300">
+                      Resolved
+                    </span>
+                  )}
+                  {!thread.isResolved && (
+                    <span className="ml-auto rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300">
+                      Unresolved
+                    </span>
+                  )}
+                </div>
+                {/* Thread comments */}
+                <div className="divide-y divide-border">
+                  {(thread.comments || []).map((comment) => (
+                    <CommentCard
+                      key={comment.id}
+                      author={comment.author}
+                      authorAvatar={comment.authorAvatar}
+                      body={comment.body}
+                      createdAt={comment.createdAt}
+                      compact
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Reusable comment card for both issue comments and review thread comments. */
+function CommentCard({
+  author,
+  authorAvatar,
+  body,
+  createdAt,
+  compact,
+}: {
+  author: string;
+  authorAvatar: string;
+  body: string;
+  createdAt: any;
+  compact?: boolean;
+}) {
+  return (
+    <div className={compact ? "px-4 py-3" : "rounded-lg border border-border bg-card px-4 py-3"}>
+      <div className="flex items-center gap-2">
+        {authorAvatar ? (
+          <img
+            src={authorAvatar}
+            alt={author}
+            className="h-5 w-5 rounded-full"
+          />
+        ) : (
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs">
+            {author?.[0]?.toUpperCase()}
+          </div>
+        )}
+        <span className="text-sm font-medium text-foreground">{author}</span>
+        {createdAt && (
+          <span className="text-xs text-muted-foreground">
+            {timeAgo(createdAt)}
+          </span>
+        )}
+      </div>
+      {body && (
+        <div className="prose prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+            {body}
+          </ReactMarkdown>
+        </div>
+      )}
     </div>
   );
 }
@@ -479,5 +989,91 @@ function LabelBadge({ label }: { label: github.Label }) {
     >
       {label.name}
     </span>
+  );
+}
+
+/**
+ * Sidebar section that shows:
+ * - Latest review state per unique reviewer (deduplicated, latest non-COMMENTED wins)
+ * - Pending review requests that haven't submitted a review yet
+ */
+function ReviewersSidebar({
+  reviews,
+  reviewRequests,
+}: {
+  reviews: github.Review[] | null;
+  reviewRequests: github.ReviewRequest[] | null;
+}) {
+  const latestReviews = useMemo(() => {
+    if (!reviews || reviews.length === 0) return [];
+
+    // For each author, find their latest meaningful review state.
+    // Priority: APPROVED / CHANGES_REQUESTED > DISMISSED > COMMENTED > PENDING
+    // If only COMMENTED reviews exist, still show them.
+    const byAuthor = new Map<string, github.Review>();
+    for (const r of reviews) {
+      const existing = byAuthor.get(r.author);
+      if (!existing) {
+        byAuthor.set(r.author, r);
+        continue;
+      }
+      // Take whichever was submitted later
+      const existingTs = existing.submittedAt ? new Date(existing.submittedAt).getTime() : 0;
+      const currentTs = r.submittedAt ? new Date(r.submittedAt).getTime() : 0;
+      if (currentTs > existingTs) {
+        byAuthor.set(r.author, r);
+      }
+    }
+    return Array.from(byAuthor.values());
+  }, [reviews]);
+
+  // Pending requests that don't have a completed review
+  const pendingRequests = useMemo(() => {
+    if (!reviewRequests || reviewRequests.length === 0) return [];
+    const reviewedAuthors = new Set(latestReviews.map((r) => r.author));
+    return reviewRequests.filter((rr) => !reviewedAuthors.has(rr.reviewer));
+  }, [reviewRequests, latestReviews]);
+
+  if (latestReviews.length === 0 && pendingRequests.length === 0) return null;
+
+  return (
+    <SidebarSection title="Reviewers">
+      <div className="space-y-1.5">
+        {latestReviews.map((review) => (
+          <div key={review.author} className="flex items-center gap-2">
+            {review.authorAvatar ? (
+              <img
+                src={review.authorAvatar}
+                alt={review.author}
+                className="h-5 w-5 rounded-full"
+              />
+            ) : (
+              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-accent text-xs">
+                {review.author?.[0]?.toUpperCase()}
+              </div>
+            )}
+            <span className="text-sm text-foreground">{review.author}</span>
+            <span className="ml-auto">
+              <ReviewStateBadge state={review.state} />
+            </span>
+          </div>
+        ))}
+        {pendingRequests.map((rr, i) => (
+          <div key={`pending-${i}`} className="flex items-center gap-2">
+            {rr.reviewerType === "team" ? (
+              <Users className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <User className="h-5 w-5 text-muted-foreground" />
+            )}
+            <span className="text-sm text-muted-foreground">{rr.reviewer}</span>
+            <span className="ml-auto">
+              <span className="rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300">
+                Pending
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </SidebarSection>
   );
 }

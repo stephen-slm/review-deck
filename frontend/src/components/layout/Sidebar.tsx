@@ -39,14 +39,12 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
-  const myPRs = usePRStore((s) => s.myPRs);
-  const reviewRequests = usePRStore((s) => s.reviewRequests);
-  const reviewedByMe = usePRStore((s) => s.reviewedByMe);
+  const pages = usePRStore((s) => s.pages);
 
   const badgeCounts: Record<string, number> = {
-    myPRs: myPRs.length,
-    reviewRequests: reviewRequests.length,
-    reviewedByMe: reviewedByMe.length,
+    myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
+    reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
+    reviewedByMe: pages.reviewedByMe.totalCount || pages.reviewedByMe.items.length,
   };
 
   useEffect(() => {
@@ -56,7 +54,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-card">
       {/* macOS titlebar spacer — drag region that sits behind the traffic lights */}
-      <div className="wails-drag h-[52px] shrink-0" />
+      <div className="wails-drag h-[38px] shrink-0" />
       <div
         className="flex h-10 shrink-0 items-center border-b border-border px-4"
         onDoubleClick={() => WindowToggleMaximise()}

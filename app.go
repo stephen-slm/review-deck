@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -104,6 +105,21 @@ func (a *App) StopPoller() {
 // SyncOrgMembers forces a refresh of the org members cache for the given org.
 func (a *App) SyncOrgMembers(org string) error {
 	return a.prService.SyncOrgMembers(org)
+}
+
+// SetPollInterval updates the poller interval and persists it to the database.
+func (a *App) SetPollInterval(minutes int) error {
+	if minutes < 1 {
+		minutes = 1
+	}
+	if minutes > 60 {
+		minutes = 60
+	}
+	if err := a.db.SetSetting("poll_interval_minutes", fmt.Sprintf("%d", minutes)); err != nil {
+		return err
+	}
+	a.poller.SetInterval(minutes)
+	return nil
 }
 
 // shutdown is called when the app is closing.

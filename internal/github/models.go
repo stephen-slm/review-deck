@@ -16,11 +16,47 @@ type Label struct {
 	Color string `json:"color"`
 }
 
-// CheckRun represents a CI/CD check status.
+// CheckRun represents an individual CI/CD check run.
 type CheckRun struct {
 	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
+	Status     string `json:"status"`     // QUEUED, IN_PROGRESS, COMPLETED, etc.
+	Conclusion string `json:"conclusion"` // SUCCESS, FAILURE, NEUTRAL, CANCELLED, TIMED_OUT, etc.
+	DetailsURL string `json:"detailsUrl"`
+}
+
+// ReviewComment represents a single comment within a review thread.
+type ReviewComment struct {
+	ID           string    `json:"id"`
+	Author       string    `json:"author"`
+	AuthorAvatar string    `json:"authorAvatar"`
+	Body         string    `json:"body"`
+	Path         string    `json:"path"`
+	Line         int       `json:"line"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// ReviewThread represents a threaded conversation on a pull request diff.
+type ReviewThread struct {
+	ID         string          `json:"id"`
+	IsResolved bool            `json:"isResolved"`
+	Path       string          `json:"path"`
+	Line       int             `json:"line"`
+	Comments   []ReviewComment `json:"comments"`
+}
+
+// IssueComment represents a top-level (non-review) comment on a pull request.
+type IssueComment struct {
+	ID           string    `json:"id"`
+	Author       string    `json:"author"`
+	AuthorAvatar string    `json:"authorAvatar"`
+	Body         string    `json:"body"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+// PRComments bundles all comment data for a pull request.
+type PRComments struct {
+	IssueComments []IssueComment `json:"issueComments"`
+	ReviewThreads []ReviewThread `json:"reviewThreads"`
 }
 
 // ReviewRequest represents a pending review request.

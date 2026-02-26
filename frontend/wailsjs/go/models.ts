@@ -1,5 +1,23 @@
 export namespace github {
 	
+	export class CheckRun {
+	    name: string;
+	    status: string;
+	    conclusion: string;
+	    detailsUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckRun(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.conclusion = source["conclusion"];
+	        this.detailsUrl = source["detailsUrl"];
+	    }
+	}
 	export class Client {
 	
 	
@@ -11,6 +29,45 @@ export namespace github {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	
 	    }
+	}
+	export class IssueComment {
+	    id: string;
+	    author: string;
+	    authorAvatar: string;
+	    body: string;
+	    // Go type: time
+	    createdAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new IssueComment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.author = source["author"];
+	        this.authorAvatar = source["authorAvatar"];
+	        this.body = source["body"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class Label {
 	    name: string;
@@ -25,6 +82,119 @@ export namespace github {
 	        this.name = source["name"];
 	        this.color = source["color"];
 	    }
+	}
+	export class ReviewComment {
+	    id: string;
+	    author: string;
+	    authorAvatar: string;
+	    body: string;
+	    path: string;
+	    line: number;
+	    // Go type: time
+	    createdAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReviewComment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.author = source["author"];
+	        this.authorAvatar = source["authorAvatar"];
+	        this.body = source["body"];
+	        this.path = source["path"];
+	        this.line = source["line"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ReviewThread {
+	    id: string;
+	    isResolved: boolean;
+	    path: string;
+	    line: number;
+	    comments: ReviewComment[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ReviewThread(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.isResolved = source["isResolved"];
+	        this.path = source["path"];
+	        this.line = source["line"];
+	        this.comments = this.convertValues(source["comments"], ReviewComment);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PRComments {
+	    issueComments: IssueComment[];
+	    reviewThreads: ReviewThread[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PRComments(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.issueComments = this.convertValues(source["issueComments"], IssueComment);
+	        this.reviewThreads = this.convertValues(source["reviewThreads"], ReviewThread);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class PageInfo {
 	    hasNextPage: boolean;
@@ -237,6 +407,8 @@ export namespace github {
 		    return a;
 		}
 	}
+	
+	
 	
 	
 	

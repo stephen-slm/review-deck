@@ -336,3 +336,146 @@ func (c *Client) GetReviewedByUserPage(ctx context.Context, org, user string, pa
 	q := buildQuery(fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org), filterBots, excludedRepos)
 	return c.searchPRsPage(ctx, q, pageSize, cursor)
 }
+
+// ---- On-demand detail queries (used by PRDetailPage) ----
+
+// checkRunsQuery fetches individual check runs for a PR by node ID.
+type checkRunsQuery struct {
+	Node struct {
+		PullRequest struct {
+			Commits struct {
+				Nodes []struct {
+					Commit struct {
+						CheckSuites struct {
+							Nodes []struct {
+								CheckRuns struct {
+									Nodes []struct {
+										Name       string
+										Status     githubv4.CheckStatusState
+										Conclusion githubv4.CheckConclusionState
+										DetailsURL string `graphql:"detailsUrl"`
+									}
+								} `graphql:"checkRuns(first: 50)"`
+							}
+						} `graphql:"checkSuites(first: 20)"`
+					}
+				}
+			} `graphql:"commits(last: 1)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id: $id)"`
+}
+
+// GetPRCheckRuns fetches individual CI check runs for a pull request.
+func (c *Client) GetPRCheckRuns(ctx context.Context, nodeID string) ([]CheckRun, error) {
+	variables := map[string]interface{}{
+		"id": githubv4.ID(nodeID),
+	}
+
+	var q checkRunsQuery
+	if err := c.graphql.Query(ctx, &q, variables); err != nil {
+		return nil, fmt.Errorf("github graphql check runs: %w", err)
+	}
+
+	var runs []CheckRun
+	for _, commitNode := range q.Node.PullRequest.Commits.Nodes {
+		for _, suite := range commitNode.Commit.CheckSuites.Nodes {
+			for _, run := range suite.CheckRuns.Nodes {
+				runs = append(runs, CheckRun{
+					Name:       run.Name,
+					Status:     string(run.Status),
+					Conclusion: string(run.Conclusion),
+					DetailsURL: run.DetailsURL,
+				})
+			}
+		}
+	}
+	return runs, nil
+}
+
+// prCommentsQuery fetches top-level comments and review threads for a PR.
+type prCommentsQuery struct {
+	Node struct {
+		PullRequest struct {
+			Comments struct {
+				Nodes []struct {
+					ID     string `graphql:"id"`
+					Author struct {
+						Login     string
+						AvatarURL string `graphql:"avatarUrl(size: 32)"`
+					}
+					Body      string
+					CreatedAt time.Time
+				}
+			} `graphql:"comments(first: 100)"`
+
+			ReviewThreads struct {
+				Nodes []struct {
+					ID         string `graphql:"id"`
+					IsResolved bool
+					Path       string
+					Line       int
+					Comments   struct {
+						Nodes []struct {
+							ID     string `graphql:"id"`
+							Author struct {
+								Login     string
+								AvatarURL string `graphql:"avatarUrl(size: 32)"`
+							}
+							Body      string
+							Path      string
+							Line      int `graphql:"originalLine"`
+							CreatedAt time.Time
+						}
+					} `graphql:"comments(first: 50)"`
+				}
+			} `graphql:"reviewThreads(first: 100)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id: $id)"`
+}
+
+// GetPRComments fetches all comments and review threads for a pull request.
+func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments, error) {
+	variables := map[string]interface{}{
+		"id": githubv4.ID(nodeID),
+	}
+
+	var q prCommentsQuery
+	if err := c.graphql.Query(ctx, &q, variables); err != nil {
+		return nil, fmt.Errorf("github graphql pr comments: %w", err)
+	}
+
+	result := &PRComments{}
+
+	for _, c := range q.Node.PullRequest.Comments.Nodes {
+		result.IssueComments = append(result.IssueComments, IssueComment{
+			ID:           c.ID,
+			Author:       c.Author.Login,
+			AuthorAvatar: c.Author.AvatarURL,
+			Body:         c.Body,
+			CreatedAt:    c.CreatedAt,
+		})
+	}
+
+	for _, t := range q.Node.PullRequest.ReviewThreads.Nodes {
+		thread := ReviewThread{
+			ID:         t.ID,
+			IsResolved: t.IsResolved,
+			Path:       t.Path,
+			Line:       t.Line,
+		}
+		for _, c := range t.Comments.Nodes {
+			thread.Comments = append(thread.Comments, ReviewComment{
+				ID:           c.ID,
+				Author:       c.Author.Login,
+				AuthorAvatar: c.Author.AvatarURL,
+				Body:         c.Body,
+				Path:         c.Path,
+				Line:         c.Line,
+				CreatedAt:    c.CreatedAt,
+			})
+		}
+		result.ReviewThreads = append(result.ReviewThreads, thread)
+	}
+
+	return result, nil
+}

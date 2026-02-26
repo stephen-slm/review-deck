@@ -1,19 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   flexRender,
   createColumnHelper,
   type SortingState,
-  type PaginationState,
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -21,13 +19,14 @@ import { ReviewStatusBadge } from "./ReviewStatusBadge";
 import { ChecksStatusIcon } from "./ChecksStatusIcon";
 import { MergeButton } from "./MergeButton";
 import { ReviewerAssign } from "./ReviewerAssign";
+import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
+import { useSettingsStore } from "@/stores/settingsStore";
+import type { PageDirection, PaginationState } from "@/stores/prStore";
+
+/** Common default branch names — PRs targeting these are NOT considered stacked. */
+const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "development"]);
 
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25] as const;
-
-interface ServerPageInfo {
-  hasNextPage: boolean;
-  totalCount: number;
-}
 
 interface PRTableProps {
   data: github.PullRequest[];
@@ -37,16 +36,32 @@ interface PRTableProps {
   showMerge?: boolean;
   showAssignReviewer?: boolean;
   onRefresh?: () => void;
-  defaultPageSize?: number;
-  /** Server-side pagination info. When provided, the table shows total count and a "Load more" trigger. */
-  serverPageInfo?: ServerPageInfo;
-  /** Called when the user navigates past the currently loaded data and more server pages exist. */
-  onLoadMore?: () => void;
+  /** Server-side pagination state from the store */
+  pagination: PaginationState;
+  /** Called when the user clicks first/prev/next */
+  onPageChange: (direction: PageDirection) => void;
+  /** Called when the user changes the page size selector */
+  onPageSizeChange?: (size: number) => void;
   /** Set of priority user/team names. Matching rows get a visual indicator. */
   priorityNames?: Set<string>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
+
+/** Small hook: shows a transient "copied" state for a given key. */
+function useCopyFeedback(timeoutMs = 1500) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+
+  const flash = useCallback((key: string) => {
+    clearTimeout(timer.current);
+    setCopiedKey(key);
+    timer.current = setTimeout(() => setCopiedKey(null), timeoutMs);
+  }, [timeoutMs]);
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return { copiedKey, flash };
+}
 
 export function PRTable({
   data,
@@ -56,18 +71,60 @@ export function PRTable({
   showMerge = false,
   showAssignReviewer = false,
   onRefresh,
-  defaultPageSize = 10,
-  serverPageInfo,
-  onLoadMore,
+  pagination,
+  onPageChange,
+  onPageSizeChange,
   priorityNames,
 }: PRTableProps) {
   const navigate = useNavigate();
+  const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
-  const [pagination, setPagination] = useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: defaultPageSize,
-  });
+  const [localHideStacked, setLocalHideStacked] = useState<boolean | null>(null);
+  const hideStacked = localHideStacked ?? globalHideStacked;
+  const { copiedKey, flash } = useCopyFeedback();
+  const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const copyMenuRef = useRef<HTMLDivElement>(null);
+
+  // Filter out stacked PRs (baseRef not main/master) when toggle is on.
+  const filteredData = useMemo(
+    () =>
+      hideStacked
+        ? data.filter((pr) => DEFAULT_BRANCHES.has(pr.baseRef))
+        : data,
+    [data, hideStacked],
+  );
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!copyMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (copyMenuRef.current && !copyMenuRef.current.contains(e.target as Node)) {
+        setCopyMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [copyMenuOpen]);
+
+  const handleCopyRow = useCallback(
+    async (pr: github.PullRequest) => {
+      const text = formatSinglePR(pr);
+      const ok = await copyToClipboard(text);
+      if (ok) flash(pr.nodeId);
+    },
+    [flash],
+  );
+
+  const handleCopyAll = useCallback(
+    async (grouping: CopyGrouping) => {
+      setCopyMenuOpen(false);
+      const text = formatPRs(filteredData, grouping);
+      const ok = await copyToClipboard(text);
+      if (ok) flash("__all__");
+    },
+    [filteredData, flash],
+  );
 
   const columns = useMemo(() => {
     const authorCol = columnHelper.accessor("author", {
@@ -148,7 +205,7 @@ export function PRTable({
       }),
       columnHelper.accessor("checksStatus", {
         header: "CI",
-        cell: (info) => <ChecksStatusIcon status={info.getValue()} />,
+        cell: (info) => <ChecksStatusIcon status={info.getValue()} isMerged={info.row.original.state === "MERGED"} />,
         size: 40,
       }),
       columnHelper.display({
@@ -191,80 +248,136 @@ export function PRTable({
       columnHelper.display({
         id: "actions",
         header: "",
-        cell: (info) => (
-          <div className="flex items-center gap-0.5">
-            {showAssignReviewer && info.row.original.state === "OPEN" && (
-              <ReviewerAssign
-                prNodeId={info.row.original.nodeId}
-                currentReviewers={(info.row.original.reviewRequests || []).map(
-                  (rr) => rr.reviewer
+        cell: (info) => {
+          const pr = info.row.original;
+          const justCopied = copiedKey === pr.nodeId;
+          return (
+            <div className="flex items-center gap-0.5">
+              {showAssignReviewer && pr.state === "OPEN" && (
+                <ReviewerAssign
+                  prNodeId={pr.nodeId}
+                  currentReviewers={(pr.reviewRequests || []).map(
+                    (rr) => rr.reviewer
+                  )}
+                  onAssigned={onRefresh}
+                />
+              )}
+              {showMerge && (
+                <MergeButton
+                  prNodeId={pr.nodeId}
+                  mergeable={pr.mergeable}
+                  state={pr.state}
+                  isDraft={pr.isDraft}
+                  onMerged={onRefresh}
+                />
+              )}
+              <button
+                onClick={() => handleCopyRow(pr)}
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                title="Copy PR link"
+              >
+                {justCopied ? (
+                  <Check className="h-3.5 w-3.5 text-green-400" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
                 )}
-                onAssigned={onRefresh}
-              />
-            )}
-            {showMerge && (
-              <MergeButton
-                prNodeId={info.row.original.nodeId}
-                mergeable={info.row.original.mergeable}
-                state={info.row.original.state}
-                isDraft={info.row.original.isDraft}
-                onMerged={onRefresh}
-              />
-            )}
-            <button
-              onClick={() => BrowserOpenURL(info.row.original.url)}
-              className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-              title="Open in GitHub"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ),
-        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + 40,
+              </button>
+              <button
+                onClick={() => BrowserOpenURL(pr.url)}
+                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
+                title="Open in GitHub"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        },
+        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + 70,
       }),
     ];
-  }, [showAuthor, showMerge, showAssignReviewer, onRefresh]);
+  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, copiedKey, handleCopyRow]);
 
+  // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
-    state: { sorting, globalFilter, pagination },
+    state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
-    onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
   });
 
-  // Determine if the user is on the last client page and more server data is available.
-  const isOnLastClientPage = !table.getCanNextPage();
-  const canLoadMore = !!serverPageInfo?.hasNextPage && !!onLoadMore;
-  const totalCount = serverPageInfo?.totalCount ?? data.length;
-
-  // Handle "next": if at the end of client data and server has more, load more first.
-  const handleNext = () => {
-    if (isOnLastClientPage && canLoadMore) {
-      onLoadMore!();
-    } else {
-      table.nextPage();
-    }
-  };
-
-  // Can go forward if TanStack has more pages OR if the server has more data to fetch.
-  const canGoNext = table.getCanNextPage() || canLoadMore;
+  const totalPages = pagination.totalCount > 0
+    ? Math.ceil(pagination.totalCount / pagination.pageSize)
+    : 1;
+  const onFirstPage = pagination.currentPage <= 1;
+  const onLastPage = !pagination.hasNextPage;
 
   return (
     <div className="space-y-3">
-      {/* Search bar */}
-      <input
-        type="text"
-        value={globalFilter}
-        onChange={(e) => setGlobalFilter(e.target.value)}
-        placeholder="Filter pull requests..."
-        className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-      />
+      {/* Toolbar: search + copy dropdown */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+          placeholder="Filter pull requests..."
+          className="w-full max-w-sm rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          onClick={() => setLocalHideStacked((prev) => !(prev ?? globalHideStacked))}
+          className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+            hideStacked
+              ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+              : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          }`}
+          title={hideStacked ? "Showing non-stacked PRs only (click to show all)" : "Showing all PRs (click to hide stacked)"}
+        >
+          <Layers className="h-3.5 w-3.5" />
+          {hideStacked ? "Stacked hidden" : "Show all"}
+        </button>
+        {data.length > 0 && (
+          <div className="relative" ref={copyMenuRef}>
+            <button
+              onClick={() => setCopyMenuOpen((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+              title="Copy PRs to clipboard"
+            >
+              {copiedKey === "__all__" ? (
+                <Check className="h-3.5 w-3.5 text-green-400" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              Copy
+              <ChevronDown className="h-3 w-3" />
+            </button>
+            {copyMenuOpen && (
+              <div className="absolute right-0 z-50 mt-1 w-44 rounded-md border border-border bg-popover py-1 shadow-md">
+                <button
+                  onClick={() => handleCopyAll("none")}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
+                >
+                  No grouping
+                </button>
+                <button
+                  onClick={() => handleCopyAll("repo")}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
+                >
+                  Group by repo
+                </button>
+                <button
+                  onClick={() => handleCopyAll("size")}
+                  className="flex w-full items-center px-3 py-1.5 text-left text-xs text-popover-foreground hover:bg-accent"
+                >
+                  Group by size
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Table */}
       <div className="rounded-md border border-border">
@@ -302,7 +415,7 @@ export function PRTable({
             ))}
           </thead>
           <tbody>
-            {isLoading && data.length === 0 ? (
+            {isLoading && filteredData.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
@@ -360,15 +473,13 @@ export function PRTable({
       </div>
 
       {/* Pagination controls */}
-      {!isLoading && data.length > 0 && (
+      {!isLoading && filteredData.length > 0 && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Rows per page</span>
             <select
               value={pagination.pageSize}
-              onChange={(e) =>
-                setPagination({ pageIndex: 0, pageSize: Number(e.target.value) })
-              }
+              onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
               className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             >
               {PAGE_SIZE_OPTIONS.map((size) => (
@@ -381,34 +492,35 @@ export function PRTable({
 
           <div className="flex items-center gap-1">
             <span className="mr-2 text-xs text-muted-foreground">
-              {data.length} loaded{totalCount > data.length ? ` of ${totalCount}` : ""}
-              {" "}&middot; Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {table.getPageCount() || 1}
+              Page {pagination.currentPage} of {totalPages}
+              {pagination.totalCount > 0 && (
+                <> &middot; {pagination.totalCount} total</>
+              )}
               {isLoading && (
                 <Loader2 className="ml-1 inline h-3 w-3 animate-spin" />
               )}
             </span>
             <button
-              onClick={() => table.setPageIndex(0)}
-              disabled={!table.getCanPreviousPage()}
+              onClick={() => onPageChange("first")}
+              disabled={onFirstPage || isLoading}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
               title="First page"
             >
               <ChevronsLeft className="h-4 w-4" />
             </button>
             <button
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              onClick={() => onPageChange("prev")}
+              disabled={onFirstPage || isLoading}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
               title="Previous page"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <button
-              onClick={handleNext}
-              disabled={!canGoNext || isLoading}
+              onClick={() => onPageChange("next")}
+              disabled={onLastPage || isLoading}
               className="rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-30"
-              title={isOnLastClientPage && canLoadMore ? "Load more from GitHub" : "Next page"}
+              title="Next page"
             >
               <ChevronRight className="h-4 w-4" />
             </button>

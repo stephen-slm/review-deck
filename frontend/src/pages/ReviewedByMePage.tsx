@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { usePRStore } from "@/stores/prStore";
+import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
@@ -9,15 +9,18 @@ export function ReviewedByMePage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
   const {
-    reviewedByMe,
-    pageState,
-    isLoadingReviewedByMe,
+    pages,
+    isLoading,
     error,
     fetchReviewedByMe,
-    loadMoreReviewedByMe,
+    goToPageReviewedByMe,
+    setPageSize,
     fetchIfStale,
     clearError,
   } = usePRStore();
+
+  const pg = pages.reviewedByMe;
+  const loading = isLoading.reviewedByMe;
 
   const forceRefresh = useCallback(() => {
     clearError();
@@ -26,11 +29,26 @@ export function ReviewedByMePage() {
     }
   }, [orgs, fetchReviewedByMe, clearError]);
 
-  const handleLoadMore = useCallback(() => {
-    for (const org of orgs) {
-      loadMoreReviewedByMe(org);
-    }
-  }, [orgs, loadMoreReviewedByMe]);
+  const handlePageChange = useCallback(
+    (direction: PageDirection) => {
+      for (const org of orgs) {
+        goToPageReviewedByMe(org, direction);
+      }
+    },
+    [orgs, goToPageReviewedByMe],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (size: number) => {
+      setPageSize("reviewedByMe", size, () => {
+        for (const org of orgs) {
+          return fetchReviewedByMe(org);
+        }
+        return Promise.resolve();
+      });
+    },
+    [orgs, fetchReviewedByMe, setPageSize],
+  );
 
   useEffect(() => {
     loadOrgs();
@@ -81,10 +99,10 @@ export function ReviewedByMePage() {
         </div>
         <button
           onClick={forceRefresh}
-          disabled={isLoadingReviewedByMe}
+          disabled={loading}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoadingReviewedByMe ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
@@ -97,12 +115,13 @@ export function ReviewedByMePage() {
       )}
 
       <PRTable
-        data={reviewedByMe}
-        isLoading={isLoadingReviewedByMe}
+        data={pg.items}
+        isLoading={loading}
         showAuthor
         emptyMessage="No reviewed pull requests found."
-        serverPageInfo={pageState.reviewedByMe}
-        onLoadMore={handleLoadMore}
+        pagination={pg}
+        onPageChange={handlePageChange}
+        onPageSizeChange={handlePageSizeChange}
       />
     </div>
   );

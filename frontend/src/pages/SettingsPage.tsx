@@ -8,7 +8,7 @@ import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, cacheTTLMinutes, loadCacheTTL, setCacheTTL, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -24,8 +24,10 @@ export function SettingsPage() {
   useEffect(() => {
     loadOrgs();
     loadFilterBots();
+    loadHideStackedPRs();
     loadCacheTTL();
-  }, [loadOrgs, loadFilterBots, loadCacheTTL]);
+    loadPollInterval();
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadCacheTTL, loadPollInterval]);
 
   // Load teams and priorities for all orgs once orgs are loaded; sync teams from GitHub if none cached yet.
   useEffect(() => {
@@ -256,7 +258,7 @@ export function SettingsPage() {
           <h3 className="text-lg font-semibold">Filters</h3>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">
@@ -278,6 +280,32 @@ export function SettingsPage() {
               <span
                 className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
                   filterBots ? "translate-x-4" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Hide stacked pull requests
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Hide PRs that target a branch other than main or master (i.e.
+                stacked/chained PRs). Can also be toggled per table.
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={hideStackedPRs}
+              onClick={() => setHideStackedPRs(!hideStackedPRs)}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
+                hideStackedPRs ? "bg-primary" : "bg-muted"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                  hideStackedPRs ? "translate-x-4" : "translate-x-0.5"
                 }`}
               />
             </button>
@@ -603,7 +631,7 @@ export function SettingsPage() {
           <h3 className="text-lg font-semibold">Cache</h3>
         </div>
 
-        <div className="rounded-lg border border-border bg-card p-4">
+        <div className="rounded-lg border border-border bg-card p-4 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-foreground">
@@ -623,6 +651,31 @@ export function SettingsPage() {
                 onChange={(e) => {
                   const val = parseInt(e.target.value, 10);
                   if (!isNaN(val)) setCacheTTL(val);
+                }}
+                className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Poll interval
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                How often the background poller fetches new data from GitHub.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={1}
+                max={60}
+                value={pollIntervalMinutes}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) setPollInterval(val);
                 }}
                 className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />

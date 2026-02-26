@@ -1,48 +1,108 @@
-import { useEffect, useCallback } from "react";
-import { usePRStore } from "@/stores/prStore";
+import { useState, useEffect, useCallback } from "react";
+import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
+type Tab = "open" | "merged";
+
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const { orgs, loadOrgs } = useSettingsStore();
   const {
-    myPRs,
-    pageState,
-    isLoadingMyPRs,
+    pages,
+    isLoading,
     error,
     fetchMyPRs,
-    loadMoreMyPRs,
+    fetchMyRecentMerged,
+    goToPageMyPRs,
+    goToPageMyRecentMerged,
+    setPageSize,
     fetchIfStale,
     clearError,
   } = usePRStore();
 
+  const [activeTab, setActiveTab] = useState<Tab>("open");
+
+  const pgOpen = pages.myPRs;
+  const pgMerged = pages.myRecentMerged;
+  const loadingOpen = isLoading.myPRs;
+  const loadingMerged = isLoading.myRecentMerged;
+  const loading = activeTab === "open" ? loadingOpen : loadingMerged;
+
   const forceRefresh = useCallback(() => {
     clearError();
     for (const org of orgs) {
-      fetchMyPRs(org);
+      if (activeTab === "open") {
+        fetchMyPRs(org);
+      } else {
+        fetchMyRecentMerged(org);
+      }
     }
-  }, [orgs, fetchMyPRs, clearError]);
+  }, [orgs, activeTab, fetchMyPRs, fetchMyRecentMerged, clearError]);
 
-  const handleLoadMore = useCallback(() => {
-    for (const org of orgs) {
-      loadMoreMyPRs(org);
-    }
-  }, [orgs, loadMoreMyPRs]);
+  // Open tab pagination
+  const handlePageChangeOpen = useCallback(
+    (direction: PageDirection) => {
+      for (const org of orgs) {
+        goToPageMyPRs(org, direction);
+      }
+    },
+    [orgs, goToPageMyPRs],
+  );
+
+  const handlePageSizeChangeOpen = useCallback(
+    (size: number) => {
+      setPageSize("myPRs", size, () => {
+        for (const org of orgs) {
+          return fetchMyPRs(org);
+        }
+        return Promise.resolve();
+      });
+    },
+    [orgs, fetchMyPRs, setPageSize],
+  );
+
+  // Merged tab pagination
+  const handlePageChangeMerged = useCallback(
+    (direction: PageDirection) => {
+      for (const org of orgs) {
+        goToPageMyRecentMerged(org, direction);
+      }
+    },
+    [orgs, goToPageMyRecentMerged],
+  );
+
+  const handlePageSizeChangeMerged = useCallback(
+    (size: number) => {
+      setPageSize("myRecentMerged", size, () => {
+        for (const org of orgs) {
+          return fetchMyRecentMerged(org);
+        }
+        return Promise.resolve();
+      });
+    },
+    [orgs, fetchMyRecentMerged, setPageSize],
+  );
 
   useEffect(() => {
     loadOrgs();
   }, [loadOrgs]);
 
+  // Only fetch the active tab's data; merged tab is lazy-loaded on first switch.
   useEffect(() => {
-    if (isAuthenticated && orgs.length > 0) {
+    if (!isAuthenticated || orgs.length === 0) return;
+    if (activeTab === "open") {
       for (const org of orgs) {
         fetchIfStale("myPRs", () => fetchMyPRs(org));
       }
+    } else {
+      for (const org of orgs) {
+        fetchIfStale("myRecentMerged", () => fetchMyRecentMerged(org));
+      }
     }
-  }, [isAuthenticated, orgs, fetchMyPRs, fetchIfStale]);
+  }, [isAuthenticated, orgs, activeTab, fetchMyPRs, fetchMyRecentMerged, fetchIfStale]);
 
   if (!isAuthenticated) {
     return (
@@ -76,15 +136,15 @@ export function MyPRsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">My Pull Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Open pull requests you have authored.
+            Pull requests you have authored.
           </p>
         </div>
         <button
           onClick={forceRefresh}
-          disabled={isLoadingMyPRs}
+          disabled={loading}
           className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${isLoadingMyPRs ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
           Refresh
         </button>
       </div>
@@ -96,16 +156,69 @@ export function MyPRsPage() {
         </div>
       )}
 
-      <PRTable
-        data={myPRs}
-        isLoading={isLoadingMyPRs}
-        emptyMessage="No open pull requests found."
-        showMerge
-        showAssignReviewer
-        onRefresh={forceRefresh}
-        serverPageInfo={pageState.myPRs}
-        onLoadMore={handleLoadMore}
-      />
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-border">
+        <button
+          onClick={() => setActiveTab("open")}
+          className={`relative px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === "open"
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Open
+          {pgOpen.totalCount > 0 && (
+            <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-xs">
+              {pgOpen.totalCount}
+            </span>
+          )}
+          {activeTab === "open" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("merged")}
+          className={`relative px-3 py-2 text-sm font-medium transition-colors ${
+            activeTab === "merged"
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Recently Merged
+          {pgMerged.totalCount > 0 && (
+            <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-xs">
+              {pgMerged.totalCount}
+            </span>
+          )}
+          {activeTab === "merged" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+          )}
+        </button>
+      </div>
+
+      {activeTab === "open" ? (
+        <PRTable
+          data={pgOpen.items}
+          isLoading={loadingOpen}
+          emptyMessage="No open pull requests found."
+          showMerge
+          showAssignReviewer
+          onRefresh={forceRefresh}
+          pagination={pgOpen}
+          onPageChange={handlePageChangeOpen}
+          onPageSizeChange={handlePageSizeChangeOpen}
+        />
+      ) : (
+        <PRTable
+          data={pgMerged.items}
+          isLoading={loadingMerged}
+          emptyMessage="No recently merged pull requests."
+          onRefresh={forceRefresh}
+          pagination={pgMerged}
+          onPageChange={handlePageChangeMerged}
+          onPageSizeChange={handlePageSizeChangeMerged}
+        />
+      )}
     </div>
   );
 }

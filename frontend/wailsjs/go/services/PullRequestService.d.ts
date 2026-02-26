@@ -3,6 +3,8 @@
 import {github} from '../models';
 import {time} from '../models';
 
+export function ApprovePR(arg1:string,arg2:string):Promise<void>;
+
 export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
 
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
@@ -14,6 +16,10 @@ export function GetMyRecentMerged(arg1:string,arg2:number):Promise<Array<github.
 export function GetMyRecentMergedPage(arg1:string,arg2:number,arg3:number,arg4:string):Promise<github.PRPage>;
 
 export function GetOrgMembers(arg1:string):Promise<Array<github.User>>;
+
+export function GetPRCheckRuns(arg1:string):Promise<Array<github.CheckRun>>;
+
+export function GetPRComments(arg1:string):Promise<github.PRComments>;
 
 export function GetReviewRequests(arg1:string):Promise<Array<github.PullRequest>>;
 

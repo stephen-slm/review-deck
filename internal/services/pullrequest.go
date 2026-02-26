@@ -236,6 +236,15 @@ func (s *PullRequestService) MergePR(prNodeID string, method string) error {
 	return s.client.MergePR(context.Background(), prNodeID, mergeMethod)
 }
 
+// ApprovePR submits an approving review on a pull request.
+// An optional body can be provided as a comment with the approval.
+func (s *PullRequestService) ApprovePR(prNodeID string, body string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.ApprovePR(context.Background(), prNodeID, body)
+}
+
 // RequestReviews adds reviewers to a pull request.
 // userIDs and teamIDs are GitHub GraphQL node IDs.
 func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, teamIDs []string) error {
@@ -313,4 +322,30 @@ func (s *PullRequestService) SyncTeamsForOrg(org string) error {
 	}
 
 	return s.db.UpsertTrackedTeams(org, teams)
+}
+
+// ---- On-demand PR detail queries ----
+
+// GetPRCheckRuns fetches individual CI check runs for a specific PR.
+func (s *PullRequestService) GetPRCheckRuns(nodeID string) ([]gh.CheckRun, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	runs, err := s.client.GetPRCheckRuns(context.Background(), nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch check runs: %w", err)
+	}
+	return runs, nil
+}
+
+// GetPRComments fetches all comments and review threads for a specific PR.
+func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	comments, err := s.client.GetPRComments(context.Background(), nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch pr comments: %w", err)
+	}
+	return comments, nil
 }
