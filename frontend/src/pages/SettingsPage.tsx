@@ -651,17 +651,24 @@ export function SettingsPage() {
                       </ul>
                     )}
                   </div>
-                  <select
-                    value={newPriorityType}
-                    onChange={(e) => {
-                      setNewPriorityType(e.target.value as "user" | "team");
-                      setNewPriorityName("");
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPriorityType((prev) => {
+                        const next = prev === "user" ? "team" : "user";
+                        setNewPriorityName("");
+                        return next;
+                      });
                     }}
-                    className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="inline-flex items-center gap-1 rounded-md border border-input bg-card px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    title={`Switch to ${newPriorityType === "user" ? "Team" : "User"}`}
                   >
-                    <option value="user">User</option>
-                    <option value="team">Team</option>
-                  </select>
+                    {newPriorityType === "user" ? (
+                      <><Users className="h-3.5 w-3.5" /> User</>
+                    ) : (
+                      <><Users className="h-3.5 w-3.5" /> Team</>
+                    )}
+                  </button>
                   <button
                     onClick={() => {
                       if (!newPriorityName.trim()) return;

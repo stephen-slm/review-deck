@@ -530,19 +530,21 @@ export function PRTable({
       {/* Pagination controls */}
       {!isLoading && filteredData.length > 0 && (
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Rows per page</span>
-            <select
-              value={pagination.pageSize}
-              onChange={(e) => onPageSizeChange?.(Number(e.target.value))}
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground">Rows</span>
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <button
+                key={size}
+                onClick={() => onPageSizeChange?.(size)}
+                className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  pagination.pageSize === size
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`}
+              >
+                {size}
+              </button>
+            ))}
           </div>
 
           <div className="flex items-center gap-1">
