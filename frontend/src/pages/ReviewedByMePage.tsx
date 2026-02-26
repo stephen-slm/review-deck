@@ -3,6 +3,7 @@ import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
+import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
 export function ReviewedByMePage() {
@@ -11,6 +12,7 @@ export function ReviewedByMePage() {
   const {
     pages,
     isLoading,
+    lastFetchedAt,
     error,
     fetchReviewedByMe,
     goToPageReviewedByMe,
@@ -97,14 +99,17 @@ export function ReviewedByMePage() {
             Open pull requests you have reviewed.
           </p>
         </div>
-        <button
-          onClick={forceRefresh}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <LastRefreshed timestamp={lastFetchedAt.reviewedByMe} />
+          <button
+            onClick={forceRefresh}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

@@ -23,7 +23,8 @@ func main() {
 		MinWidth:  1024,
 		MinHeight: 700,
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets:     assets,
+			Middleware: app.ImageProxyMiddleware(),
 		},
 		BackgroundColour: &options.RGBA{R: 9, G: 9, B: 11, A: 1},
 		OnStartup:        app.startup,

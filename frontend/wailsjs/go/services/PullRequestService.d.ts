@@ -4,6 +4,8 @@ import {github} from '../models';
 import {storage} from '../models';
 import {time} from '../models';
 
+export function AddLabels(arg1:string,arg2:Array<string>):Promise<void>;
+
 export function ApprovePR(arg1:string,arg2:string):Promise<void>;
 
 export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
@@ -24,6 +26,8 @@ export function GetPRCheckRuns(arg1:string):Promise<Array<github.CheckRun>>;
 
 export function GetPRComments(arg1:string):Promise<github.PRComments>;
 
+export function GetRepoLabels(arg1:string,arg2:string):Promise<Array<github.Label>>;
+
 export function GetReviewRequests(arg1:string):Promise<Array<github.PullRequest>>;
 
 export function GetReviewRequestsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
@@ -38,9 +42,13 @@ export function GetTeamReviewRequests(arg1:string,arg2:string):Promise<Array<git
 
 export function GetTeamReviewRequestsPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
 
-export function MergePR(arg1:string,arg2:string):Promise<void>;
+export function MergePR(arg1:string,arg2:string):Promise<string>;
+
+export function RemoveLabels(arg1:string,arg2:Array<string>):Promise<void>;
 
 export function RequestReviews(arg1:string,arg2:Array<string>,arg3:Array<string>):Promise<void>;
+
+export function ResolveThread(arg1:string):Promise<void>;
 
 export function SearchOrgMembers(arg1:string,arg2:string):Promise<Array<github.User>>;
 
@@ -51,3 +59,5 @@ export function SyncOrgMembers(arg1:string):Promise<void>;
 export function SyncOrgMembersIfStale(arg1:string,arg2:time.Duration):Promise<void>;
 
 export function SyncTeamsForOrg(arg1:string):Promise<void>;
+
+export function UnresolveThread(arg1:string):Promise<void>;

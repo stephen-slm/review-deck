@@ -72,6 +72,7 @@ export namespace github {
 		}
 	}
 	export class Label {
+	    id: string;
 	    name: string;
 	    color: string;
 	
@@ -81,6 +82,7 @@ export namespace github {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
 	        this.name = source["name"];
 	        this.color = source["color"];
 	    }

@@ -118,7 +118,7 @@ interface PRState {
   fetchAll: (orgs: string[], force?: boolean) => Promise<void>;
 
   // ---- Actions ----
-  mergePR: (prNodeID: string, method: string) => Promise<void>;
+  mergePR: (prNodeID: string, method: string) => Promise<string>;
   approvePR: (prNodeID: string, body?: string) => Promise<void>;
   requestReviews: (prNodeID: string, userIDs: string[], teamIDs: string[]) => Promise<void>;
 
@@ -490,7 +490,7 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   mergePR: async (prNodeID: string, method: string) => {
     try {
-      await MergePR(prNodeID, method);
+      return await MergePR(prNodeID, method);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       set({ error: message });

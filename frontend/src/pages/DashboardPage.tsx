@@ -18,6 +18,7 @@ import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ChecksStatusIcon } from "@/components/pr/ChecksStatusIcon";
+import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { github } from "../../wailsjs/go/models";
 
 interface StatCardProps {
@@ -192,6 +193,7 @@ export function DashboardPage() {
   const {
     pages,
     isLoading: loadingFlags,
+    lastFetchedAt,
     fetchAll,
     error,
     clearError,
@@ -269,16 +271,23 @@ export function DashboardPage() {
             Overview of your pull request activity.
           </p>
         </div>
-        <button
-          onClick={forceRefresh}
-          disabled={isLoading}
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
-        >
-          <RefreshCw
-            className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          <LastRefreshed timestamp={Math.min(
+            lastFetchedAt.myPRs || Infinity,
+            lastFetchedAt.reviewRequests || Infinity,
+            lastFetchedAt.reviewedByMe || Infinity,
+          )} />
+          <button
+            onClick={forceRefresh}
+            disabled={isLoading}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${isLoading ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error && (

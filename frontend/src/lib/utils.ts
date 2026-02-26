@@ -5,9 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function timeAgo(date: string | Date): string {
+export function timeAgo(date: string | Date | number): string {
   const now = new Date();
-  const then = new Date(date);
+  const then = typeof date === "number" ? new Date(date) : new Date(date);
   const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
 
   if (seconds < 60) return "just now";

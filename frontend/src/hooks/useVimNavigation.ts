@@ -57,13 +57,22 @@ export function useVimNavigation() {
       "5": vim(() => navigate(TAB_ROUTES[4])),
       "6": vim(() => navigate(TAB_ROUTES[5])),
 
-      // ---- Global: Escape — blur input or go back ----
+      // ---- Global: Escape — close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {
+        // 1. If a dropdown/modal registered an escape handler, let it close first.
+        const { onEscape } = store();
+        if (onEscape) {
+          event.preventDefault();
+          onEscape();
+          return;
+        }
+        // 2. If a text input is focused, blur it.
         if (isInputFocused()) {
           (document.activeElement as HTMLElement)?.blur();
           event.preventDefault();
           return;
         }
+        // 3. Otherwise, go back.
         event.preventDefault();
         const { onGoBack } = store();
         if (onGoBack) {
@@ -146,6 +155,20 @@ export function useVimNavigation() {
       "Backspace": vim(() => {
         const { onGoBack } = store();
         if (onGoBack) onGoBack();
+      }),
+
+      // ---- PR detail actions ----
+      "a": vim(() => {
+        const { onAssignReviewer } = store();
+        if (onAssignReviewer) onAssignReviewer();
+      }),
+      "m": vim(() => {
+        const { onMerge } = store();
+        if (onMerge) onMerge();
+      }),
+      "Shift+A": vim(() => {
+        const { onApprove } = store();
+        if (onApprove) onApprove();
       }),
     });
 

@@ -22,6 +22,15 @@ export interface VimState {
   /** Override h/l to cycle tabs instead of back/open (used on detail page). */
   onTabNext: (() => void) | null;
   onTabPrev: (() => void) | null;
+  /** PR detail actions triggered by keyboard shortcuts. */
+  onAssignReviewer: (() => void) | null;
+  onMerge: (() => void) | null;
+  onApprove: (() => void) | null;
+  /**
+   * Escape override — set by open dropdowns/modals to close themselves
+   * instead of navigating back. Components set this directly via setState.
+   */
+  onEscape: (() => void) | null;
 
   // ---- Actions ----
   setSelectedIndex: (i: number) => void;
@@ -34,7 +43,8 @@ export interface VimState {
   registerActions: (actions: Partial<Pick<VimState,
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
-    "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev"
+    "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
+    "onAssignReviewer" | "onMerge" | "onApprove"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -52,6 +62,10 @@ const emptyActions = {
   onMoveUp: null,
   onTabNext: null,
   onTabPrev: null,
+  onAssignReviewer: null,
+  onMerge: null,
+  onApprove: null,
+  onEscape: null,
 };
 
 export const useVimStore = create<VimState>((set, get) => ({

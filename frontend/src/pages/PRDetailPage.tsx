@@ -29,7 +29,25 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments, GetSinglePR } from "../../wailsjs/go/services/PullRequestService";
+import { GetPRCheckRuns, GetPRComments, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+
+/** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
+function proxyImageSrc(src: string | undefined): string | undefined {
+  if (!src) return src;
+  try {
+    const u = new URL(src);
+    const host = u.hostname.toLowerCase();
+    if (
+      host.endsWith("githubusercontent.com") ||
+      host.endsWith("github.com")
+    ) {
+      return `/api/proxy/image?url=${encodeURIComponent(src)}`;
+    }
+  } catch {
+    // Not a valid URL — return as-is.
+  }
+  return src;
+}
 
 /** Custom markdown components — opens links in the system browser via Wails. */
 const mdComponents: Components = {
@@ -49,7 +67,7 @@ const mdComponents: Components = {
   img: ({ src, alt, ...props }) => (
     <img
       {...props}
-      src={src}
+      src={proxyImageSrc(src)}
       alt={alt || ""}
       className="my-2 max-w-full rounded-md border border-border"
       loading="lazy"
@@ -76,6 +94,7 @@ const mdComponents: Components = {
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useVimStore } from "@/stores/vimStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { github } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
@@ -127,6 +146,11 @@ export function PRDetailPage() {
   const [comments, setComments] = useState<github.PRComments | null>(null);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
+
+  // Refs for triggering keybinding actions on child components.
+  const reviewerToggleRef = useRef<(() => void) | null>(null);
+  const mergeToggleRef = useRef<(() => void) | null>(null);
+  const approveRef = useRef<(() => void) | null>(null);
 
   // Fetch check runs when the checks tab is first selected
   useEffect(() => {
@@ -198,6 +222,9 @@ export function PRDetailPage() {
       onRefresh: handleRefresh,
       onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
       onTabPrev: () => setActiveTab(tabKeys[(currentIdx - 1 + tabKeys.length) % tabKeys.length]),
+      onAssignReviewer: () => reviewerToggleRef.current?.(),
+      onMerge: () => mergeToggleRef.current?.(),
+      onApprove: () => approveRef.current?.(),
     };
 
     if (activeTab === "description") {
@@ -462,6 +489,25 @@ export function PRDetailPage() {
               comments={comments}
               loading={commentsLoading}
               error={commentsError}
+              onToggleResolved={(threadId: string, resolved: boolean) => {
+                const update = (val: boolean) =>
+                  setComments((prev) => {
+                    if (!prev) return prev;
+                    return Object.assign(Object.create(Object.getPrototypeOf(prev)), {
+                      ...prev,
+                      reviewThreads: prev.reviewThreads.map((t) =>
+                        t.id === threadId
+                          ? Object.assign(Object.create(Object.getPrototypeOf(t)), { ...t, isResolved: val })
+                          : t
+                      ),
+                    });
+                  });
+                // Optimistically update local state.
+                update(resolved);
+                // Fire API call, revert on failure.
+                const call = resolved ? ResolveThread(threadId) : UnresolveThread(threadId);
+                call.catch(() => update(!resolved));
+              }}
             />
           )}
         </div>
@@ -472,7 +518,7 @@ export function PRDetailPage() {
           <SidebarSection title="Actions">
             <div className="space-y-2">
               {pr.state === "OPEN" && (
-                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} />
+                <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} triggerRef={approveRef} />
               )}
               {pr.state === "OPEN" && (
                 <DetailMergeButton
@@ -480,6 +526,7 @@ export function PRDetailPage() {
                   mergeable={pr.mergeable}
                   isDraft={pr.isDraft}
                   onMerged={() => navigate(-1)}
+                  triggerRef={mergeToggleRef}
                 />
               )}
               <button
@@ -522,7 +569,7 @@ export function PRDetailPage() {
           </SidebarSection>
 
           {/* Reviewers: completed reviews + pending requests */}
-          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} />
+          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} />
 
           {/* Labels */}
           {pr.labels && pr.labels.length > 0 && (
@@ -610,32 +657,60 @@ function DetailMergeButton({
   mergeable,
   isDraft,
   onMerged,
+  triggerRef,
 }: {
   prNodeId: string;
   mergeable: string;
   isDraft: boolean;
   onMerged?: () => void;
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const { mergePR } = usePRStore();
 
   const canMerge = !isDraft && mergeable === "MERGEABLE";
 
+  // Expose toggle to parent via triggerRef.
+  useEffect(() => {
+    if (triggerRef) triggerRef.current = () => { if (canMerge) setIsOpen((o) => !o); };
+    return () => { if (triggerRef) triggerRef.current = null; };
+  }, [triggerRef, canMerge]);
+
+  // Register vim escape override to close dropdown instead of navigating back.
+  useEffect(() => {
+    if (isOpen) {
+      useVimStore.setState({ onEscape: () => setIsOpen(false) });
+      return () => useVimStore.setState({ onEscape: null });
+    }
+  }, [isOpen]);
+
   const handleMerge = async (method: string) => {
     setIsMerging(true);
     setMergeError(null);
     try {
-      await mergePR(prNodeId, method);
+      const result = await mergePR(prNodeId, method);
+      setMergeResult(result);
       setIsOpen(false);
-      onMerged?.();
+      if (result === "merged") onMerged?.();
     } catch (err: unknown) {
       setMergeError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsMerging(false);
     }
   };
+
+  // Show enqueued state
+  if (mergeResult === "enqueued") {
+    return (
+      <div className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-900/40 px-3 py-2 text-sm font-medium text-green-400">
+        <CheckCircle className="h-4 w-4" />
+        Added to merge queue
+      </div>
+    );
+  }
 
   const title = !canMerge
     ? isDraft
@@ -689,10 +764,12 @@ function DetailApproveButton({
   prNodeId,
   reviews,
   author,
+  triggerRef,
 }: {
   prNodeId: string;
   reviews: github.Review[] | null;
   author: string;
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const [isApproving, setIsApproving] = useState(false);
   const [approved, setApproved] = useState(false);
@@ -728,6 +805,16 @@ function DetailApproveButton({
       setIsApproving(false);
     }
   };
+
+  // Expose approve to parent via triggerRef.
+  useEffect(() => {
+    if (triggerRef) {
+      triggerRef.current = () => {
+        if (!isOwnPR && !alreadyApproved && !approved && !isApproving) handleApprove();
+      };
+    }
+    return () => { if (triggerRef) triggerRef.current = null; };
+  });
 
   if (approved || alreadyApproved) {
     return (
@@ -891,13 +978,18 @@ function CommentsTab({
   comments,
   loading,
   error,
+  onToggleResolved,
 }: {
   comments: github.PRComments | null;
   loading: boolean;
   error: string | null;
+  onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
+  const hideCopilot = useSettingsStore((s) => s.hideCopilotReviews);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  const COPILOT_BOT = "copilot-pull-request-reviewer[bot]";
 
   // Auto-scroll the selected comment/thread into view.
   useEffect(() => {
@@ -922,8 +1014,15 @@ function CommentsTab({
     );
   }
 
-  const issueComments = comments?.issueComments || [];
-  const reviewThreads = comments?.reviewThreads || [];
+  const rawIssueComments = comments?.issueComments || [];
+  const rawReviewThreads = comments?.reviewThreads || [];
+
+  const issueComments = hideCopilot
+    ? rawIssueComments.filter((c) => c.author !== COPILOT_BOT)
+    : rawIssueComments;
+  const reviewThreads = hideCopilot
+    ? rawReviewThreads.filter((t) => !(t.comments?.length > 0 && t.comments[0].author === COPILOT_BOT))
+    : rawReviewThreads;
   const hasContent = issueComments.length > 0 || reviewThreads.length > 0;
 
   if (!hasContent) {
@@ -993,15 +1092,22 @@ function CommentsTab({
                     {thread.path}
                     {thread.line > 0 && `:${thread.line}`}
                   </code>
-                  {thread.isResolved && (
-                    <span className="ml-auto rounded-full bg-green-900/60 px-1.5 py-0.5 text-[10px] font-medium text-green-300">
+                  {thread.isResolved ? (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, false); }}
+                      className="ml-auto rounded-full bg-green-900/60 px-1.5 py-0.5 text-[10px] font-medium text-green-300 transition-colors hover:bg-green-900/80"
+                      title="Unresolve thread"
+                    >
                       Resolved
-                    </span>
-                  )}
-                  {!thread.isResolved && (
-                    <span className="ml-auto rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300">
+                    </button>
+                  ) : (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, true); }}
+                      className="ml-auto rounded-full bg-yellow-900/60 px-1.5 py-0.5 text-[10px] font-medium text-yellow-300 transition-colors hover:bg-yellow-900/80"
+                      title="Resolve thread"
+                    >
                       Unresolved
-                    </span>
+                    </button>
                   )}
                 </div>
                 {/* Thread comments */}
@@ -1185,11 +1291,13 @@ function ReviewersSidebar({
   reviewRequests,
   prNodeId,
   isOpen,
+  triggerRef,
 }: {
   reviews: github.Review[] | null;
   reviewRequests: github.ReviewRequest[] | null;
   prNodeId: string;
   isOpen: boolean;
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const latestReviews = useMemo(() => {
     if (!reviews || reviews.length === 0) return [];
@@ -1266,6 +1374,7 @@ function ReviewersSidebar({
           <ReviewerAssign
             prNodeId={prNodeId}
             currentReviewers={(reviewRequests || []).map((rr) => rr.reviewer)}
+            triggerRef={triggerRef}
           />
         )}
       </div>

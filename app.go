@@ -3,9 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -120,6 +124,86 @@ func (a *App) SetPollInterval(minutes int) error {
 	}
 	a.poller.SetInterval(minutes)
 	return nil
+}
+
+// ImageProxyMiddleware returns an HTTP middleware that proxies image requests
+// through the authenticated GitHub client. Requests to /api/proxy/image?url=<encoded>
+// are intercepted; all other requests pass through to the default asset handler.
+func (a *App) ImageProxyMiddleware() func(next http.Handler) http.Handler {
+	// Allowed host suffixes for proxied URLs.
+	allowedHosts := []string{
+		"githubusercontent.com",
+		"github.com",
+		"avatars.githubusercontent.com",
+		"user-images.githubusercontent.com",
+		"private-user-images.githubusercontent.com",
+	}
+
+	isAllowed := func(rawURL string) bool {
+		u, err := url.Parse(rawURL)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") {
+			return false
+		}
+		host := strings.ToLower(u.Hostname())
+		for _, allowed := range allowedHosts {
+			if host == allowed || strings.HasSuffix(host, "."+allowed) {
+				return true
+			}
+		}
+		return false
+	}
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/proxy/image" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			targetURL := r.URL.Query().Get("url")
+			if targetURL == "" {
+				http.Error(w, "missing url parameter", http.StatusBadRequest)
+				return
+			}
+
+			if !isAllowed(targetURL) {
+				http.Error(w, "url not allowed", http.StatusForbidden)
+				return
+			}
+
+			client := a.authService.GetClient()
+			var httpClient *http.Client
+			if client != nil {
+				httpClient = client.HTTPClient()
+			} else {
+				httpClient = http.DefaultClient
+			}
+
+			req, err := http.NewRequestWithContext(r.Context(), "GET", targetURL, nil)
+			if err != nil {
+				http.Error(w, "bad request", http.StatusBadRequest)
+				return
+			}
+
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				http.Error(w, "upstream error", http.StatusBadGateway)
+				return
+			}
+			defer resp.Body.Close()
+
+			// Forward content type and cache headers.
+			if ct := resp.Header.Get("Content-Type"); ct != "" {
+				w.Header().Set("Content-Type", ct)
+			}
+			if cl := resp.Header.Get("Content-Length"); cl != "" {
+				w.Header().Set("Content-Length", cl)
+			}
+			w.Header().Set("Cache-Control", "private, max-age=3600")
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body)
+		})
+	}
 }
 
 // shutdown is called when the app is closing.

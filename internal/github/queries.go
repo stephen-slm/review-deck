@@ -71,6 +71,7 @@ type prFields struct {
 
 	Labels struct {
 		Nodes []struct {
+			ID    string `graphql:"id"`
 			Name  string
 			Color string
 		}
@@ -158,7 +159,7 @@ func convertPRFields(pr prFields) PullRequest {
 	}
 
 	for _, l := range pr.Labels.Nodes {
-		result.Labels = append(result.Labels, Label{Name: l.Name, Color: l.Color})
+		result.Labels = append(result.Labels, Label{ID: l.ID, Name: l.Name, Color: l.Color})
 	}
 
 	for _, rr := range pr.ReviewRequests.Nodes {
@@ -514,4 +515,45 @@ func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments,
 	}
 
 	return result, nil
+}
+
+// GetRepoLabels fetches all labels for a repository.
+func (c *Client) GetRepoLabels(ctx context.Context, owner, repo string) ([]Label, error) {
+	var query struct {
+		Repository struct {
+			Labels struct {
+				Nodes []struct {
+					ID    string `graphql:"id"`
+					Name  string
+					Color string
+				}
+				PageInfo struct {
+					HasNextPage bool
+					EndCursor   string
+				}
+			} `graphql:"labels(first: 100, after: $cursor, orderBy: {field: NAME, direction: ASC})"`
+		} `graphql:"repository(owner: $owner, name: $repo)"`
+	}
+
+	vars := map[string]interface{}{
+		"owner":  githubv4.String(owner),
+		"repo":   githubv4.String(repo),
+		"cursor": (*githubv4.String)(nil),
+	}
+
+	var all []Label
+	for {
+		if err := c.graphql.Query(ctx, &query, vars); err != nil {
+			return nil, fmt.Errorf("get repo labels: %w", err)
+		}
+		for _, l := range query.Repository.Labels.Nodes {
+			all = append(all, Label{ID: l.ID, Name: l.Name, Color: l.Color})
+		}
+		if !query.Repository.Labels.PageInfo.HasNextPage {
+			break
+		}
+		cursor := githubv4.String(query.Repository.Labels.PageInfo.EndCursor)
+		vars["cursor"] = &cursor
+	}
+	return all, nil
 }

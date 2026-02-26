@@ -3,20 +3,30 @@ import { UserPlus, Search, X, Loader2 } from "lucide-react";
 import { GetOrgMembers, RequestReviews } from "../../../wailsjs/go/services/PullRequestService";
 import { SyncOrgMembers } from "../../../wailsjs/go/main/App";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useVimStore } from "@/stores/vimStore";
 import { github } from "../../../wailsjs/go/models";
 
 interface ReviewerAssignProps {
   prNodeId: string;
   currentReviewers: string[];
   onAssigned?: () => void;
+  /** Mutable ref where the component registers a toggle function for external triggering. */
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
 }
 
 export function ReviewerAssign({
   prNodeId,
   currentReviewers,
   onAssigned,
+  triggerRef,
 }: ReviewerAssignProps) {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Expose toggle to parent via triggerRef.
+  useEffect(() => {
+    if (triggerRef) triggerRef.current = () => setIsOpen((o) => !o);
+    return () => { if (triggerRef) triggerRef.current = null; };
+  }, [triggerRef]);
   const [query, setQuery] = useState("");
   const [allMembers, setAllMembers] = useState<github.User[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,6 +51,14 @@ export function ReviewerAssign({
       document.addEventListener("mousedown", handleClickOutside);
       return () =>
         document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isOpen]);
+
+  // Register vim escape override to close dropdown instead of navigating back.
+  useEffect(() => {
+    if (isOpen) {
+      useVimStore.setState({ onEscape: () => setIsOpen(false) });
+      return () => useVimStore.setState({ onEscape: null });
     }
   }, [isOpen]);
 

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { GitMerge, ChevronDown } from "lucide-react";
+import { GitMerge, ChevronDown, CheckCircle } from "lucide-react";
 import { usePRStore } from "@/stores/prStore";
+import { useVimStore } from "@/stores/vimStore";
 
 interface MergeButtonProps {
   prNodeId: string;
@@ -25,6 +26,7 @@ export function MergeButton({
 }: MergeButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
+  const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { mergePR } = usePRStore();
@@ -48,15 +50,24 @@ export function MergeButton({
     }
   }, [isOpen]);
 
+  // Register vim escape override to close dropdown instead of navigating back.
+  useEffect(() => {
+    if (isOpen) {
+      useVimStore.setState({ onEscape: () => setIsOpen(false) });
+      return () => useVimStore.setState({ onEscape: null });
+    }
+  }, [isOpen]);
+
   if (state !== "OPEN") return null;
 
   const handleMerge = async (method: string) => {
     setIsMerging(true);
     setMergeError(null);
     try {
-      await mergePR(prNodeId, method);
+      const result = await mergePR(prNodeId, method);
+      setMergeResult(result);
       setIsOpen(false);
-      onMerged?.();
+      if (result === "merged") onMerged?.();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       setMergeError(message);
@@ -64,6 +75,16 @@ export function MergeButton({
       setIsMerging(false);
     }
   };
+
+  // Show enqueued indicator
+  if (mergeResult === "enqueued") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded p-1 text-xs text-green-400" title="Added to merge queue">
+        <CheckCircle className="h-3.5 w-3.5" />
+        Queued
+      </span>
+    );
+  }
 
   const title = !canMerge
     ? isDraft

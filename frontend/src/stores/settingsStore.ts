@@ -27,6 +27,7 @@ interface SettingsState {
   orgs: string[];
   filterBots: boolean;
   hideStackedPRs: boolean;
+  hideCopilotReviews: boolean;
   cacheTTLMinutes: number;
   pollIntervalMinutes: number;
   /** Tracked teams keyed by org name */
@@ -42,6 +43,8 @@ interface SettingsState {
   setFilterBots: (enabled: boolean) => Promise<void>;
   loadHideStackedPRs: () => Promise<void>;
   setHideStackedPRs: (enabled: boolean) => Promise<void>;
+  loadHideCopilotReviews: () => Promise<void>;
+  setHideCopilotReviews: (enabled: boolean) => Promise<void>;
   loadCacheTTL: () => Promise<void>;
   setCacheTTL: (minutes: number) => Promise<void>;
   loadPollInterval: () => Promise<void>;
@@ -69,6 +72,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
   filterBots: false,
   hideStackedPRs: false,
+  hideCopilotReviews: false,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
   teamsByOrg: {},
@@ -122,6 +126,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setHideStackedPRs: async (enabled: boolean) => {
     await SetSetting("hide_stacked_prs", enabled ? "true" : "false");
     set({ hideStackedPRs: enabled });
+  },
+
+  loadHideCopilotReviews: async () => {
+    try {
+      const val = await GetSetting("hide_copilot_reviews");
+      set({ hideCopilotReviews: val === "true" });
+    } catch {
+      set({ hideCopilotReviews: false });
+    }
+  },
+
+  setHideCopilotReviews: async (enabled: boolean) => {
+    await SetSetting("hide_copilot_reviews", enabled ? "true" : "false");
+    set({ hideCopilotReviews: enabled });
   },
 
   loadCacheTTL: async () => {

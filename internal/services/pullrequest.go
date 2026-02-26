@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	gh "review-deck/internal/github"
@@ -218,9 +219,11 @@ func (s *PullRequestService) GetCachedPRs(authorLogin string, state string) ([]g
 
 // MergePR merges a pull request by its node ID.
 // method must be one of: "MERGE", "SQUASH", "REBASE".
-func (s *PullRequestService) MergePR(prNodeID string, method string) error {
+// Returns "merged" on direct merge success, or "enqueued" if the repository
+// requires a merge queue and the PR was added to it.
+func (s *PullRequestService) MergePR(prNodeID string, method string) (string, error) {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return "", fmt.Errorf("not authenticated")
 	}
 
 	var mergeMethod githubv4.PullRequestMergeMethod
@@ -233,7 +236,22 @@ func (s *PullRequestService) MergePR(prNodeID string, method string) error {
 		mergeMethod = githubv4.PullRequestMergeMethodMerge
 	}
 
-	return s.client.MergePR(context.Background(), prNodeID, mergeMethod)
+	ctx := context.Background()
+	err := s.client.MergePR(ctx, prNodeID, mergeMethod)
+	if err == nil {
+		return "merged", nil
+	}
+
+	// If direct merge failed due to merge queue requirement, try enqueue.
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "merge queue") || strings.Contains(errMsg, "required to use the merge queue") || strings.Contains(errMsg, "is in a merge queue") {
+		if enqErr := s.client.EnqueuePR(ctx, prNodeID); enqErr != nil {
+			return "", fmt.Errorf("merge failed (%v) and enqueue also failed: %w", err, enqErr)
+		}
+		return "enqueued", nil
+	}
+
+	return "", err
 }
 
 // ApprovePR submits an approving review on a pull request.
@@ -245,6 +263,22 @@ func (s *PullRequestService) ApprovePR(prNodeID string, body string) error {
 	return s.client.ApprovePR(context.Background(), prNodeID, body)
 }
 
+// ResolveThread resolves a review thread.
+func (s *PullRequestService) ResolveThread(threadID string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.ResolveThread(context.Background(), threadID)
+}
+
+// UnresolveThread unresolves a review thread.
+func (s *PullRequestService) UnresolveThread(threadID string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.UnresolveThread(context.Background(), threadID)
+}
+
 // RequestReviews adds reviewers to a pull request.
 // userIDs and teamIDs are GitHub GraphQL node IDs.
 func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, teamIDs []string) error {
@@ -253,6 +287,31 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 	}
 
 	return s.client.RequestReviews(context.Background(), prNodeID, userIDs, teamIDs)
+}
+
+// GetRepoLabels fetches all labels for a repository.
+// owner/repo are the GitHub owner and repository name (e.g. "paxosglobal", "pax").
+func (s *PullRequestService) GetRepoLabels(owner string, repo string) ([]gh.Label, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	return s.client.GetRepoLabels(context.Background(), owner, repo)
+}
+
+// AddLabels adds labels to a pull request by its node ID.
+func (s *PullRequestService) AddLabels(prNodeID string, labelIDs []string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.AddLabels(context.Background(), prNodeID, labelIDs)
+}
+
+// RemoveLabels removes labels from a pull request by its node ID.
+func (s *PullRequestService) RemoveLabels(prNodeID string, labelIDs []string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.RemoveLabels(context.Background(), prNodeID, labelIDs)
 }
 
 // GetOrgMembers returns all cached members for an org.
