@@ -162,6 +162,8 @@ export function PRDetailPage() {
   const approveRef = useRef<(() => void) | null>(null);
   const fileToggleRef = useRef<(() => void) | null>(null);
   const commentToggleRef = useRef<(() => void) | null>(null);
+  const commentResolveRef = useRef<(() => void) | null>(null);
+  const commentUnresolveRef = useRef<(() => void) | null>(null);
 
   // Fetch check runs when the checks tab is first selected
   useEffect(() => {
@@ -304,6 +306,8 @@ export function PRDetailPage() {
       };
     } else if (activeTab === "comments") {
       actions.onSpace = () => commentToggleRef.current?.();
+      actions.onResolve = () => commentResolveRef.current?.();
+      actions.onUnresolve = () => commentUnresolveRef.current?.();
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       actions.onOpen = (idx: number) => {
         const issueComments = comments?.issueComments || [];
@@ -557,6 +561,8 @@ export function PRDetailPage() {
               loading={commentsLoading}
               error={commentsError}
               toggleSelectedRef={commentToggleRef}
+              resolveRef={commentResolveRef}
+              unresolveRef={commentUnresolveRef}
               onToggleResolved={(threadId: string, resolved: boolean) => {
                 const update = (val: boolean) =>
                   setComments((prev) => {
@@ -1063,12 +1069,16 @@ function CommentsTab({
   loading,
   error,
   toggleSelectedRef,
+  resolveRef,
+  unresolveRef,
   onToggleResolved,
 }: {
   comments: github.PRComments | null;
   loading: boolean;
   error: string | null;
   toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
+  resolveRef?: React.MutableRefObject<(() => void) | null>;
+  unresolveRef?: React.MutableRefObject<(() => void) | null>;
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
@@ -1130,6 +1140,31 @@ function CommentsTab({
       };
       return () => { toggleSelectedRef.current = null; };
     }
+  }); // no deps — keeps closure fresh
+
+  // Expose resolve/unresolve for the currently selected review thread via refs (r / u keys).
+  useEffect(() => {
+    const getSelectedThread = () => {
+      if (selectedIndex < issueComments.length) return undefined;
+      const threadIdx = selectedIndex - issueComments.length;
+      return reviewThreads[threadIdx];
+    };
+    if (resolveRef) {
+      resolveRef.current = () => {
+        const thread = getSelectedThread();
+        if (thread && !thread.isResolved) onToggleResolved?.(thread.id, true);
+      };
+    }
+    if (unresolveRef) {
+      unresolveRef.current = () => {
+        const thread = getSelectedThread();
+        if (thread && thread.isResolved) onToggleResolved?.(thread.id, false);
+      };
+    }
+    return () => {
+      if (resolveRef) resolveRef.current = null;
+      if (unresolveRef) unresolveRef.current = null;
+    };
   }); // no deps — keeps closure fresh
 
   // Auto-scroll the selected comment/thread into view.
@@ -1229,9 +1264,29 @@ function CommentsTab({
       {/* Review threads (inline code comments) */}
       {reviewThreads.length > 0 && (
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-foreground">
-            Review threads ({reviewThreads.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">
+              Review threads ({reviewThreads.length})
+            </h3>
+            <div className="flex items-center gap-2">
+              {reviewThreads.some((t) => !t.isResolved) && (
+                <button
+                  onClick={() => reviewThreads.filter((t) => !t.isResolved).forEach((t) => onToggleResolved?.(t.id, true))}
+                  className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  Resolve all
+                </button>
+              )}
+              {reviewThreads.some((t) => t.isResolved) && (
+                <button
+                  onClick={() => reviewThreads.filter((t) => t.isResolved).forEach((t) => onToggleResolved?.(t.id, false))}
+                  className="rounded-md border border-border px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                >
+                  Unresolve all
+                </button>
+              )}
+            </div>
+          </div>
           <div className="space-y-3">
             {reviewThreads.map((thread, i) => {
               const globalIdx = issueComments.length + i;
@@ -1264,21 +1319,31 @@ function CommentsTab({
                     {thread.line > 0 && `:${thread.line}`}
                   </code>
                   {thread.isResolved ? (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, false); }}
-                      className="ml-auto rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 transition-colors hover:bg-green-200 dark:bg-green-900/60 dark:text-green-200 dark:hover:bg-green-900/80"
-                      title="Unresolve thread"
-                    >
-                      Resolved
-                    </button>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <span className="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-800 dark:bg-green-900/60 dark:text-green-200">
+                        Resolved
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, false); }}
+                        className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title="Unresolve thread"
+                      >
+                        Unresolve
+                      </button>
+                    </div>
                   ) : (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, true); }}
-                      className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 transition-colors hover:bg-amber-200 dark:bg-amber-900/60 dark:text-amber-200 dark:hover:bg-amber-900/80"
-                      title="Resolve thread"
-                    >
-                      Unresolved
-                    </button>
+                    <div className="ml-auto flex items-center gap-1.5">
+                      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                        Unresolved
+                      </span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onToggleResolved?.(thread.id, true); }}
+                        className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+                        title="Resolve thread"
+                      >
+                        Resolve
+                      </button>
+                    </div>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); if (thread.url) BrowserOpenURL(thread.url); }}

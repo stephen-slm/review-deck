@@ -50,6 +50,12 @@ function AppContent() {
           </Routes>
         </div>
         <ShortcutHintBar />
+        {/* Persistent hint indicator */}
+        <div className="flex shrink-0 items-center justify-end border-t border-border px-3 py-1">
+          <span className="text-[10px] text-muted-foreground/50">
+            Press <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">?</kbd> for shortcuts
+          </span>
+        </div>
       </main>
     </div>
   );

@@ -151,10 +151,20 @@ export function useVimNavigation() {
         if (onFocusSearch) onFocusSearch();
       }),
 
-      // ---- Refresh ----
-      "r": vim(() => {
+      // ---- Refresh (Shift+R) ----
+      "Shift+r": vim(() => {
         const { onRefresh } = store();
         if (onRefresh) onRefresh();
+      }),
+
+      // ---- Resolve / unresolve comment thread (r / u) ----
+      "r": vim(() => {
+        const { onResolve } = store();
+        if (onResolve) onResolve();
+      }),
+      "u": vim(() => {
+        const { onUnresolve } = store();
+        if (onUnresolve) onUnresolve();
       }),
 
       // ---- Go back / prev tab (h / Backspace) ----
