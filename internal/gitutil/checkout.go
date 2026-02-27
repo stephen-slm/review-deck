@@ -74,3 +74,9 @@ func IsClaudeInstalled() bool {
 	_, err := exec.LookPath("claude")
 	return err == nil
 }
+
+// IsCodexInstalled returns true if the `codex` CLI (OpenAI Codex) is available on the PATH.
+func IsCodexInstalled() bool {
+	_, err := exec.LookPath("codex")
+	return err == nil
+}

@@ -25,7 +25,7 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
   const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost } = useSettingsStore();
-  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
+  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, setRepoAIAgent, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
   const derivedOrgs = useMemo(() => {
@@ -314,7 +314,7 @@ export function SettingsPage() {
                   {repos.map((r) => (
                     <li
                       key={r.id}
-                      className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2.5"
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-2.5"
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-foreground">
@@ -324,6 +324,16 @@ export function SettingsPage() {
                           {r.localPath}
                         </p>
                       </div>
+                      <select
+                        value={r.aiAgent || ""}
+                        onChange={(e) => setRepoAIAgent(r.id, e.target.value)}
+                        title="Default AI agent for this repository"
+                        className="shrink-0 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">Default</option>
+                        <option value="claude">Claude</option>
+                        <option value="codex">Codex</option>
+                      </select>
                       <button
                         onClick={() => removeRepo(r.id)}
                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"

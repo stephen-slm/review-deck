@@ -63,6 +63,15 @@ func (db *DB) GetAIReview(prNodeID string) (*AIReview, error) {
 	return &r, nil
 }
 
+// DeleteAIReview removes a cached AI review for a specific PR.
+func (db *DB) DeleteAIReview(prNodeID string) error {
+	_, err := db.conn.Exec("DELETE FROM ai_reviews WHERE pr_node_id = ?", prNodeID)
+	if err != nil {
+		return fmt.Errorf("delete ai review: %w", err)
+	}
+	return nil
+}
+
 // DeleteExpiredAIReviews removes AI reviews older than 7 days.
 func (db *DB) DeleteExpiredAIReviews() error {
 	_, err := db.conn.Exec("DELETE FROM ai_reviews WHERE created_at < datetime('now', '-7 days')")

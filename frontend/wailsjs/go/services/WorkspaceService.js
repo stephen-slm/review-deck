@@ -14,6 +14,10 @@ export function CheckoutPR(arg1, arg2, arg3) {
   return window['go']['services']['WorkspaceService']['CheckoutPR'](arg1, arg2, arg3);
 }
 
+export function DeleteAIReview(arg1) {
+  return window['go']['services']['WorkspaceService']['DeleteAIReview'](arg1);
+}
+
 export function GetAIReview(arg1) {
   return window['go']['services']['WorkspaceService']['GetAIReview'](arg1);
 }
@@ -34,6 +38,6 @@ export function SetContext(arg1) {
   return window['go']['services']['WorkspaceService']['SetContext'](arg1);
 }
 
-export function StartClaudeReview(arg1, arg2, arg3, arg4) {
-  return window['go']['services']['WorkspaceService']['StartClaudeReview'](arg1, arg2, arg3, arg4);
+export function StartAIReview(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['services']['WorkspaceService']['StartAIReview'](arg1, arg2, arg3, arg4, arg5);
 }

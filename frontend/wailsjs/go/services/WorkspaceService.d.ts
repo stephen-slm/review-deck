@@ -9,6 +9,8 @@ export function CheckToolAvailability():Promise<services.ToolAvailability>;
 
 export function CheckoutPR(arg1:string,arg2:string,arg3:number):Promise<void>;
 
+export function DeleteAIReview(arg1:string):Promise<void>;
+
 export function GetAIReview(arg1:string):Promise<services.AIReviewResult>;
 
 export function GetCurrentBranch(arg1:string,arg2:string):Promise<string>;
@@ -19,4 +21,4 @@ export function OpenTerminal(arg1:string,arg2:string):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
-export function StartClaudeReview(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+export function StartAIReview(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<void>;

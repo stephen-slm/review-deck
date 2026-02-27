@@ -34,7 +34,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartClaudeReview, CancelClaudeReview, GetCurrentBranch, GetAIReview } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelClaudeReview, GetCurrentBranch, GetAIReview, DeleteAIReview } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
@@ -281,7 +281,11 @@ export function PRDetailPage() {
   const handleStartClaudeReview = useCallback(async () => {
     if (!pr || claudeReviewing) return;
     try {
-      await StartClaudeReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
+      // Clear cached review so re-run always fetches fresh.
+      await DeleteAIReview(pr.nodeId);
+      setClaudeResult(null);
+      // Empty agent string = use per-repo or global default.
+      await StartAIReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId, "");
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
@@ -757,7 +761,7 @@ export function PRDetailPage() {
               result={claudeResult}
               error={claudeError}
               hasLocalPath={hasLocalPath}
-              hasTools={!!toolAvailability?.gh && !!toolAvailability?.claude}
+              hasTools={!!toolAvailability?.gh && (!!toolAvailability?.claude || !!toolAvailability?.codex)}
               onStart={handleStartClaudeReview}
               onCancel={handleCancelClaudeReview}
             />
@@ -822,12 +826,12 @@ export function PRDetailPage() {
                   </button>
                   <button
                     onClick={() => { handleStartClaudeReview(); setActiveTab("ai-review"); }}
-                    disabled={claudeReviewing || !toolAvailability?.claude || !toolAvailability?.gh}
+                    disabled={claudeReviewing || !(toolAvailability?.claude || toolAvailability?.codex) || !toolAvailability?.gh}
                     title={
                       !toolAvailability?.gh
                         ? "gh CLI not installed"
-                        : !toolAvailability?.claude
-                          ? "Claude CLI not installed"
+                        : !(toolAvailability?.claude || toolAvailability?.codex)
+                          ? "No AI CLI installed (claude or codex)"
                           : claudeReviewing
                             ? "Review in progress..."
                             : "Start AI code review"
@@ -835,7 +839,7 @@ export function PRDetailPage() {
                     className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-purple-500 bg-transparent px-3 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
                   >
                     <Sparkles className={`h-4 w-4 ${claudeReviewing ? "animate-pulse" : ""}`} />
-                    {claudeReviewing ? "Reviewing..." : "Claude Review"}
+                    {claudeReviewing ? "Reviewing..." : "AI Review"}
                   </button>
                 </>
               )}

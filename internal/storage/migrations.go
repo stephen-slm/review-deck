@@ -196,6 +196,9 @@ var migrations = []string{
 
 	CREATE INDEX IF NOT EXISTS idx_ai_reviews_pr ON ai_reviews(pr_node_id);
 	CREATE INDEX IF NOT EXISTS idx_ai_reviews_repo ON ai_reviews(repo_owner, repo_name);`,
+
+	// Migration 10: Per-repo default AI agent (claude, codex). Empty = global default.
+	`ALTER TABLE tracked_repos ADD COLUMN ai_agent TEXT NOT NULL DEFAULT '';`,
 }
 
 // Migrate runs all pending migrations.
