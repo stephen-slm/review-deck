@@ -72,15 +72,23 @@ export function SettingsPage() {
     loadAiDescriptionPrompt();
   }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
 
-  // Register j/k as page scroll on this non-list page.
+  // Register vim keybindings: j/k scroll, h/l and 1-6 switch tabs.
   useEffect(() => {
     const scrollEl = document.getElementById("scroll-region");
+    const tabKeys: SettingsTab[] = settingsTabs.map((t) => t.key);
+    const currentIdx = tabKeys.indexOf(activeTab);
+
     useVimStore.getState().registerActions({
       onMoveDown: () => scrollEl?.scrollBy(0, 150),
       onMoveUp: () => scrollEl?.scrollBy(0, -150),
+      onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
+      onTabPrev: () => setActiveTab(tabKeys[(currentIdx - 1 + tabKeys.length) % tabKeys.length]),
+      onTabDirect: (idx: number) => {
+        if (idx >= 0 && idx < tabKeys.length) setActiveTab(tabKeys[idx]);
+      },
     });
     return () => useVimStore.getState().clearActions();
-  }, []);
+  }); // no deps — re-registers each render with fresh closures for activeTab
 
   // Load teams and priorities for all derived orgs once repos are loaded; sync teams from GitHub if none cached yet.
   useEffect(() => {
@@ -139,7 +147,7 @@ export function SettingsPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border">
-        {settingsTabs.map((tab) => (
+        {settingsTabs.map((tab, idx) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
@@ -151,6 +159,9 @@ export function SettingsPage() {
           >
             <tab.icon className="h-3.5 w-3.5" />
             {tab.label}
+            <kbd className="ml-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+              {idx + 1}
+            </kbd>
             {activeTab === tab.key && (
               <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
             )}
