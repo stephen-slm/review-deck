@@ -97,6 +97,7 @@ import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useFlagStore } from "@/stores/flagStore";
 import { github } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
@@ -138,6 +139,14 @@ export function PRDetailPage() {
   // The PR to display: prefer the independently fetched version (from manual refresh)
   // over the store copy, since the store only updates on background poll cycles.
   const pr = fetchedPR ?? storePR ?? undefined;
+
+  const getFlagReasons = useFlagStore((s) => s.getFlagReasons);
+  const flagRules = useFlagStore((s) => s.rules);
+  const flagReasons = useMemo(
+    () => (pr ? getFlagReasons(pr) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pr, flagRules],
+  );
 
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
@@ -673,6 +682,20 @@ export function PRDetailPage() {
               <div className="flex flex-wrap gap-1.5">
                 {pr.labels.map((label) => (
                   <LabelBadge key={label.name} label={label} />
+                ))}
+              </div>
+            </SidebarSection>
+          )}
+
+          {/* Flag Reasons */}
+          {flagReasons.length > 0 && (
+            <SidebarSection title="Flagged">
+              <div className="space-y-1">
+                {flagReasons.map((reason, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-red-500" />
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs text-foreground">{reason}</code>
+                  </div>
                 ))}
               </div>
             </SidebarSection>

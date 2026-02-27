@@ -331,7 +331,7 @@ export function PRTable({
         cell: (info) => {
           const { additions, deletions } = info.row.original;
           return (
-            <span className="font-mono text-xs">
+            <span className="whitespace-nowrap font-mono text-xs">
               <span className="text-green-600 dark:text-green-400">+{additions}</span>
               {" / "}
               <span className="text-red-600 dark:text-red-400">-{deletions}</span>
