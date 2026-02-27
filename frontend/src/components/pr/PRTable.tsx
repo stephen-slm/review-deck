@@ -11,14 +11,13 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2 } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
 import { ReviewStatusBadge } from "./ReviewStatusBadge";
 import { ChecksStatusIcon } from "./ChecksStatusIcon";
-import { MergeButton } from "./MergeButton";
-import { ReviewerAssign } from "./ReviewerAssign";
+
 import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
@@ -34,8 +33,6 @@ interface PRTableProps {
   isLoading: boolean;
   emptyMessage?: string;
   showAuthor?: boolean;
-  showMerge?: boolean;
-  showAssignReviewer?: boolean;
   onRefresh?: () => void;
   /** Server-side pagination state from the store */
   pagination: PaginationState;
@@ -83,8 +80,6 @@ export function PRTable({
   isLoading,
   emptyMessage = "No pull requests found.",
   showAuthor = false,
-  showMerge = false,
-  showAssignReviewer = false,
   onRefresh,
   pagination,
   onPageChange,
@@ -391,25 +386,6 @@ export function PRTable({
           const justCopied = copiedKey === pr.nodeId;
           return (
             <div className="flex items-center gap-0.5">
-              {showAssignReviewer && pr.state === "OPEN" && (
-                <ReviewerAssign
-                  prNodeId={pr.nodeId}
-                  currentReviewers={(pr.reviewRequests || []).map(
-                    (rr) => rr.reviewer
-                  )}
-                  onAssigned={onRefresh}
-                />
-              )}
-              {showMerge && (
-                <MergeButton
-                  prNodeId={pr.nodeId}
-                  mergeable={pr.mergeable}
-                  state={pr.state}
-                  isDraft={pr.isDraft}
-                  isInMergeQueue={pr.isInMergeQueue}
-                  onMerged={onRefresh}
-                />
-              )}
               {onHide && (
                 <button
                   onClick={() => onHide(pr.nodeId)}
@@ -430,20 +406,13 @@ export function PRTable({
                   <Copy className="h-3.5 w-3.5" />
                 )}
               </button>
-              <button
-                onClick={() => BrowserOpenURL(pr.url)}
-                className="rounded p-1 text-muted-foreground transition-colors hover:text-foreground"
-                title="Open in GitHub"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
             </div>
           );
         },
-        size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + (onHide ? 30 : 0) + 70,
+        size: (onHide ? 30 : 0) + 40,
       }),
     ];
-  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, onHide, copiedKey, handleCopyRow, flagReasons]);
+  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({

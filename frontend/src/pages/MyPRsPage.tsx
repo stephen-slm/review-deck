@@ -229,8 +229,6 @@ export function MyPRsPage() {
           data={pgOpen.items}
           isLoading={loadingOpen}
           emptyMessage="No open pull requests found."
-          showMerge
-          showAssignReviewer
           onRefresh={forceRefresh}
           pagination={pgOpen}
           onPageChange={handlePageChangeOpen}
