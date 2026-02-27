@@ -210,7 +210,14 @@ export function PRDetailPage() {
 
   // Check tool availability on mount
   useEffect(() => {
-    CheckToolAvailability().then(setToolAvailability).catch(() => {});
+    CheckToolAvailability()
+      .then((tools) => {
+        console.log("[review-deck] tool availability:", tools);
+        setToolAvailability(tools);
+      })
+      .catch((err) => {
+        console.error("[review-deck] failed to check tool availability:", err);
+      });
   }, []);
 
   // Fetch current branch when PR loads (for checkout button label)

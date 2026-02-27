@@ -138,7 +138,7 @@ export function SettingsPage() {
 
 
   return (
-    <div className="max-w-2xl space-y-4">
+    <div className="max-w-3xl space-y-4">
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -147,12 +147,12 @@ export function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-0.5 border-b border-border overflow-x-auto">
         {settingsTabs.map((tab, idx) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`relative inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors ${
+            className={`relative inline-flex shrink-0 items-center gap-1 px-2.5 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -1142,6 +1142,41 @@ export function SettingsPage() {
                 </div>
               </div>
             </section>
+
+            {/* Per-repo AI agent overrides */}
+            {repos.length > 0 && (
+              <section className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <FolderGit2 className="h-5 w-5 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold">Per-Repository Agent</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Override the default AI agent for individual repositories. &ldquo;Default&rdquo; uses the global agent above.
+                </p>
+
+                <ul className="space-y-1.5">
+                  {repos.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+                    >
+                      <span className="min-w-0 truncate text-sm text-foreground">
+                        {r.repoOwner}/{r.repoName}
+                      </span>
+                      <select
+                        value={r.aiAgent || ""}
+                        onChange={(e) => setRepoAIAgent(r.id, e.target.value)}
+                        className="shrink-0 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      >
+                        <option value="">Default</option>
+                        <option value="claude">Claude</option>
+                        <option value="codex">Codex</option>
+                      </select>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
             {/* AI Description Prompt */}
             <section className="space-y-4">

@@ -3,6 +3,10 @@ package main
 import (
 	"embed"
 	"log"
+	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -13,7 +17,44 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// ensurePATH augments the PATH environment variable on macOS so that CLI
+// tools installed in common locations (Homebrew, npm globals, ~/.local/bin)
+// are discoverable by exec.LookPath. macOS GUI apps launched from Finder or
+// Spotlight inherit a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin) that does
+// not include these directories.
+func ensurePATH() {
+	if runtime.GOOS != "darwin" {
+		return
+	}
+
+	// Try to get the user's login shell PATH via `$SHELL -l -c 'echo $PATH'`.
+	shell := os.Getenv("SHELL")
+	if shell == "" {
+		shell = "/bin/zsh"
+	}
+	out, err := exec.Command(shell, "-l", "-c", "echo $PATH").Output()
+	if err == nil {
+		shellPath := strings.TrimSpace(string(out))
+		if shellPath != "" {
+			os.Setenv("PATH", shellPath)
+			return
+		}
+	}
+
+	// Fallback: manually append common directories.
+	extra := []string{
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+		os.Getenv("HOME") + "/.local/bin",
+		os.Getenv("HOME") + "/.npm-global/bin",
+		"/usr/local/go/bin",
+	}
+	current := os.Getenv("PATH")
+	os.Setenv("PATH", current+":"+strings.Join(extra, ":"))
+}
+
 func main() {
+	ensurePATH()
 	app := NewApp()
 
 	err := wails.Run(&options.App{
