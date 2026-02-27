@@ -41,14 +41,14 @@ interface FlagState {
 }
 
 function matchesRule(pr: github.PullRequest, rule: FlagRule): boolean {
-  if (!rule.enabled) return false;
+  if (!pr || !rule.enabled) return false;
 
   if (rule.type === "keyword" && rule.keyword) {
     const kw = rule.keyword.toLowerCase();
     const title = (pr.title || "").toLowerCase();
     const body = (pr.body || "").toLowerCase();
     const branch = (pr.headRef || "").toLowerCase();
-    const labelText = (pr.labels || []).map((l) => l.name.toLowerCase()).join(" ");
+    const labelText = (pr.labels || []).map((l) => l?.name?.toLowerCase?.() ?? "").join(" ");
     return title.includes(kw) || body.includes(kw) || branch.includes(kw) || labelText.includes(kw);
   }
 

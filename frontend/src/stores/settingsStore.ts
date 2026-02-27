@@ -27,12 +27,18 @@ const DEFAULT_CACHE_TTL_MINUTES = 5;
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
 const DEFAULT_PR_REFRESH_INTERVAL_SECONDS = 30;
 
+const DEFAULT_FILTERED_COMMENT_USERS = ["copilot-pull-request-reviewer[bot]", "github-actions[bot]"];
+const DEFAULT_FILTERED_REVIEW_USERS = ["copilot-pull-request-reviewer[bot]", "github-actions[bot]"];
+
 interface SettingsState {
   orgs: string[];
   filterBots: boolean;
   hideStackedPRs: boolean;
   hideDraftPRs: boolean;
-  hideCopilotReviews: boolean;
+  /** Usernames whose comments (issue comments & review threads) are filtered out on the PR detail page. */
+  filteredCommentUsers: string[];
+  /** Usernames whose reviews are filtered out on the PR detail page (Reviews section, Reviewers sidebar). */
+  filteredReviewUsers: string[];
   theme: ThemeChoice;
   cacheTTLMinutes: number;
   pollIntervalMinutes: number;
@@ -53,8 +59,10 @@ interface SettingsState {
   setHideStackedPRs: (enabled: boolean) => Promise<void>;
   loadHideDraftPRs: () => Promise<void>;
   setHideDraftPRs: (enabled: boolean) => Promise<void>;
-  loadHideCopilotReviews: () => Promise<void>;
-  setHideCopilotReviews: (enabled: boolean) => Promise<void>;
+  loadFilteredCommentUsers: () => Promise<void>;
+  setFilteredCommentUsers: (users: string[]) => Promise<void>;
+  loadFilteredReviewUsers: () => Promise<void>;
+  setFilteredReviewUsers: (users: string[]) => Promise<void>;
   loadTheme: () => Promise<void>;
   setTheme: (theme: ThemeChoice) => Promise<void>;
   loadCacheTTL: () => Promise<void>;
@@ -92,7 +100,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   filterBots: false,
   hideStackedPRs: false,
   hideDraftPRs: false,
-  hideCopilotReviews: false,
+  filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS,
+  filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS,
   theme: DEFAULT_THEME,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
@@ -165,18 +174,64 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ hideDraftPRs: enabled });
   },
 
-  loadHideCopilotReviews: async () => {
+  loadFilteredCommentUsers: async () => {
     try {
-      const val = await GetSetting("hide_copilot_reviews");
-      set({ hideCopilotReviews: val === "true" });
+      const val = await GetSetting("filtered_comment_users");
+      if (val) {
+        const parsed = JSON.parse(val) as string[];
+        if (Array.isArray(parsed)) {
+          set({ filteredCommentUsers: parsed });
+          return;
+        }
+      }
     } catch {
-      set({ hideCopilotReviews: false });
+      // Setting doesn't exist yet or invalid JSON — check legacy setting.
     }
+    // Migrate from legacy hide_copilot_reviews boolean if it was enabled.
+    try {
+      const legacy = await GetSetting("hide_copilot_reviews");
+      if (legacy === "true") {
+        set({ filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS });
+        await SetSetting("filtered_comment_users", JSON.stringify(DEFAULT_FILTERED_COMMENT_USERS));
+        return;
+      }
+    } catch { /* ignore */ }
+    set({ filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS });
   },
 
-  setHideCopilotReviews: async (enabled: boolean) => {
-    await SetSetting("hide_copilot_reviews", enabled ? "true" : "false");
-    set({ hideCopilotReviews: enabled });
+  setFilteredCommentUsers: async (users: string[]) => {
+    await SetSetting("filtered_comment_users", JSON.stringify(users));
+    set({ filteredCommentUsers: users });
+  },
+
+  loadFilteredReviewUsers: async () => {
+    try {
+      const val = await GetSetting("filtered_review_users");
+      if (val) {
+        const parsed = JSON.parse(val) as string[];
+        if (Array.isArray(parsed)) {
+          set({ filteredReviewUsers: parsed });
+          return;
+        }
+      }
+    } catch {
+      // Setting doesn't exist yet or invalid JSON — check legacy setting.
+    }
+    // Migrate from legacy hide_copilot_reviews boolean if it was enabled.
+    try {
+      const legacy = await GetSetting("hide_copilot_reviews");
+      if (legacy === "true") {
+        set({ filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS });
+        await SetSetting("filtered_review_users", JSON.stringify(DEFAULT_FILTERED_REVIEW_USERS));
+        return;
+      }
+    } catch { /* ignore */ }
+    set({ filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS });
+  },
+
+  setFilteredReviewUsers: async (users: string[]) => {
+    await SetSetting("filtered_review_users", JSON.stringify(users));
+    set({ filteredReviewUsers: users });
   },
 
   loadTheme: async () => {

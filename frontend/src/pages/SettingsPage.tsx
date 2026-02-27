@@ -21,7 +21,7 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [token, setToken] = useState("");
@@ -35,6 +35,10 @@ export function SettingsPage() {
   const [membersByOrg, setMembersByOrg] = useState<Record<string, github.User[]>>({});
   const [showPrioritySuggestions, setShowPrioritySuggestions] = useState(false);
 
+  // Filtered users input state
+  const [newFilteredCommentUser, setNewFilteredCommentUser] = useState("");
+  const [newFilteredReviewUser, setNewFilteredReviewUser] = useState("");
+
   // Flag rules state
   const { rules: flagRules, loadRules: loadFlagRules, addRule, removeRule, toggleRule } = useFlagStore();
   const [newRuleType, setNewRuleType] = useState<"keyword" | "size">("keyword");
@@ -46,7 +50,8 @@ export function SettingsPage() {
     loadOrgs();
     loadFilterBots();
     loadHideStackedPRs();
-    loadHideCopilotReviews();
+    loadFilteredCommentUsers();
+    loadFilteredReviewUsers();
     loadTheme();
     loadCacheTTL();
     loadPollInterval();
@@ -54,7 +59,7 @@ export function SettingsPage() {
     loadHideDraftPRs();
     loadPRRefreshInterval();
     loadFlagRules();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath, loadFlagRules]);
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath, loadFlagRules]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -470,32 +475,155 @@ export function SettingsPage() {
                   </button>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-border pt-4">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Hide Copilot review comments
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Filter out comments and review threads authored by
-                      copilot-pull-request-reviewer[bot] on the PR detail page.
-                    </p>
-                  </div>
-                  <button
-                    role="switch"
-                    aria-checked={hideCopilotReviews}
-                    onClick={() => setHideCopilotReviews(!hideCopilotReviews)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
-                      hideCopilotReviews ? "bg-primary" : "bg-muted"
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
-                        hideCopilotReviews ? "translate-x-4" : "translate-x-0.5"
-                      }`}
-                    />
-                  </button>
-                </div>
               </div>
+            </section>
+
+            {/* Filtered Comment Users */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Filtered Comment Users</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Comments and review threads authored by these users are hidden on the
+                PR detail page Discussion tab.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newFilteredCommentUser}
+                  onChange={(e) => setNewFilteredCommentUser(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFilteredCommentUser.trim()) {
+                      const user = newFilteredCommentUser.trim();
+                      if (!filteredCommentUsers.includes(user)) {
+                        setFilteredCommentUsers([...filteredCommentUsers, user]);
+                      }
+                      setNewFilteredCommentUser("");
+                    }
+                  }}
+                  placeholder="e.g. copilot-pull-request-reviewer[bot]"
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  onClick={() => {
+                    const user = newFilteredCommentUser.trim();
+                    if (!user) return;
+                    if (!filteredCommentUsers.includes(user)) {
+                      setFilteredCommentUsers([...filteredCommentUsers, user]);
+                    }
+                    setNewFilteredCommentUser("");
+                  }}
+                  disabled={!newFilteredCommentUser.trim()}
+                  className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              </div>
+
+              {filteredCommentUsers.length > 0 ? (
+                <ul className="space-y-1">
+                  {filteredCommentUsers.map((user) => (
+                    <li
+                      key={user}
+                      className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2"
+                    >
+                      <span className="text-sm text-foreground">{user}</span>
+                      <button
+                        onClick={() =>
+                          setFilteredCommentUsers(
+                            filteredCommentUsers.filter((u) => u !== user),
+                          )
+                        }
+                        className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                  No users filtered. All comments will be shown.
+                </p>
+              )}
+            </section>
+
+            {/* Filtered Review Users */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Bot className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Filtered Review Users</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Reviews authored by these users are hidden from the PR detail page
+                Reviews section and Reviewers sidebar.
+              </p>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newFilteredReviewUser}
+                  onChange={(e) => setNewFilteredReviewUser(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFilteredReviewUser.trim()) {
+                      const user = newFilteredReviewUser.trim();
+                      if (!filteredReviewUsers.includes(user)) {
+                        setFilteredReviewUsers([...filteredReviewUsers, user]);
+                      }
+                      setNewFilteredReviewUser("");
+                    }
+                  }}
+                  placeholder="e.g. github-actions[bot]"
+                  className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <button
+                  onClick={() => {
+                    const user = newFilteredReviewUser.trim();
+                    if (!user) return;
+                    if (!filteredReviewUsers.includes(user)) {
+                      setFilteredReviewUsers([...filteredReviewUsers, user]);
+                    }
+                    setNewFilteredReviewUser("");
+                  }}
+                  disabled={!newFilteredReviewUser.trim()}
+                  className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              </div>
+
+              {filteredReviewUsers.length > 0 ? (
+                <ul className="space-y-1">
+                  {filteredReviewUsers.map((user) => (
+                    <li
+                      key={user}
+                      className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2"
+                    >
+                      <span className="text-sm text-foreground">{user}</span>
+                      <button
+                        onClick={() =>
+                          setFilteredReviewUsers(
+                            filteredReviewUsers.filter((u) => u !== user),
+                          )
+                        }
+                        className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                        title="Remove"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                  No users filtered. All reviews will be shown.
+                </p>
+              )}
             </section>
 
             {/* Excluded Repositories Section */}
@@ -669,19 +797,19 @@ export function SettingsPage() {
                 {orgs.map((org) => {
                   const priorities = prioritiesByOrg[org] || [];
                   const existingNames = new Set(priorities.map((p) => p.name));
-                  const suggestions = useMemo(() => {
-                    const q = newPriorityName.toLowerCase();
-                    if (newPriorityType === "team") {
-                      return (teamsByOrg[org] || [])
-                        .filter((t) => !existingNames.has(t.teamSlug) && (q.length === 0 || t.teamSlug.toLowerCase().includes(q) || t.teamName.toLowerCase().includes(q)))
-                        .slice(0, 10)
-                        .map((t) => ({ name: t.teamSlug, label: t.teamName, avatar: "" }));
-                    }
-                    return (membersByOrg[org] || [])
+                  const q = newPriorityName.toLowerCase();
+                  let suggestions: { name: string; label: string; avatar: string }[];
+                  if (newPriorityType === "team") {
+                    suggestions = (teamsByOrg[org] || [])
+                      .filter((t) => !existingNames.has(t.teamSlug) && (q.length === 0 || t.teamSlug.toLowerCase().includes(q) || t.teamName.toLowerCase().includes(q)))
+                      .slice(0, 10)
+                      .map((t) => ({ name: t.teamSlug, label: t.teamName, avatar: "" }));
+                  } else {
+                    suggestions = (membersByOrg[org] || [])
                       .filter((u) => !existingNames.has(u.login) && (q.length === 0 || u.login.toLowerCase().includes(q) || (u.name && u.name.toLowerCase().includes(q))))
                       .slice(0, 10)
                       .map((u) => ({ name: u.login, label: u.name || u.login, avatar: u.avatarUrl || "" }));
-                  }, [newPriorityName, newPriorityType, org, membersByOrg, teamsByOrg, existingNames]);
+                  }
                   return (
                     <div key={org} className="space-y-2">
                       <h4 className="text-sm font-medium text-foreground">{org}</h4>

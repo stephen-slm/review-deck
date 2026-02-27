@@ -55,15 +55,20 @@ export function Sidebar() {
   // Compute flagged count: merge review requests + reviewed by me, deduplicate,
   // and count those matching any enabled flag rule.
   const flaggedCount = useMemo(() => {
-    const seen = new Set<string>();
-    let count = 0;
-    const allItems = [...pages.reviewRequests.items, ...pages.reviewedByMe.items];
-    for (const pr of allItems) {
-      if (seen.has(pr.nodeId)) continue;
-      seen.add(pr.nodeId);
-      if (isFlagged(pr)) count++;
+    try {
+      const seen = new Set<string>();
+      let count = 0;
+      const allItems = [...pages.reviewRequests.items, ...pages.reviewedByMe.items];
+      for (const pr of allItems) {
+        if (!pr?.nodeId) continue;
+        if (seen.has(pr.nodeId)) continue;
+        seen.add(pr.nodeId);
+        if (isFlagged(pr)) count++;
+      }
+      return count;
+    } catch {
+      return 0;
     }
-    return count;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages.reviewRequests.items, pages.reviewedByMe.items, flagRules]);
 

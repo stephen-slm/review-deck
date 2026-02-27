@@ -148,15 +148,15 @@ export function PRDetailPage() {
     [pr, flagRules],
   );
 
-  const COPILOT_BOT = "copilot-pull-request-reviewer[bot]";
-  const hideCopilot = useSettingsStore((s) => s.hideCopilotReviews);
+  const filteredReviewUsers = useSettingsStore((s) => s.filteredReviewUsers);
 
-  // Filter copilot bot from reviews shown on Description tab and Reviewers sidebar.
+  // Filter out reviews authored by users in the "Filtered Review Users" list.
   const filteredReviews = useMemo(() => {
     if (!pr?.reviews) return null;
-    if (!hideCopilot) return pr.reviews;
-    return pr.reviews.filter((r) => r.author !== COPILOT_BOT);
-  }, [pr?.reviews, hideCopilot]);
+    if (filteredReviewUsers.length === 0) return pr.reviews;
+    const blocked = new Set(filteredReviewUsers.map((u) => u.toLowerCase()));
+    return pr.reviews.filter((r) => !blocked.has((r.author || "").toLowerCase()));
+  }, [pr?.reviews, filteredReviewUsers]);
 
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
@@ -1214,7 +1214,7 @@ function CommentsTab({
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
-  const hideCopilot = useSettingsStore((s) => s.hideCopilotReviews);
+  const filteredCommentUsers = useSettingsStore((s) => s.filteredCommentUsers);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Collapsed state: set of item IDs that are collapsed.
@@ -1222,16 +1222,20 @@ function CommentsTab({
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const initializedRef = useRef(false);
 
-  const COPILOT_BOT = "copilot-pull-request-reviewer[bot]";
-
   const rawIssueComments = comments?.issueComments || [];
   const rawReviewThreads = comments?.reviewThreads || [];
 
-  const issueComments = hideCopilot
-    ? rawIssueComments.filter((c) => c.author !== COPILOT_BOT)
+  // Build a lowercased Set for fast lookup.
+  const blockedCommenters = useMemo(
+    () => new Set(filteredCommentUsers.map((u) => u.toLowerCase())),
+    [filteredCommentUsers],
+  );
+
+  const issueComments = blockedCommenters.size > 0
+    ? rawIssueComments.filter((c) => !blockedCommenters.has((c.author || "").toLowerCase()))
     : rawIssueComments;
-  const reviewThreads = hideCopilot
-    ? rawReviewThreads.filter((t) => !(t.comments?.length > 0 && t.comments[0].author === COPILOT_BOT))
+  const reviewThreads = blockedCommenters.size > 0
+    ? rawReviewThreads.filter((t) => !(t.comments?.length > 0 && blockedCommenters.has((t.comments[0].author || "").toLowerCase())))
     : rawReviewThreads;
 
   // Auto-collapse resolved threads on first load.

@@ -33,6 +33,8 @@ function AppContent() {
     useSettingsStore.getState().loadHideStackedPRs();
     useSettingsStore.getState().loadHideDraftPRs();
     useSettingsStore.getState().loadPRRefreshInterval();
+    useSettingsStore.getState().loadFilteredCommentUsers();
+    useSettingsStore.getState().loadFilteredReviewUsers();
     useFlagStore.getState().loadRules();
   }, []);
 
