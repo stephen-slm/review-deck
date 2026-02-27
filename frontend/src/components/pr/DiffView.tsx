@@ -317,7 +317,7 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
   }
 
   return (
-    <section className="max-h-[600px] overflow-y-auto space-y-3">
+    <section className="space-y-3">
       {/* Summary bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-sm">

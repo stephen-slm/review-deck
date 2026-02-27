@@ -11,6 +11,7 @@ import { PRDetailPage } from "./pages/PRDetailPage";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { usePollerEvents } from "./hooks/usePollerEvents";
 import { useVimNavigation } from "./hooks/useVimNavigation";
+import { useWindowFocus } from "./hooks/useWindowFocus";
 import { usePRStore } from "./stores/prStore";
 import { useSettingsStore } from "./stores/settingsStore";
 
@@ -19,6 +20,9 @@ function AppContent() {
   usePollerEvents();
   // Global VIM-style keyboard navigation.
   useVimNavigation();
+  // Re-focus webview content when the native window regains focus (fixes
+  // vim keys breaking after Cmd+Tab in production Wails builds on macOS).
+  useWindowFocus();
 
   // Hydrate persisted settings and cache timestamps on startup.
   useEffect(() => {
