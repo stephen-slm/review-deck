@@ -19,9 +19,10 @@ import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
 import { SetPollInterval } from "../../wailsjs/go/main/App";
 import { storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
-import { ThemeChoice, themeChoices } from "../theme";
+import { ThemeChoice, themeChoices, themeNames } from "../theme";
 
 const DEFAULT_THEME: ThemeChoice = "system";
+const DEFAULT_DARK_THEME = "nord";
 
 const DEFAULT_CACHE_TTL_MINUTES = 5;
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
@@ -40,6 +41,8 @@ interface SettingsState {
   /** Usernames whose reviews are filtered out on the PR detail page (Reviews section, Reviewers sidebar). */
   filteredReviewUsers: string[];
   theme: ThemeChoice;
+  /** Which dark theme to use when the user selects "System" and the OS is in dark mode. */
+  defaultDarkTheme: string;
   cacheTTLMinutes: number;
   pollIntervalMinutes: number;
   /** How often the PR detail page auto-refreshes (in seconds). */
@@ -65,6 +68,8 @@ interface SettingsState {
   setFilteredReviewUsers: (users: string[]) => Promise<void>;
   loadTheme: () => Promise<void>;
   setTheme: (theme: ThemeChoice) => Promise<void>;
+  loadDefaultDarkTheme: () => Promise<void>;
+  setDefaultDarkTheme: (name: string) => Promise<void>;
   loadCacheTTL: () => Promise<void>;
   setCacheTTL: (minutes: number) => Promise<void>;
   loadPollInterval: () => Promise<void>;
@@ -103,6 +108,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS,
   filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS,
   theme: DEFAULT_THEME,
+  defaultDarkTheme: DEFAULT_DARK_THEME,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
   prRefreshIntervalSeconds: DEFAULT_PR_REFRESH_INTERVAL_SECONDS,
@@ -250,6 +256,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setTheme: async (theme: ThemeChoice) => {
     await SetSetting("theme", theme);
     set({ theme });
+  },
+
+  loadDefaultDarkTheme: async () => {
+    try {
+      const val = await GetSetting("default_dark_theme");
+      if (val && themeNames.includes(val)) {
+        set({ defaultDarkTheme: val });
+        return;
+      }
+    } catch {
+      // fall through to default
+    }
+    set({ defaultDarkTheme: DEFAULT_DARK_THEME });
+  },
+
+  setDefaultDarkTheme: async (name: string) => {
+    await SetSetting("default_dark_theme", name);
+    set({ defaultDarkTheme: name });
   },
 
   loadCacheTTL: async () => {

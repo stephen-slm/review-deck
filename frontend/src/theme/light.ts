@@ -3,6 +3,8 @@ import { ThemeDefinition } from "./tokens";
 export const lightTheme: ThemeDefinition = {
   name: "light",
   displayName: "Light",
+  isDark: false,
+  description: "Default light theme",
   preview: { background: "#F7F9FB", accent: "#2563EB" },
   tokens: {
     background: "210 33.3% 97.6%",

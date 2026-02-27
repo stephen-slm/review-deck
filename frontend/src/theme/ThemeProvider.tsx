@@ -16,36 +16,44 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeChoice = useSettingsStore((s) => s.theme);
   const setThemeChoice = useSettingsStore((s) => s.setTheme);
   const loadTheme = useSettingsStore((s) => s.loadTheme);
+  const defaultDarkTheme = useSettingsStore((s) => s.defaultDarkTheme);
+  const loadDefaultDarkTheme = useSettingsStore((s) => s.loadDefaultDarkTheme);
 
-  const [systemTheme, setSystemTheme] = useState<ThemeName>(() =>
-    window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "nord" : "light",
+  const [prefersDark, setPrefersDark] = useState<boolean>(
+    () => !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
 
-  // Sync with system preference changes when choice is system.
+  // Sync with system preference changes.
   useEffect(() => {
     if (!window.matchMedia) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (event: MediaQueryListEvent) => {
-      setSystemTheme(event.matches ? "nord" : "light");
+      setPrefersDark(event.matches);
     };
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  const resolvedTheme: ThemeName = themeChoice === "system" ? systemTheme : themeChoice;
+  // Resolve the concrete theme name.
+  const resolvedTheme: ThemeName = useMemo(() => {
+    if (themeChoice === "system") {
+      return prefersDark ? defaultDarkTheme : "light";
+    }
+    return themeChoice;
+  }, [themeChoice, prefersDark, defaultDarkTheme]);
+
   const themeDef = useMemo(() => getTheme(resolvedTheme), [resolvedTheme]);
 
   useEffect(() => {
     loadTheme();
-  }, [loadTheme]);
+    loadDefaultDarkTheme();
+  }, [loadTheme, loadDefaultDarkTheme]);
 
   useEffect(() => {
     applyThemeTokens(themeDef.tokens);
-    const isDark = resolvedTheme === "nord";
-    document.body.classList.toggle("dark", isDark);
-    // Tell the browser how to render native form controls (select, scrollbars, etc.)
-    document.documentElement.style.colorScheme = isDark ? "dark" : "light";
-  }, [themeDef.tokens, resolvedTheme]);
+    document.body.classList.toggle("dark", themeDef.isDark);
+    document.documentElement.style.colorScheme = themeDef.isDark ? "dark" : "light";
+  }, [themeDef]);
 
   const setTheme = useCallback(
     (name: ThemeChoice) => {

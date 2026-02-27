@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
-import { themeChoices, getTheme, ThemeChoice } from "@/theme";
+import { getTheme, lightThemeNames, darkThemeNames, ThemeChoice } from "@/theme";
 import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette, Code, AlertTriangle, Settings2, Shield, Crown } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
@@ -123,24 +123,28 @@ export function SettingsPage() {
     if (e.key === "Enter") action();
   };
 
-  const themeOptions = useMemo(
+  const defaultDarkTheme = useSettingsStore((s) => s.defaultDarkTheme);
+  const setDefaultDarkTheme = useSettingsStore((s) => s.setDefaultDarkTheme);
+  const loadDefaultDarkTheme = useSettingsStore((s) => s.loadDefaultDarkTheme);
+
+  useEffect(() => {
+    loadDefaultDarkTheme();
+  }, [loadDefaultDarkTheme]);
+
+  const lightThemeOptions = useMemo(
     () =>
-      themeChoices.map((choice: ThemeChoice) => {
-        if (choice === "system") {
-          return {
-            name: "system" as ThemeChoice,
-            displayName: "System",
-            description: "Follows your OS preference",
-            preview: { background: "linear-gradient(135deg, #F7F9FB 50%, #2E3440 50%)", accent: "#88C0D0" },
-          };
-        }
-        const def = getTheme(choice);
-        return {
-          name: choice as ThemeChoice,
-          displayName: def.displayName,
-          description: choice === "nord" ? "Low-light friendly" : "Default light theme",
-          preview: def.preview,
-        };
+      lightThemeNames.map((name) => {
+        const def = getTheme(name);
+        return { name: name as ThemeChoice, displayName: def.displayName, description: def.description ?? "", preview: def.preview };
+      }),
+    [],
+  );
+
+  const darkThemeOptions = useMemo(
+    () =>
+      darkThemeNames.map((name) => {
+        const def = getTheme(name);
+        return { name: name as ThemeChoice, displayName: def.displayName, description: def.description ?? "", preview: def.preview };
       }),
     [],
   );
@@ -278,40 +282,101 @@ export function SettingsPage() {
               </div>
               <p className="text-sm text-muted-foreground">Choose a color theme for the app.</p>
 
-              <div className="grid gap-3 sm:grid-cols-3">
-                {themeOptions.map((opt) => {
-                  const selected = theme === opt.name;
-                  return (
-                    <button
-                      key={opt.name}
-                      onClick={() => setTheme(opt.name)}
-                      className={`flex w-full flex-col items-center gap-2 rounded-lg border bg-card p-3 text-center transition-colors ${
-                        selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
-                      }`}
-                      aria-pressed={selected}
-                    >
-                      <div className="flex h-10 w-full overflow-hidden rounded-md border border-border shadow-sm">
-                        {opt.name === "system" ? (
-                          <span className="flex-1" style={{ background: opt.preview.background }} />
-                        ) : (
-                          <>
-                            <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
-                            <span className="w-5" style={{ backgroundColor: opt.preview.accent }} />
-                          </>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{opt.displayName}</p>
-                        <p className="text-xs text-muted-foreground">{opt.description}</p>
-                      </div>
-                      {selected && (
-                        <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
-                          Active
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+              {/* System option */}
+              <button
+                onClick={() => setTheme("system")}
+                className={`flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors ${
+                  theme === "system" ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
+                }`}
+                aria-pressed={theme === "system"}
+              >
+                <div className="flex h-8 w-14 shrink-0 overflow-hidden rounded-md border border-border shadow-sm">
+                  <span className="flex-1" style={{ background: "linear-gradient(135deg, #F7F9FB 50%, #2E3440 50%)" }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-foreground">System</p>
+                  <p className="text-xs text-muted-foreground">Follows your OS preference</p>
+                </div>
+                {theme === "system" && (
+                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
+                    Active
+                  </span>
+                )}
+              </button>
+
+              {/* Default dark theme dropdown (only when System is selected) */}
+              {theme === "system" && (
+                <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground">Default dark theme</p>
+                    <p className="text-xs text-muted-foreground">
+                      Used when your OS is in dark mode.
+                    </p>
+                  </div>
+                  <select
+                    value={defaultDarkTheme}
+                    onChange={(e) => setDefaultDarkTheme(e.target.value)}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {darkThemeOptions.map((opt) => (
+                      <option key={opt.name} value={opt.name}>
+                        {opt.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Light Themes */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Light Themes</h4>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {lightThemeOptions.map((opt) => {
+                    const selected = theme === opt.name;
+                    return (
+                      <button
+                        key={opt.name}
+                        onClick={() => setTheme(opt.name)}
+                        className={`flex w-full flex-col items-center gap-1.5 rounded-lg border bg-card p-2 text-center transition-colors ${
+                          selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
+                        }`}
+                        aria-pressed={selected}
+                      >
+                        <div className="flex h-6 w-full overflow-hidden rounded border border-border shadow-sm">
+                          <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
+                          <span className="w-4" style={{ backgroundColor: opt.preview.accent }} />
+                        </div>
+                        <p className="truncate text-xs font-medium text-foreground w-full">{opt.displayName}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Dark Themes */}
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Dark Themes</h4>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {darkThemeOptions.map((opt) => {
+                    const selected = theme === opt.name;
+                    return (
+                      <button
+                        key={opt.name}
+                        onClick={() => setTheme(opt.name)}
+                        className={`flex w-full flex-col items-center gap-1.5 rounded-lg border bg-card p-2 text-center transition-colors ${
+                          selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
+                        }`}
+                        aria-pressed={selected}
+                      >
+                        <div className="flex h-6 w-full overflow-hidden rounded border border-border shadow-sm">
+                          <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
+                          <span className="w-4" style={{ backgroundColor: opt.preview.accent }} />
+                        </div>
+                        <p className="truncate text-xs font-medium text-foreground w-full">{opt.displayName}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </section>
 

@@ -1,4 +1,5 @@
-export type ThemeName = "light" | "nord";
+/** Theme name is now a plain string to support dynamically-registered OpenCode themes. */
+export type ThemeName = string;
 export type ThemeChoice = ThemeName | "system";
 
 export interface ThemeTokens {
@@ -38,5 +39,9 @@ export interface ThemeDefinition {
   name: ThemeName;
   tokens: ThemeTokens;
   displayName: string;
+  /** Whether this theme is a dark theme (used for Tailwind dark: class and color-scheme). */
+  isDark: boolean;
+  /** Optional short description shown in the theme picker. */
+  description?: string;
   preview: { background: string; accent: string };
 }

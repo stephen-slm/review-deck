@@ -3,6 +3,8 @@ import { ThemeDefinition } from "./tokens";
 export const nordTheme: ThemeDefinition = {
   name: "nord",
   displayName: "Nord",
+  isDark: true,
+  description: "Low-light friendly",
   preview: { background: "#2E3440", accent: "#88C0D0" },
   tokens: {
     background: "220 16.4% 21.6%",
