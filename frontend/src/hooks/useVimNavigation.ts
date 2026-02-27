@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { tinykeys } from "tinykeys";
 import { useVimStore } from "@/stores/vimStore";
@@ -40,7 +40,10 @@ export function useVimNavigation() {
   const location = useLocation();
 
   // Reset selection when the route changes so each page starts fresh.
-  useEffect(() => {
+  // useLayoutEffect ensures this runs synchronously before child
+  // useEffect hooks (e.g. PRTable's setListLength), preventing the
+  // parent reset from wiping out the child's freshly-set listLength.
+  useLayoutEffect(() => {
     useVimStore.getState().resetSelection();
   }, [location.pathname]);
 
