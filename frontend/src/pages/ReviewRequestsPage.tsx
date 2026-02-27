@@ -1,28 +1,27 @@
 import { useEffect, useCallback, useMemo } from "react";
-import { usePRStore, type PageDirection } from "@/stores/prStore";
+import { usePRStore, type PageDirection, type PaginationState } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
+import { useRepoStore } from "@/stores/repoStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
-import { RefreshCw, AlertCircle } from "lucide-react";
+import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
-import { GetReviewRequestsPage } from "../../wailsjs/go/services/PullRequestService";
+import { GetReviewRequestsForRepoPage } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
+  const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
-  const { orgs, loadOrgs, loadAllPriorities, getPriorityNames } = useSettingsStore();
+  const { loadAllPriorities, getPriorityNames } = useSettingsStore();
   const {
     pages,
     isLoading,
     lastFetchedAt,
     error,
-    fetchReviewRequests,
-    goToPageReviewRequests,
     setPageSize,
-    fetchIfStale,
     clearError,
     hiddenPRs,
     hidePR,
@@ -32,46 +31,107 @@ export function ReviewRequestsPage() {
   const pg = pages.reviewRequests;
   const loading = isLoading.reviewRequests;
 
+  const owner = selectedRepo?.repoOwner ?? "";
+  const repo = selectedRepo?.repoName ?? "";
+
+  // --- Fetch helper ---
+  const fetchPage = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (!owner || !repo) return;
+      const page = await GetReviewRequestsForRepoPage(owner, repo, pageSize, cursor);
+      const prs = page.pullRequests || [];
+      const info = page.pageInfo;
+      const now = Date.now();
+      usePRStore.setState((s) => ({
+        pages: {
+          ...s.pages,
+          reviewRequests: {
+            ...s.pages.reviewRequests,
+            items: prs,
+            currentPage: 1,
+            hasNextPage: info.hasNextPage,
+            endCursor: info.endCursor,
+            totalCount: info.totalCount,
+            cursorStack: [""],
+            pageCache: {
+              1: { items: prs, pageInfo: info, fetchedAt: now },
+            },
+          },
+        },
+        isLoading: { ...s.isLoading, reviewRequests: false },
+        lastFetchedAt: { ...s.lastFetchedAt, reviewRequests: now },
+      }));
+    },
+    [owner, repo],
+  );
+
   const forceRefresh = useCallback(() => {
+    if (!owner || !repo) return;
     clearError();
-    for (const org of orgs) {
-      fetchReviewRequests(org);
-    }
-  }, [orgs, fetchReviewRequests, clearError]);
+    usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true } }));
+    fetchPage(usePRStore.getState().pages.reviewRequests.pageSize, "").catch(() =>
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false } })),
+    );
+  }, [owner, repo, fetchPage, clearError]);
 
   const handlePageChange = useCallback(
     (direction: PageDirection) => {
-      for (const org of orgs) {
-        goToPageReviewRequests(org, direction);
-      }
+      if (!owner || !repo) return;
+      const pgState = usePRStore.getState().pages.reviewRequests;
+      const nav = resolveNav(pgState, direction);
+      if (!nav) return;
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true } }));
+      GetReviewRequestsForRepoPage(owner, repo, pgState.pageSize, nav.cursor)
+        .then((page) => {
+          const prs = page.pullRequests || [];
+          usePRStore.setState((s) => ({
+            pages: {
+              ...s.pages,
+              reviewRequests: {
+                ...s.pages.reviewRequests,
+                items: prs,
+                currentPage: nav.newPage,
+                cursorStack: nav.newStack,
+                hasNextPage: page.pageInfo.hasNextPage,
+                endCursor: page.pageInfo.endCursor,
+                totalCount: page.pageInfo.totalCount,
+                pageCache: {
+                  ...s.pages.reviewRequests.pageCache,
+                  [nav.newPage]: { items: prs, pageInfo: page.pageInfo, fetchedAt: Date.now() },
+                },
+              },
+            },
+            isLoading: { ...s.isLoading, reviewRequests: false },
+          }));
+        })
+        .catch(() =>
+          usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false } })),
+        );
     },
-    [orgs, goToPageReviewRequests],
+    [owner, repo],
   );
 
   const handlePageSizeChange = useCallback(
     (size: number) => {
       setPageSize("reviewRequests", size, () => {
-        for (const org of orgs) {
-          return fetchReviewRequests(org);
-        }
-        return Promise.resolve();
+        if (!owner || !repo) return Promise.resolve();
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true } }));
+        return fetchPage(size, "");
       });
     },
-    [orgs, fetchReviewRequests, setPageSize],
+    [owner, repo, fetchPage, setPageSize],
   );
 
   const handleFetchMore = useCallback(() => {
-    const org = orgs[0];
-    if (!org) return;
+    if (!owner || !repo) return;
     appendNextPage("reviewRequests", (pageSize, cursor) =>
-      GetReviewRequestsPage(org, pageSize, cursor),
+      GetReviewRequestsForRepoPage(owner, repo, pageSize, cursor),
     );
-  }, [orgs, appendNextPage]);
+  }, [owner, repo, appendNextPage]);
 
   useEffect(() => {
-    loadOrgs();
     loadAllPriorities();
-  }, [loadOrgs, loadAllPriorities]);
+  }, [loadAllPriorities]);
 
   // Build priority set and sort PRs so priority items come first.
   const priorityNames = useMemo(() => getPriorityNames(), [getPriorityNames]);
@@ -96,13 +156,14 @@ export function ReviewRequestsPage() {
     [pg.items, flagRules],
   );
 
+  // Fetch data when repo changes
   useEffect(() => {
-    if (isAuthenticated && orgs.length > 0) {
-      for (const org of orgs) {
-        fetchIfStale("reviewRequests", () => fetchReviewRequests(org));
-      }
-    }
-  }, [isAuthenticated, orgs, fetchReviewRequests, fetchIfStale]);
+    if (!isAuthenticated || !owner || !repo) return;
+    usePRStore.getState().fetchIfStale("reviewRequests", async () => {
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: true } }));
+      await fetchPage(usePRStore.getState().pages.reviewRequests.pageSize, "");
+    });
+  }, [isAuthenticated, owner, repo, fetchPage]);
 
   if (!isAuthenticated) {
     return (
@@ -117,13 +178,13 @@ export function ReviewRequestsPage() {
     );
   }
 
-  if (orgs.length === 0) {
+  if (!selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground" />
+          <FolderGit2 className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-3 text-sm text-muted-foreground">
-            Add a GitHub organization in Settings to start tracking.
+            Select a repository from the sidebar to view review requests.
           </p>
         </div>
       </div>
@@ -136,7 +197,8 @@ export function ReviewRequestsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Review Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pull requests awaiting your review.
+            Pull requests awaiting your review in{" "}
+            <span className="font-medium text-foreground">{owner}/{repo}</span>.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -176,4 +238,26 @@ export function ReviewRequestsPage() {
       />
     </div>
   );
+}
+
+// Minimal page navigation resolver.
+function resolveNav(
+  pg: PaginationState,
+  direction: PageDirection,
+): { cursor: string; newPage: number; newStack: string[] } | null {
+  switch (direction) {
+    case "first":
+      return { cursor: "", newPage: 1, newStack: [""] };
+    case "next": {
+      if (!pg.hasNextPage) return null;
+      const newStack = [...pg.cursorStack, pg.endCursor];
+      return { cursor: pg.endCursor, newPage: pg.currentPage + 1, newStack };
+    }
+    case "prev": {
+      if (pg.currentPage <= 1) return null;
+      const newStack = pg.cursorStack.slice(0, -1);
+      const cursor = newStack[newStack.length - 1] ?? "";
+      return { cursor, newPage: pg.currentPage - 1, newStack };
+    }
+  }
 }

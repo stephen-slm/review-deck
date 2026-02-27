@@ -22,12 +22,20 @@ export function GetMyPRs(arg1) {
   return window['go']['services']['PullRequestService']['GetMyPRs'](arg1);
 }
 
+export function GetMyPRsForRepoPage(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['GetMyPRsForRepoPage'](arg1, arg2, arg3, arg4);
+}
+
 export function GetMyPRsPage(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['GetMyPRsPage'](arg1, arg2, arg3);
 }
 
 export function GetMyRecentMerged(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetMyRecentMerged'](arg1, arg2);
+}
+
+export function GetMyRecentMergedForRepoPage(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['services']['PullRequestService']['GetMyRecentMergedForRepoPage'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function GetMyRecentMergedPage(arg1, arg2, arg3, arg4) {
@@ -58,12 +66,20 @@ export function GetReviewRequests(arg1) {
   return window['go']['services']['PullRequestService']['GetReviewRequests'](arg1);
 }
 
+export function GetReviewRequestsForRepoPage(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['GetReviewRequestsForRepoPage'](arg1, arg2, arg3, arg4);
+}
+
 export function GetReviewRequestsPage(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['GetReviewRequestsPage'](arg1, arg2, arg3);
 }
 
 export function GetReviewedByMe(arg1) {
   return window['go']['services']['PullRequestService']['GetReviewedByMe'](arg1);
+}
+
+export function GetReviewedByMeForRepoPage(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['GetReviewedByMeForRepoPage'](arg1, arg2, arg3, arg4);
 }
 
 export function GetReviewedByMePage(arg1, arg2, arg3) {

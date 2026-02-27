@@ -14,9 +14,13 @@ export function GetMetricsHistory(arg1:number):Promise<Array<storage.MetricsSnap
 
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
 
+export function GetMyPRsForRepoPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
+
 export function GetMyPRsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
 
 export function GetMyRecentMerged(arg1:string,arg2:number):Promise<Array<github.PullRequest>>;
+
+export function GetMyRecentMergedForRepoPage(arg1:string,arg2:string,arg3:number,arg4:number,arg5:string):Promise<github.PRPage>;
 
 export function GetMyRecentMergedPage(arg1:string,arg2:number,arg3:number,arg4:string):Promise<github.PRPage>;
 
@@ -32,9 +36,13 @@ export function GetRepoLabels(arg1:string,arg2:string):Promise<Array<github.Labe
 
 export function GetReviewRequests(arg1:string):Promise<Array<github.PullRequest>>;
 
+export function GetReviewRequestsForRepoPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
+
 export function GetReviewRequestsPage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
 
 export function GetReviewedByMe(arg1:string):Promise<Array<github.PullRequest>>;
+
+export function GetReviewedByMeForRepoPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
 
 export function GetReviewedByMePage(arg1:string,arg2:number,arg3:string):Promise<github.PRPage>;
 

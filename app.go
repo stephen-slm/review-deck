@@ -27,10 +27,12 @@ type App struct {
 	db       *storage.DB
 	ghClient *gh.Client
 
-	authService     *services.AuthService
-	prService       *services.PullRequestService
-	settingsService *services.SettingsService
-	poller          *services.Poller
+	authService      *services.AuthService
+	prService        *services.PullRequestService
+	settingsService  *services.SettingsService
+	repoService      *services.RepoService
+	workspaceService *services.WorkspaceService
+	poller           *services.Poller
 }
 
 // NewApp creates a new App. Initializes the database and services
@@ -54,18 +56,23 @@ func NewApp() *App {
 	authService := services.NewAuthService(db)
 	prService := services.NewPullRequestService(db)
 	settingsService := services.NewSettingsService(db)
+	repoService := services.NewRepoService(db)
+	workspaceService := services.NewWorkspaceService(db)
 	poller := services.NewPoller(db, 5*time.Minute)
 
 	// Register consumers so login/logout propagates the client.
 	authService.RegisterConsumer(prService)
+	authService.RegisterConsumer(repoService)
 	authService.RegisterConsumer(poller)
 
 	app := &App{
-		db:              db,
-		authService:     authService,
-		prService:       prService,
-		settingsService: settingsService,
-		poller:          poller,
+		db:               db,
+		authService:      authService,
+		prService:        prService,
+		settingsService:  settingsService,
+		repoService:      repoService,
+		workspaceService: workspaceService,
+		poller:           poller,
 	}
 
 	// If we have a stored token, initialize the GitHub client.
@@ -84,6 +91,8 @@ func NewApp() *App {
 // startup is called when the app starts and the window is being created.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.repoService.SetContext(ctx)
+	a.workspaceService.SetContext(ctx)
 }
 
 // domReady is called after the frontend DOM has been loaded.

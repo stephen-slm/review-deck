@@ -16,8 +16,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeChoice = useSettingsStore((s) => s.theme);
   const setThemeChoice = useSettingsStore((s) => s.setTheme);
   const loadTheme = useSettingsStore((s) => s.loadTheme);
-  const defaultDarkTheme = useSettingsStore((s) => s.defaultDarkTheme);
-  const loadDefaultDarkTheme = useSettingsStore((s) => s.loadDefaultDarkTheme);
 
   const [prefersDark, setPrefersDark] = useState<boolean>(
     () => !!window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -37,17 +35,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Resolve the concrete theme name.
   const resolvedTheme: ThemeName = useMemo(() => {
     if (themeChoice === "system") {
-      return prefersDark ? defaultDarkTheme : "light";
+      return prefersDark ? "dark" : "light";
     }
     return themeChoice;
-  }, [themeChoice, prefersDark, defaultDarkTheme]);
+  }, [themeChoice, prefersDark]);
 
   const themeDef = useMemo(() => getTheme(resolvedTheme), [resolvedTheme]);
 
   useEffect(() => {
     loadTheme();
-    loadDefaultDarkTheme();
-  }, [loadTheme, loadDefaultDarkTheme]);
+  }, [loadTheme]);
 
   useEffect(() => {
     applyThemeTokens(themeDef.tokens);

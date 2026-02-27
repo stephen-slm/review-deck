@@ -49,6 +49,8 @@ func main() {
 			app.authService,
 			app.prService,
 			app.settingsService,
+			app.repoService,
+			app.workspaceService,
 		},
 	})
 

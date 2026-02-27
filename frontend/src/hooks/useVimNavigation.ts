@@ -3,12 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { tinykeys } from "tinykeys";
 import { useVimStore } from "@/stores/vimStore";
 
-/** Routes corresponding to sidebar tabs 1-6. */
+/** Routes corresponding to sidebar tabs 1-4. */
 const TAB_ROUTES = [
-  "/dashboard",
   "/my-prs",
   "/review-requests",
-  "/reviewed",
   "/flagged",
   "/settings",
 ];
@@ -52,19 +50,21 @@ export function useVimNavigation() {
     const store = useVimStore.getState;
 
     const unsubscribe = tinykeys(window, {
-      // ---- Global: Tab navigation (Cmd+1 through Cmd+6) ----
+      // ---- Global: Repo selector (Cmd+0) ----
+      "$mod+0": vim(() => window.dispatchEvent(new Event("repo-selector:toggle"))),
+
+      // ---- Global: Tab navigation (Cmd+1 through Cmd+4) ----
       "$mod+1": vim(() => navigate(TAB_ROUTES[0])),
       "$mod+2": vim(() => navigate(TAB_ROUTES[1])),
       "$mod+3": vim(() => navigate(TAB_ROUTES[2])),
       "$mod+4": vim(() => navigate(TAB_ROUTES[3])),
-      "$mod+5": vim(() => navigate(TAB_ROUTES[4])),
-      "$mod+6": vim(() => navigate(TAB_ROUTES[5])),
 
-      // ---- Page tab navigation (1-4) — only active when a page registers onTabDirect ----
+      // ---- Page tab navigation (1-5) — only active when a page registers onTabDirect ----
       "1": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(0); }),
       "2": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(1); }),
       "3": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(2); }),
       "4": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(3); }),
+      "5": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(4); }),
 
       // ---- Global: Escape — exit visual/pick mode > close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {

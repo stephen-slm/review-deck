@@ -259,8 +259,9 @@ func (p *Poller) poll(ctx context.Context) {
 		return
 	}
 
-	orgs, err := p.db.GetTrackedOrgs()
-	if err != nil || len(orgs) == 0 {
+	// Fetch tracked repos instead of orgs.
+	repos, err := p.db.GetTrackedRepos()
+	if err != nil || len(repos) == 0 {
 		return
 	}
 
@@ -293,10 +294,13 @@ func (p *Poller) poll(ctx context.Context) {
 
 	filterBots := p.filterBotsEnabled()
 	reviewSince := time.Now().AddDate(0, 0, -p.reviewMaxAgeDays())
+	mergedSince := time.Now().AddDate(0, 0, -14)
 
-	for _, org := range orgs {
-		excludedRepos := p.getExcludedRepos(org)
-		if prs, err := client.GetMyOpenPRs(ctx, org, login, filterBots, excludedRepos); err == nil {
+	for _, repo := range repos {
+		owner := repo.RepoOwner
+		name := repo.RepoName
+
+		if prs, err := client.GetMyOpenPRsForRepo(ctx, owner, name, login, filterBots); err == nil {
 			result.MyPRs = append(result.MyPRs, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -308,7 +312,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewRequestsForUser(ctx, org, login, reviewSince, filterBots, excludedRepos); err == nil {
+		if prs, err := client.GetReviewRequestsForRepo(ctx, owner, name, login, reviewSince, filterBots); err == nil {
 			result.ReviewRequests = append(result.ReviewRequests, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -320,7 +324,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewedByUser(ctx, org, login, reviewSince, filterBots, excludedRepos); err == nil {
+		if prs, err := client.GetReviewedByUserForRepo(ctx, owner, name, login, reviewSince, filterBots); err == nil {
 			result.ReviewedByMe = append(result.ReviewedByMe, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -332,8 +336,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		mergedSince := time.Now().AddDate(0, 0, -14)
-		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, mergedSince, filterBots, excludedRepos); err == nil {
+		if prs, err := client.GetMyRecentMergedPRsForRepo(ctx, owner, name, login, mergedSince, filterBots); err == nil {
 			result.RecentMerged = append(result.RecentMerged, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -344,10 +347,17 @@ func (p *Poller) poll(ctx context.Context) {
 		if !sleep(ctx, requestDelay) {
 			return
 		}
+	}
 
-		// Fetch team review requests for enabled teams.
+	// Fetch team review requests per unique org (these are org-level queries).
+	uniqueOrgs := make(map[string]bool)
+	for _, repo := range repos {
+		uniqueOrgs[repo.RepoOwner] = true
+	}
+	for org := range uniqueOrgs {
 		enabledTeams, err := p.db.GetEnabledTeamSlugs(org)
 		if err == nil {
+			excludedRepos := p.getExcludedRepos(org)
 			for _, team := range enabledTeams {
 				if prs, err := client.GetTeamReviewRequests(ctx, org, team, reviewSince, filterBots, excludedRepos); err == nil {
 					result.TeamReviewRequests = append(result.TeamReviewRequests, prs...)
@@ -401,8 +411,13 @@ func (p *Poller) poll(ctx context.Context) {
 	p.recordMetrics(&result)
 
 	// Sync org members cache if stale (daily).
+	// Derive unique orgs from tracked repos.
+	var orgList []string
+	for org := range uniqueOrgs {
+		orgList = append(orgList, org)
+	}
 	if p.shouldSyncMembersNow() {
-		p.syncOrgMembersIfNeeded(ctx, client, orgs)
+		p.syncOrgMembersIfNeeded(ctx, client, orgList)
 	}
 }
 

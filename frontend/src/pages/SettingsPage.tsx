@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useRepoStore } from "@/stores/repoStore";
 import { useVimStore } from "@/stores/vimStore";
-import { getTheme, lightThemeNames, darkThemeNames, ThemeChoice } from "@/theme";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette, Code, AlertTriangle, Settings2, Shield, Crown } from "lucide-react";
+
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
-import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
+import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 
@@ -21,17 +22,22 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority } = useSettingsStore();
+  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
+
+  // Derive unique org names from tracked repos for team/priority features.
+  const derivedOrgs = useMemo(() => {
+    const owners = new Set(repos.map((r) => r.repoOwner));
+    return Array.from(owners).sort();
+  }, [repos]);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [newOrg, setNewOrg] = useState("");
   const [syncingOrg, setSyncingOrg] = useState<string | null>(null);
   const [newPriorityName, setNewPriorityName] = useState("");
   const [newPriorityType, setNewPriorityType] = useState<"user" | "team">("user");
-  const [newExcludedRepo, setNewExcludedRepo] = useState("");
-  const [syncingMembers, setSyncingMembers] = useState<string | null>(null);
+
   const [membersByOrg, setMembersByOrg] = useState<Record<string, github.User[]>>({});
   const [showPrioritySuggestions, setShowPrioritySuggestions] = useState(false);
 
@@ -47,6 +53,7 @@ export function SettingsPage() {
   const [newRuleSizeValue, setNewRuleSizeValue] = useState("");
 
   useEffect(() => {
+    loadRepos();
     loadOrgs();
     loadFilterBots();
     loadHideStackedPRs();
@@ -55,11 +62,10 @@ export function SettingsPage() {
     loadTheme();
     loadCacheTTL();
     loadPollInterval();
-    loadSourceBasePath();
     loadHideDraftPRs();
     loadPRRefreshInterval();
     loadFlagRules();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath, loadFlagRules]);
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -71,27 +77,26 @@ export function SettingsPage() {
     return () => useVimStore.getState().clearActions();
   }, []);
 
-  // Load teams and priorities for all orgs once orgs are loaded; sync teams from GitHub if none cached yet.
+  // Load teams and priorities for all derived orgs once repos are loaded; sync teams from GitHub if none cached yet.
   useEffect(() => {
-    if (orgs.length === 0) return;
+    if (derivedOrgs.length === 0) return;
     loadAllTeams().then(() => {
       const current = useSettingsStore.getState().teamsByOrg;
-      for (const org of orgs) {
+      for (const org of derivedOrgs) {
         if (!current[org] || current[org].length === 0) {
           syncTeams(org);
         }
       }
     });
     loadAllPriorities();
-    loadAllExcludedRepos();
     // Load cached org members for priority autocomplete.
-    for (const org of orgs) {
+    for (const org of derivedOrgs) {
       GetOrgMembers(org).then((members) => {
         setMembersByOrg((prev) => ({ ...prev, [org]: members || [] }));
       }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgs]);
+  }, [derivedOrgs]);
 
   const handleLogin = async () => {
     if (!token.trim()) return;
@@ -112,42 +117,11 @@ export function SettingsPage() {
     setToken("");
   };
 
-  const handleAddOrg = async () => {
-    const org = newOrg.trim();
-    if (!org) return;
-    await addOrg(org);
-    setNewOrg("");
-  };
-
   const handleKeyDown = (e: React.KeyboardEvent, action: () => void) => {
     if (e.key === "Enter") action();
   };
 
-  const defaultDarkTheme = useSettingsStore((s) => s.defaultDarkTheme);
-  const setDefaultDarkTheme = useSettingsStore((s) => s.setDefaultDarkTheme);
-  const loadDefaultDarkTheme = useSettingsStore((s) => s.loadDefaultDarkTheme);
 
-  useEffect(() => {
-    loadDefaultDarkTheme();
-  }, [loadDefaultDarkTheme]);
-
-  const lightThemeOptions = useMemo(
-    () =>
-      lightThemeNames.map((name) => {
-        const def = getTheme(name);
-        return { name: name as ThemeChoice, displayName: def.displayName, description: def.description ?? "", preview: def.preview };
-      }),
-    [],
-  );
-
-  const darkThemeOptions = useMemo(
-    () =>
-      darkThemeNames.map((name) => {
-        const def = getTheme(name);
-        return { name: name as ThemeChoice, displayName: def.displayName, description: def.description ?? "", preview: def.preview };
-      }),
-    [],
-  );
 
   return (
     <div className="max-w-2xl space-y-4">
@@ -282,171 +256,111 @@ export function SettingsPage() {
               </div>
               <p className="text-sm text-muted-foreground">Choose a color theme for the app.</p>
 
-              {/* System option */}
-              <button
-                onClick={() => setTheme("system")}
-                className={`flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors ${
-                  theme === "system" ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
-                }`}
-                aria-pressed={theme === "system"}
-              >
-                <div className="flex h-8 w-14 shrink-0 overflow-hidden rounded-md border border-border shadow-sm">
-                  <span className="flex-1" style={{ background: "linear-gradient(135deg, #F7F9FB 50%, #2E3440 50%)" }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-foreground">System</p>
-                  <p className="text-xs text-muted-foreground">Follows your OS preference</p>
-                </div>
-                {theme === "system" && (
-                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-medium text-primary-foreground">
-                    Active
-                  </span>
-                )}
-              </button>
-
-              {/* Default dark theme dropdown (only when System is selected) */}
-              {theme === "system" && (
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">Default dark theme</p>
-                    <p className="text-xs text-muted-foreground">
-                      Used when your OS is in dark mode.
-                    </p>
-                  </div>
-                  <select
-                    value={defaultDarkTheme}
-                    onChange={(e) => setDefaultDarkTheme(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {darkThemeOptions.map((opt) => (
-                      <option key={opt.name} value={opt.name}>
-                        {opt.displayName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Light Themes */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">Light Themes</h4>
-                <div className="grid gap-2 sm:grid-cols-4">
-                  {lightThemeOptions.map((opt) => {
-                    const selected = theme === opt.name;
-                    return (
-                      <button
-                        key={opt.name}
-                        onClick={() => setTheme(opt.name)}
-                        className={`flex w-full flex-col items-center gap-1.5 rounded-lg border bg-card p-2 text-center transition-colors ${
-                          selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
-                        }`}
-                        aria-pressed={selected}
-                      >
-                        <div className="flex h-6 w-full overflow-hidden rounded border border-border shadow-sm">
-                          <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
-                          <span className="w-4" style={{ backgroundColor: opt.preview.accent }} />
-                        </div>
-                        <p className="truncate text-xs font-medium text-foreground w-full">{opt.displayName}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Dark Themes */}
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-muted-foreground">Dark Themes</h4>
-                <div className="grid gap-2 sm:grid-cols-4">
-                  {darkThemeOptions.map((opt) => {
-                    const selected = theme === opt.name;
-                    return (
-                      <button
-                        key={opt.name}
-                        onClick={() => setTheme(opt.name)}
-                        className={`flex w-full flex-col items-center gap-1.5 rounded-lg border bg-card p-2 text-center transition-colors ${
-                          selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
-                        }`}
-                        aria-pressed={selected}
-                      >
-                        <div className="flex h-6 w-full overflow-hidden rounded border border-border shadow-sm">
-                          <span className="flex-1" style={{ backgroundColor: opt.preview.background }} />
-                          <span className="w-4" style={{ backgroundColor: opt.preview.accent }} />
-                        </div>
-                        <p className="truncate text-xs font-medium text-foreground w-full">{opt.displayName}</p>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {([
+                  { key: "system" as const, label: "System", desc: "Follows OS preference", bg: "linear-gradient(135deg, #F7F9FB 50%, #2E3440 50%)" },
+                  { key: "light" as const, label: "Light", desc: "Default light theme", bg: "#F7F9FB" },
+                  { key: "dark" as const, label: "Dark", desc: "Default dark theme", bg: "#2E3440" },
+                ] as const).map((opt) => {
+                  const selected = theme === opt.key;
+                  return (
+                    <button
+                      key={opt.key}
+                      onClick={() => setTheme(opt.key)}
+                      className={`flex w-full items-center gap-3 rounded-lg border bg-card p-3 text-left transition-colors ${
+                        selected ? "border-primary ring-2 ring-ring" : "border-border hover:border-accent"
+                      }`}
+                      aria-pressed={selected}
+                    >
+                      <div
+                        className="h-8 w-10 shrink-0 rounded-md border border-border shadow-sm"
+                        style={{ background: opt.bg }}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                        <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </section>
 
-            {/* Organizations Section */}
+            {/* Repositories Section */}
             <section className="space-y-4">
-              <h3 className="text-lg font-semibold">Tracked Organizations</h3>
+              <div className="flex items-center gap-2">
+                <FolderGit2 className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Tracked Repositories</h3>
+              </div>
               <p className="text-sm text-muted-foreground">
-                Add GitHub organizations to track pull requests from.
+                Repositories you are tracking. Click "Add" to select a local Git repo folder.
               </p>
 
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={newOrg}
-                  onChange={(e) => setNewOrg(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, handleAddOrg)}
-                  placeholder="organization-name"
-                  className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <button
-                  onClick={handleAddOrg}
-                  disabled={!newOrg.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add
-                </button>
-              </div>
+              <button
+                onClick={() => addRepo()}
+                disabled={repoLoading}
+                className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add repository
+              </button>
 
-              {orgs.length > 0 ? (
+              {repos.length > 0 ? (
                 <ul className="space-y-2">
-                  {orgs.map((org) => (
+                  {repos.map((r) => (
                     <li
-                      key={org}
+                      key={r.id}
                       className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2.5"
                     >
-                      <span className="text-sm font-medium">{org}</span>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={async () => {
-                            setSyncingMembers(org);
-                            try {
-                              await SyncOrgMembers(org);
-                              const members = await GetOrgMembers(org);
-                              setMembersByOrg((prev) => ({ ...prev, [org]: members || [] }));
-                            } finally {
-                              setSyncingMembers(null);
-                            }
-                          }}
-                          disabled={syncingMembers === org}
-                          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-                          title="Sync org members from GitHub"
-                        >
-                          <RefreshCw className={`h-3 w-3 ${syncingMembers === org ? "animate-spin" : ""}`} />
-                          Sync members
-                        </button>
-                        <button
-                          onClick={() => removeOrg(org)}
-                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {r.repoOwner}/{r.repoName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {r.localPath}
+                        </p>
                       </div>
+                      <button
+                        onClick={() => removeRepo(r.id)}
+                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </li>
                   ))}
                 </ul>
               ) : (
                 <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-                  No organizations tracked yet. Add one above to get started.
+                  No repositories tracked yet. Add one above to get started.
                 </p>
+              )}
+
+              {/* Default repository picker */}
+              {repos.length > 1 && (
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">Default repository</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Automatically selected when the app starts.
+                      </p>
+                    </div>
+                    <select
+                      value={selectedRepoId ?? ""}
+                      onChange={(e) => {
+                        const id = parseInt(e.target.value, 10);
+                        if (!isNaN(id)) selectRepo(id);
+                      }}
+                      className="max-w-[200px] truncate rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {repos.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.repoOwner}/{r.repoName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               )}
             </section>
           </>
@@ -691,87 +605,14 @@ export function SettingsPage() {
               )}
             </section>
 
-            {/* Excluded Repositories Section */}
-            {isAuthenticated && orgs.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <GitFork className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold">Excluded Repositories</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Repositories listed here are excluded from all PR views and poller
-                  queries. Enter the repo name only (not the full org/repo path).
-                </p>
 
-                {orgs.map((org) => {
-                  const repos = excludedReposByOrg[org] || [];
-                  return (
-                    <div key={org} className="space-y-2">
-                      <h4 className="text-sm font-medium text-foreground">{org}</h4>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newExcludedRepo}
-                          onChange={(e) => setNewExcludedRepo(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" && newExcludedRepo.trim()) {
-                              addExcludedRepo(org, newExcludedRepo.trim());
-                              setNewExcludedRepo("");
-                            }
-                          }}
-                          placeholder="repository-name"
-                          className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                        />
-                        <button
-                          onClick={() => {
-                            if (!newExcludedRepo.trim()) return;
-                            addExcludedRepo(org, newExcludedRepo.trim());
-                            setNewExcludedRepo("");
-                          }}
-                          disabled={!newExcludedRepo.trim()}
-                          className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
-                        >
-                          <Plus className="h-3.5 w-3.5" />
-                          Exclude
-                        </button>
-                      </div>
-                      {repos.length > 0 ? (
-                        <ul className="space-y-1">
-                          {repos.map((repo) => (
-                            <li
-                              key={repo}
-                              className="flex items-center justify-between rounded-md border border-border bg-card px-4 py-2"
-                            >
-                              <span className="text-sm text-foreground">
-                                {org}/{repo}
-                              </span>
-                              <button
-                                onClick={() => removeExcludedRepo(org, repo)}
-                                className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
-                                title="Remove exclusion"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
-                          No repositories excluded.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </section>
-            )}
           </>
         )}
 
         {activeTab === "teams" && (
           <>
             {/* Teams Section */}
-            {isAuthenticated && orgs.length > 0 ? (
+            {isAuthenticated && derivedOrgs.length > 0 ? (
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Users className="h-5 w-5 text-muted-foreground" />
@@ -782,7 +623,7 @@ export function SettingsPage() {
                   teams are excluded from the poller and team review request views.
                 </p>
 
-                {orgs.map((org) => {
+                {derivedOrgs.map((org) => {
                   const teams = teamsByOrg[org] || [];
                   return (
                     <div key={org} className="space-y-2">
@@ -848,7 +689,7 @@ export function SettingsPage() {
             )}
 
             {/* Priority Reviewers Section */}
-            {isAuthenticated && orgs.length > 0 && (
+            {isAuthenticated && derivedOrgs.length > 0 && (
               <section className="space-y-4">
                 <div className="flex items-center gap-2">
                   <Star className="h-5 w-5 text-muted-foreground" />
@@ -859,7 +700,7 @@ export function SettingsPage() {
                   Requests view and marked with a visual indicator.
                 </p>
 
-                {orgs.map((org) => {
+                {derivedOrgs.map((org) => {
                   const priorities = prioritiesByOrg[org] || [];
                   const existingNames = new Set(priorities.map((p) => p.name));
                   const q = newPriorityName.toLowerCase();
@@ -1266,36 +1107,7 @@ export function SettingsPage() {
               </div>
             </section>
 
-            {/* IDE Integration Section */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-muted-foreground" />
-                <h3 className="text-lg font-semibold">IDE Integration</h3>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Configure a local source base path to enable "Open in GoLand" buttons
-                throughout the app. Repos are expected at{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-xs">{"<base>/<org>/<repo>"}</code>.
-              </p>
 
-              <div className="rounded-lg border border-border bg-card p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">Source base path</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Absolute path where your Git repositories are cloned.
-                    </p>
-                  </div>
-                  <input
-                    type="text"
-                    value={sourceBasePath}
-                    onChange={(e) => setSourceBasePath(e.target.value)}
-                    placeholder="~/source"
-                    className="w-56 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </div>
-              </div>
-            </section>
           </>
         )}
       </div>

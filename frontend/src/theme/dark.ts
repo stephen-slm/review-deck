@@ -1,10 +1,10 @@
 import { ThemeDefinition } from "./tokens";
 
-export const nordTheme: ThemeDefinition = {
-  name: "nord",
-  displayName: "Nord",
+export const darkTheme: ThemeDefinition = {
+  name: "dark",
+  displayName: "Dark",
   isDark: true,
-  description: "Low-light friendly",
+  description: "Default dark theme",
   preview: { background: "#2E3440", accent: "#88C0D0" },
   tokens: {
     background: "220 16.4% 21.6%",

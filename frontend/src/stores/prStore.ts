@@ -139,6 +139,9 @@ interface PRState {
   setCacheTTL: (ms: number) => void;
   clearError: () => void;
 
+  /** Reset all pages and cache timestamps. Called when the selected repo changes. */
+  resetPages: () => void;
+
   // ---- Hidden PRs ----
   hidePR: (nodeId: string) => void;
   unhidePR: (nodeId: string) => void;
@@ -609,6 +612,19 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),
   clearError: () => set({ error: null }),
+
+  resetPages: () =>
+    set({
+      pages: {
+        myPRs: emptyPagination(get().pages.myPRs.pageSize),
+        myRecentMerged: emptyPagination(get().pages.myRecentMerged.pageSize),
+        reviewRequests: emptyPagination(get().pages.reviewRequests.pageSize),
+        teamReviewRequests: emptyPagination(get().pages.teamReviewRequests.pageSize),
+        reviewedByMe: emptyPagination(get().pages.reviewedByMe.pageSize),
+      },
+      lastFetchedAt: { ...defaultLastFetched },
+      error: null,
+    }),
 
   // ---- Hidden PRs (persisted as JSON array of nodeIds) ----
 

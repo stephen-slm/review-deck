@@ -158,6 +158,65 @@ func (s *PullRequestService) GetReviewedByMePage(org string, pageSize int, curso
 	return page, nil
 }
 
+// ---- Repo-scoped paginated methods (used by the new repo-focused frontend) ----
+
+// GetMyPRsForRepoPage returns a single page of open PRs for a specific repo.
+func (s *PullRequestService) GetMyPRsForRepoPage(owner, repo string, pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetMyOpenPRsForRepoPage(context.Background(), owner, repo, login, pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch my PRs for %s/%s: %w", owner, repo, err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetMyRecentMergedForRepoPage returns a single page of recently merged PRs for a specific repo.
+func (s *PullRequestService) GetMyRecentMergedForRepoPage(owner, repo string, daysBack int, pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	since := time.Now().AddDate(0, 0, -daysBack)
+	page, err := s.client.GetMyRecentMergedPRsForRepoPage(context.Background(), owner, repo, login, since, pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch merged PRs for %s/%s: %w", owner, repo, err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetReviewRequestsForRepoPage returns a single page of review requests for a specific repo.
+func (s *PullRequestService) GetReviewRequestsForRepoPage(owner, repo string, pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetReviewRequestsForRepoPage(context.Background(), owner, repo, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch review requests for %s/%s: %w", owner, repo, err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetReviewedByMeForRepoPage returns a single page of PRs reviewed by the user for a specific repo.
+func (s *PullRequestService) GetReviewedByMeForRepoPage(owner, repo string, pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetReviewedByUserForRepoPage(context.Background(), owner, repo, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch reviewed PRs for %s/%s: %w", owner, repo, err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
 // ---- Legacy fetch-all methods (kept for poller compatibility) ----
 
 // GetMyPRs fetches ALL open PRs authored by the current user (used by poller).

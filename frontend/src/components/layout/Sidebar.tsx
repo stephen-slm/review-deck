@@ -1,28 +1,29 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { NavLink } from "react-router-dom";
 import {
-  LayoutDashboard,
   GitPullRequest,
   Eye,
-  CheckCircle,
   AlertTriangle,
   Settings,
+  ChevronDown,
+  Plus,
+  FolderGit2,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { usePRStore } from "@/stores/prStore";
-import { useFlagStore } from "@/stores/flagStore";
+import { useRepoStore } from "@/stores/repoStore";
+import { useVimStore } from "@/stores/vimStore";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
-  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged";
+  icon: typeof GitPullRequest;
+  badgeKey?: "myPRs" | "reviewRequests";
 }
 
 const navItems: NavItem[] = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/my-prs", label: "My PRs", icon: GitPullRequest, badgeKey: "myPRs" },
   {
     to: "/review-requests",
@@ -30,58 +31,105 @@ const navItems: NavItem[] = [
     icon: Eye,
     badgeKey: "reviewRequests",
   },
-  {
-    to: "/reviewed",
-    label: "Reviewed by Me",
-    icon: CheckCircle,
-    badgeKey: "reviewedByMe",
-  },
-  {
-    to: "/flagged",
-    label: "Flagged",
-    icon: AlertTriangle,
-    badgeKey: "flagged",
-  },
+  { to: "/flagged", label: "Flagged", icon: AlertTriangle },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const pages = usePRStore((s) => s.pages);
-  const isFlagged = useFlagStore((s) => s.isFlagged);
-  // Subscribe to rules so we re-render when flag rules change.
-  const flagRules = useFlagStore((s) => s.rules);
-
-  // Compute flagged count: merge review requests + reviewed by me, deduplicate,
-  // and count those matching any enabled flag rule.
-  const flaggedCount = useMemo(() => {
-    try {
-      const seen = new Set<string>();
-      let count = 0;
-      const allItems = [...pages.reviewRequests.items, ...pages.reviewedByMe.items];
-      for (const pr of allItems) {
-        if (!pr?.nodeId) continue;
-        if (seen.has(pr.nodeId)) continue;
-        seen.add(pr.nodeId);
-        if (isFlagged(pr)) count++;
-      }
-      return count;
-    } catch {
-      return 0;
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages.reviewRequests.items, pages.reviewedByMe.items, flagRules]);
+  const { repos, selectedRepoId, selectedRepo, selectRepo, addRepo, loadRepos, loadSelectedRepo } = useRepoStore();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [highlightedIdx, setHighlightedIdx] = useState(-1);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const badgeCounts: Record<string, number> = {
     myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
     reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
-    reviewedByMe: pages.reviewedByMe.totalCount || pages.reviewedByMe.items.length,
-    flagged: flaggedCount,
   };
 
   useEffect(() => {
     checkAuth();
-  }, [checkAuth]);
+    loadRepos().then(() => loadSelectedRepo());
+  }, [checkAuth, loadRepos, loadSelectedRepo]);
+
+  // Reset highlight when dropdown opens/closes.
+  useEffect(() => {
+    if (dropdownOpen) {
+      // Start with the currently selected repo highlighted.
+      const idx = repos.findIndex((r) => r.id === selectedRepoId);
+      setHighlightedIdx(idx >= 0 ? idx : 0);
+    } else {
+      setHighlightedIdx(-1);
+    }
+  }, [dropdownOpen, repos, selectedRepoId]);
+
+  // Auto-scroll highlighted item into view.
+  useEffect(() => {
+    if (highlightedIdx >= 0 && itemRefs.current[highlightedIdx]) {
+      itemRefs.current[highlightedIdx]?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightedIdx]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [dropdownOpen]);
+
+  // Register vim Escape override when dropdown is open.
+  useEffect(() => {
+    if (dropdownOpen) {
+      useVimStore.setState({ onEscape: () => setDropdownOpen(false) });
+      return () => useVimStore.setState({ onEscape: null });
+    }
+  }, [dropdownOpen]);
+
+  // Vim-style keyboard navigation when dropdown is open (j/k/Enter).
+  // Uses keydown on window so it works even when no input is focused.
+  useEffect(() => {
+    if (!dropdownOpen || repos.length === 0) return;
+    const handler = (e: KeyboardEvent) => {
+      // Don't interfere with text inputs.
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setHighlightedIdx((i) => Math.min(i + 1, repos.length - 1));
+      } else if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setHighlightedIdx((i) => Math.max(i - 1, 0));
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (highlightedIdx >= 0 && highlightedIdx < repos.length) {
+          selectRepo(repos[highlightedIdx].id);
+          setDropdownOpen(false);
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [dropdownOpen, repos, highlightedIdx, selectRepo]);
+
+  // Listen for global toggle event (Cmd+0 keybinding).
+  useEffect(() => {
+    const handler = () => setDropdownOpen((o) => !o);
+    window.addEventListener("repo-selector:toggle", handler);
+    return () => window.removeEventListener("repo-selector:toggle", handler);
+  }, []);
+
+  const handleAddRepo = useCallback(async () => {
+    setDropdownOpen(false);
+    await addRepo();
+  }, [addRepo]);
 
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-card">
@@ -93,6 +141,60 @@ export function Sidebar() {
       >
         <h1 className="text-lg font-semibold text-foreground">Review Deck</h1>
       </div>
+
+      {/* Repo switcher */}
+      <div className="border-b border-border p-2" ref={dropdownRef}>
+        <button
+          onClick={() => setDropdownOpen((o) => !o)}
+          className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+        >
+          <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <span className="flex-1 truncate text-left">
+            {selectedRepo
+              ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
+              : repos.length > 0
+                ? "Select a repo"
+                : "No repos added"}
+          </span>
+          <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", dropdownOpen && "rotate-180")} />
+        </button>
+
+        {dropdownOpen && (
+          <div className="mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md">
+            {repos.map((repo, i) => (
+              <button
+                key={repo.id}
+                ref={(el) => { itemRefs.current[i] = el; }}
+                onClick={() => {
+                  selectRepo(repo.id);
+                  setDropdownOpen(false);
+                }}
+                onMouseEnter={() => setHighlightedIdx(i)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  repo.id === selectedRepoId && i !== highlightedIdx && "bg-accent/50 text-accent-foreground",
+                  i === highlightedIdx && "bg-accent text-accent-foreground",
+                )}
+              >
+                <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {repo.repoOwner}/{repo.repoName}
+                  </p>
+                </div>
+              </button>
+            ))}
+            <button
+              onClick={handleAddRepo}
+              className="flex w-full items-center gap-2 border-t border-border px-3 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add repository...
+            </button>
+          </div>
+        )}
+      </div>
+
       <nav className="flex-1 space-y-1 p-1.5">
         {navItems.map((item, idx) => {
           const count = item.badgeKey ? badgeCounts[item.badgeKey] : 0;
@@ -117,9 +219,7 @@ export function Sidebar() {
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                     item.badgeKey === "reviewRequests"
                       ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                      : item.badgeKey === "flagged"
-                        ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
-                        : "bg-secondary text-secondary-foreground"
+                      : "bg-secondary text-secondary-foreground"
                   )}
                 >
                   {count}

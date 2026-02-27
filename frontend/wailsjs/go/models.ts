@@ -499,6 +499,64 @@ export namespace github {
 
 }
 
+export namespace gitutil {
+	
+	export class RepoInfo {
+	    owner: string;
+	    repo: string;
+	    remoteURL: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RepoInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.owner = source["owner"];
+	        this.repo = source["repo"];
+	        this.remoteURL = source["remoteURL"];
+	    }
+	}
+
+}
+
+export namespace services {
+	
+	export class AIReviewResult {
+	    review: string;
+	    cost: number;
+	    duration: number;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AIReviewResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.review = source["review"];
+	        this.cost = source["cost"];
+	        this.duration = source["duration"];
+	        this.created_at = source["created_at"];
+	    }
+	}
+	export class ToolAvailability {
+	    gh: boolean;
+	    claude: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ToolAvailability(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.gh = source["gh"];
+	        this.claude = source["claude"];
+	    }
+	}
+
+}
+
 export namespace storage {
 	
 	export class MetricsSnapshot {
@@ -578,6 +636,49 @@ export namespace storage {
 	        this.name = source["name"];
 	        this.type = source["type"];
 	        this.priority = source["priority"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TrackedRepo {
+	    id: number;
+	    localPath: string;
+	    repoOwner: string;
+	    repoName: string;
+	    remoteURL: string;
+	    enabled: boolean;
+	    // Go type: time
+	    createdAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrackedRepo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.localPath = source["localPath"];
+	        this.repoOwner = source["repoOwner"];
+	        this.repoName = source["repoName"];
+	        this.remoteURL = source["remoteURL"];
+	        this.enabled = source["enabled"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -25,12 +25,16 @@ import {
   ThumbsUp,
   ChevronDown,
   ChevronRight,
+  Terminal,
+  Download,
+  Sparkles,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
-import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartClaudeReview, CancelClaudeReview, GetCurrentBranch, GetAIReview } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
@@ -98,10 +102,12 @@ import { useAuthStore } from "@/stores/authStore";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useFlagStore } from "@/stores/flagStore";
-import { github } from "../../wailsjs/go/models";
+import { useRepoStore } from "@/stores/repoStore";
+import { useToast } from "@/components/ui/Toast";
+import { github, services } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
-type DetailTab = "description" | "checks" | "comments" | "files";
+type DetailTab = "description" | "checks" | "comments" | "files" | "ai-review";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
@@ -176,6 +182,119 @@ export function PRDetailPage() {
   const [filesError, setFilesError] = useState<string | null>(null);
   // Expanded files state — lifted here so it persists across tab switches and auto-refreshes.
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+
+  // Workspace: tool availability, checkout state, current branch, Claude review
+  const { addToast } = useToast();
+  const repos = useRepoStore((s) => s.repos);
+  const [toolAvailability, setToolAvailability] = useState<services.ToolAvailability | null>(null);
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [currentBranch, setCurrentBranch] = useState<string | null>(null);
+
+  // Claude review state
+  const [claudeReviewing, setClaudeReviewing] = useState(false);
+  const [claudeResult, setClaudeResult] = useState<{ result: string; cost: number; duration: number; createdAt: string } | null>(null);
+  const [claudeError, setClaudeError] = useState<string | null>(null);
+
+  // Check if this PR's repo is tracked locally
+  const trackedRepo = useMemo(() => {
+    if (!pr) return undefined;
+    return repos.find((r) => r.repoOwner === pr.repoOwner && r.repoName === pr.repoName);
+  }, [repos, pr]);
+  const hasLocalPath = !!trackedRepo?.localPath;
+
+  // Check tool availability on mount
+  useEffect(() => {
+    CheckToolAvailability().then(setToolAvailability).catch(() => {});
+  }, []);
+
+  // Fetch current branch when PR loads (for checkout button label)
+  useEffect(() => {
+    if (!pr || !hasLocalPath) return;
+    GetCurrentBranch(pr.repoOwner, pr.repoName).then(setCurrentBranch).catch(() => {});
+  }, [pr?.repoOwner, pr?.repoName, hasLocalPath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load cached AI review on mount
+  useEffect(() => {
+    if (!pr?.nodeId) return;
+    GetAIReview(pr.nodeId).then((cached) => {
+      if (cached && cached.review) {
+        setClaudeResult({
+          result: cached.review,
+          cost: cached.cost ?? 0,
+          duration: cached.duration ?? 0,
+          createdAt: cached.created_at ?? "",
+        });
+      }
+    }).catch(() => {});
+  }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for Claude review events
+  useEffect(() => {
+    const offStarted = EventsOn("claude:started", () => {
+      setClaudeReviewing(true);
+      setClaudeResult(null);
+      setClaudeError(null);
+    });
+    const offResult = EventsOn("claude:result", (data: { review: string; cost: number; duration: number; created_at: string }) => {
+      setClaudeReviewing(false);
+      setClaudeResult({
+        result: data.review,
+        cost: data.cost ?? 0,
+        duration: (data.duration ?? 0) / 1000,
+        createdAt: data.created_at ?? "",
+      });
+    });
+    const offError = EventsOn("claude:error", (data: { error: string }) => {
+      setClaudeReviewing(false);
+      setClaudeError(data.error);
+    });
+    return () => {
+      offStarted();
+      offResult();
+      offError();
+    };
+  }, []);
+
+  const handleCheckout = useCallback(async () => {
+    if (!pr || checkingOut) return;
+    setCheckingOut(true);
+    try {
+      await CheckoutPR(pr.repoOwner, pr.repoName, pr.number);
+      setCurrentBranch(pr.headRef);
+      addToast(`Checked out ${pr.headRef}`, "success");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setCheckingOut(false);
+    }
+  }, [pr, checkingOut, addToast]);
+
+  const handleOpenTerminal = useCallback(async () => {
+    if (!pr) return;
+    try {
+      await OpenTerminalInRepo(pr.repoOwner, pr.repoName);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, addToast]);
+
+  const handleStartClaudeReview = useCallback(async () => {
+    if (!pr || claudeReviewing) return;
+    try {
+      await StartClaudeReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, claudeReviewing, addToast]);
+
+  const handleCancelClaudeReview = useCallback(async () => {
+    try {
+      await CancelClaudeReview();
+      setClaudeReviewing(false);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast]);
 
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
@@ -294,7 +413,7 @@ export function PRDetailPage() {
   // Register VIM actions for the detail page.
   // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
   useEffect(() => {
-    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files"];
+    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "ai-review"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -347,6 +466,11 @@ export function PRDetailPage() {
     } else if (activeTab === "files") {
       actions.onSpace = () => fileToggleRef.current?.();
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+    } else if (activeTab === "ai-review") {
+      const scrollEl = document.getElementById("scroll-region");
+      actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
+      actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
     }
 
     useVimStore.getState().registerActions(actions);
@@ -378,6 +502,7 @@ export function PRDetailPage() {
     { key: "checks", label: "Checks", icon: <Activity className="h-4 w-4" /> },
     { key: "comments", label: "Comments", icon: <MessageSquare className="h-4 w-4" /> },
     { key: "files", label: "Files", icon: <FileCode className="h-4 w-4" /> },
+    { key: "ai-review", label: "AI Review", icon: <Sparkles className="h-4 w-4" /> },
   ];
 
   return (
@@ -620,6 +745,18 @@ export function PRDetailPage() {
               onExpandedFilesChange={setExpandedFiles}
             />
           )}
+
+          {activeTab === "ai-review" && (
+            <ClaudeReviewPanel
+              reviewing={claudeReviewing}
+              result={claudeResult}
+              error={claudeError}
+              hasLocalPath={hasLocalPath}
+              hasTools={!!toolAvailability?.gh && !!toolAvailability?.claude}
+              onStart={handleStartClaudeReview}
+              onCancel={handleCancelClaudeReview}
+            />
+          )}
         </div>
 
         {/* Sidebar — sticky so it stays visible while scrolling main content */}
@@ -650,7 +787,53 @@ export function PRDetailPage() {
                 <ExternalLink className="h-4 w-4" />
                 Open in GitHub
               </button>
-              <OpenInGoLandButton org={pr.repoOwner} repo={pr.repoName} />
+              {/* Workspace actions — only available when repo has a local path */}
+              {hasLocalPath && (
+                <>
+                  <button
+                    onClick={handleCheckout}
+                    disabled={checkingOut || !toolAvailability?.gh}
+                    title={
+                      !toolAvailability?.gh
+                        ? "gh CLI not installed"
+                        : checkingOut
+                          ? "Checking out..."
+                          : currentBranch === pr.headRef
+                            ? `Already on ${pr.headRef}`
+                            : `Checkout ${pr.headRef}`
+                    }
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Download className={`h-4 w-4 ${checkingOut ? "animate-pulse" : ""}`} />
+                    {checkingOut ? "Checking out..." : currentBranch === pr.headRef ? `On ${pr.headRef}` : "Checkout"}
+                  </button>
+                  <button
+                    onClick={handleOpenTerminal}
+                    title="Open terminal at repo root"
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <Terminal className="h-4 w-4" />
+                    Open Terminal
+                  </button>
+                  <button
+                    onClick={() => { handleStartClaudeReview(); setActiveTab("ai-review"); }}
+                    disabled={claudeReviewing || !toolAvailability?.claude || !toolAvailability?.gh}
+                    title={
+                      !toolAvailability?.gh
+                        ? "gh CLI not installed"
+                        : !toolAvailability?.claude
+                          ? "Claude CLI not installed"
+                          : claudeReviewing
+                            ? "Review in progress..."
+                            : "Start AI code review"
+                    }
+                    className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-purple-500 bg-transparent px-3 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
+                  >
+                    <Sparkles className={`h-4 w-4 ${claudeReviewing ? "animate-pulse" : ""}`} />
+                    {claudeReviewing ? "Reviewing..." : "Claude Review"}
+                  </button>
+                </>
+              )}
             </div>
           </SidebarSection>
 
@@ -1560,6 +1743,159 @@ function CommentCard({
   );
 }
 
+// ---- Claude Review Panel ----
+
+function ClaudeReviewPanel({
+  reviewing,
+  result,
+  error,
+  hasLocalPath,
+  hasTools,
+  onStart,
+  onCancel,
+}: {
+  reviewing: boolean;
+  result: { result: string; cost: number; duration: number } | null;
+  error: string | null;
+  hasLocalPath: boolean;
+  hasTools: boolean;
+  onStart: () => void;
+  onCancel: () => void;
+}) {
+  if (!hasLocalPath) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
+        <Sparkles className="h-8 w-8 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          This repository does not have a local path configured.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Add the local clone path in Settings to enable AI reviews.
+        </p>
+      </div>
+    );
+  }
+
+  if (!hasTools) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
+        <Sparkles className="h-8 w-8 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">
+          Claude CLI or gh CLI is not installed.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Both <code className="rounded bg-muted px-1 py-0.5 text-xs">gh</code> and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">claude</code> must be installed and on PATH.
+        </p>
+      </div>
+    );
+  }
+
+  // Idle state — no review has been requested yet
+  if (!reviewing && !result && !error) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border py-12">
+        <Sparkles className="h-10 w-10 text-purple-500/60" />
+        <div className="text-center">
+          <p className="text-sm font-medium text-foreground">AI Code Review</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Run a Claude-powered review of this pull request's diff.
+          </p>
+        </div>
+        <button
+          onClick={onStart}
+          className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+        >
+          <Sparkles className="h-4 w-4" />
+          Start Review
+        </button>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (reviewing) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-border bg-card py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+        <div className="text-center">
+          <p className="text-sm font-medium text-foreground">Reviewing...</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Claude is analyzing the PR diff. This may take a few minutes.
+          </p>
+        </div>
+        <button
+          onClick={onCancel}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <XCircle className="h-4 w-4" />
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+          Review failed: {error}
+        </div>
+        <button
+          onClick={onStart}
+          className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
+        >
+          <Sparkles className="h-4 w-4" />
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  // Result state
+  if (result) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-purple-500" />
+            <h3 className="text-sm font-semibold text-foreground">AI Review</h3>
+          </div>
+          <div className="flex items-center gap-3">
+            {result.cost > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ${result.cost.toFixed(4)}
+              </span>
+            )}
+            {result.duration > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {result.duration < 60
+                  ? `${Math.round(result.duration)}s`
+                  : `${Math.floor(result.duration / 60)}m ${Math.round(result.duration % 60)}s`}
+              </span>
+            )}
+            <button
+              onClick={onStart}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Re-run
+            </button>
+          </div>
+        </div>
+        <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-4 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
+            {result.result}
+          </ReactMarkdown>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 // ---- Helper components ----
 
 function SidebarSection({
@@ -1766,33 +2102,4 @@ function ReviewersSidebar({
   );
 }
 
-/** "Open in GoLand" button — only rendered when a source base path is configured. */
-function OpenInGoLandButton({ org, repo, filePath, line }: { org: string; repo: string; filePath?: string; line?: number }) {
-  const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
 
-  if (!sourceBasePath) return null;
-
-  const handleClick = () => {
-    // jetbrains://goland/navigate/reference?project=<repo>&path=<filePath>&line=<line>
-    const project = repo;
-    let url = `jetbrains://goland/navigate/reference?project=${encodeURIComponent(project)}`;
-    if (filePath) {
-      url += `&path=${encodeURIComponent(filePath)}`;
-      if (line && line > 0) {
-        url += `&line=${encodeURIComponent(String(line))}`;
-      }
-    }
-    BrowserOpenURL(url);
-  };
-
-  return (
-    <button
-      onClick={handleClick}
-      className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      title={filePath ? `Open ${filePath} in GoLand` : `Open ${org}/${repo} in GoLand`}
-    >
-      <FileCode className="h-4 w-4" />
-      Open in GoLand
-    </button>
-  );
-}

@@ -1,28 +1,27 @@
 import { useState, useEffect, useCallback } from "react";
 import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { useRepoStore } from "@/stores/repoStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
-import { RefreshCw, AlertCircle } from "lucide-react";
-import { GetMyPRsPage, GetMyRecentMergedPage } from "../../wailsjs/go/services/PullRequestService";
+import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
+import {
+  GetMyPRsForRepoPage,
+  GetMyRecentMergedForRepoPage,
+} from "../../wailsjs/go/services/PullRequestService";
 
 type Tab = "open" | "merged";
 
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
-  const { orgs, loadOrgs } = useSettingsStore();
+  const selectedRepo = useRepoStore((s) => s.selectedRepo);
+
   const {
     pages,
     isLoading,
     lastFetchedAt,
     error,
-    fetchMyPRs,
-    fetchMyRecentMerged,
-    goToPageMyPRs,
-    goToPageMyRecentMerged,
     setPageSize,
-    fetchIfStale,
     clearError,
     appendNextPage,
   } = usePRStore();
@@ -35,99 +34,220 @@ export function MyPRsPage() {
   const loadingMerged = isLoading.myRecentMerged;
   const loading = activeTab === "open" ? loadingOpen : loadingMerged;
 
+  const owner = selectedRepo?.repoOwner ?? "";
+  const repo = selectedRepo?.repoName ?? "";
+
+  // --- Fetch helpers that use the repo-scoped endpoints ---
+
+  const fetchOpenPage = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (!owner || !repo) return;
+      const page = await GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
+      const prs = page.pullRequests || [];
+      const info = page.pageInfo;
+      const now = Date.now();
+      usePRStore.setState((s) => ({
+        pages: {
+          ...s.pages,
+          myPRs: {
+            ...s.pages.myPRs,
+            items: prs,
+            currentPage: 1,
+            hasNextPage: info.hasNextPage,
+            endCursor: info.endCursor,
+            totalCount: info.totalCount,
+            cursorStack: [""],
+            pageCache: {
+              1: { items: prs, pageInfo: info, fetchedAt: now },
+            },
+          },
+        },
+        isLoading: { ...s.isLoading, myPRs: false },
+        lastFetchedAt: { ...s.lastFetchedAt, myPRs: now },
+      }));
+    },
+    [owner, repo],
+  );
+
+  const fetchMergedPage = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (!owner || !repo) return;
+      const page = await GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
+      const prs = page.pullRequests || [];
+      const info = page.pageInfo;
+      const now = Date.now();
+      usePRStore.setState((s) => ({
+        pages: {
+          ...s.pages,
+          myRecentMerged: {
+            ...s.pages.myRecentMerged,
+            items: prs,
+            currentPage: 1,
+            hasNextPage: info.hasNextPage,
+            endCursor: info.endCursor,
+            totalCount: info.totalCount,
+            cursorStack: [""],
+            pageCache: {
+              1: { items: prs, pageInfo: info, fetchedAt: now },
+            },
+          },
+        },
+        isLoading: { ...s.isLoading, myRecentMerged: false },
+        lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: now },
+      }));
+    },
+    [owner, repo],
+  );
+
   const forceRefresh = useCallback(() => {
+    if (!owner || !repo) return;
     clearError();
-    for (const org of orgs) {
-      if (activeTab === "open") {
-        fetchMyPRs(org);
-      } else {
-        fetchMyRecentMerged(org);
-      }
+    const ps = usePRStore.getState().pages;
+    if (activeTab === "open") {
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
+      fetchOpenPage(ps.myPRs.pageSize, "").catch(() =>
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } })),
+      );
+    } else {
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
+      fetchMergedPage(ps.myRecentMerged.pageSize, "").catch(() =>
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
+      );
     }
-  }, [orgs, activeTab, fetchMyPRs, fetchMyRecentMerged, clearError]);
+  }, [owner, repo, activeTab, fetchOpenPage, fetchMergedPage, clearError]);
 
   // Open tab pagination
   const handlePageChangeOpen = useCallback(
     (direction: PageDirection) => {
-      for (const org of orgs) {
-        goToPageMyPRs(org, direction);
-      }
+      if (!owner || !repo) return;
+      const pg = usePRStore.getState().pages.myPRs;
+      const nav = resolveNav(pg, direction);
+      if (!nav) return;
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
+      GetMyPRsForRepoPage(owner, repo, pg.pageSize, nav.cursor)
+        .then((page) => {
+          const prs = page.pullRequests || [];
+          usePRStore.setState((s) => ({
+            pages: {
+              ...s.pages,
+              myPRs: {
+                ...s.pages.myPRs,
+                items: prs,
+                currentPage: nav.newPage,
+                cursorStack: nav.newStack,
+                hasNextPage: page.pageInfo.hasNextPage,
+                endCursor: page.pageInfo.endCursor,
+                totalCount: page.pageInfo.totalCount,
+                pageCache: {
+                  ...s.pages.myPRs.pageCache,
+                  [nav.newPage]: { items: prs, pageInfo: page.pageInfo, fetchedAt: Date.now() },
+                },
+              },
+            },
+            isLoading: { ...s.isLoading, myPRs: false },
+          }));
+        })
+        .catch(() =>
+          usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } })),
+        );
     },
-    [orgs, goToPageMyPRs],
+    [owner, repo],
   );
 
   const handlePageSizeChangeOpen = useCallback(
     (size: number) => {
       setPageSize("myPRs", size, () => {
-        for (const org of orgs) {
-          return fetchMyPRs(org);
-        }
-        return Promise.resolve();
+        if (!owner || !repo) return Promise.resolve();
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
+        return fetchOpenPage(size, "");
       });
     },
-    [orgs, fetchMyPRs, setPageSize],
+    [owner, repo, fetchOpenPage, setPageSize],
   );
 
   // Merged tab pagination
   const handlePageChangeMerged = useCallback(
     (direction: PageDirection) => {
-      for (const org of orgs) {
-        goToPageMyRecentMerged(org, direction);
-      }
+      if (!owner || !repo) return;
+      const pg = usePRStore.getState().pages.myRecentMerged;
+      const nav = resolveNav(pg, direction);
+      if (!nav) return;
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
+      GetMyRecentMergedForRepoPage(owner, repo, 14, pg.pageSize, nav.cursor)
+        .then((page) => {
+          const prs = page.pullRequests || [];
+          usePRStore.setState((s) => ({
+            pages: {
+              ...s.pages,
+              myRecentMerged: {
+                ...s.pages.myRecentMerged,
+                items: prs,
+                currentPage: nav.newPage,
+                cursorStack: nav.newStack,
+                hasNextPage: page.pageInfo.hasNextPage,
+                endCursor: page.pageInfo.endCursor,
+                totalCount: page.pageInfo.totalCount,
+                pageCache: {
+                  ...s.pages.myRecentMerged.pageCache,
+                  [nav.newPage]: { items: prs, pageInfo: page.pageInfo, fetchedAt: Date.now() },
+                },
+              },
+            },
+            isLoading: { ...s.isLoading, myRecentMerged: false },
+          }));
+        })
+        .catch(() =>
+          usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
+        );
     },
-    [orgs, goToPageMyRecentMerged],
+    [owner, repo],
   );
 
   const handlePageSizeChangeMerged = useCallback(
     (size: number) => {
       setPageSize("myRecentMerged", size, () => {
-        for (const org of orgs) {
-          return fetchMyRecentMerged(org);
-        }
-        return Promise.resolve();
+        if (!owner || !repo) return Promise.resolve();
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
+        return fetchMergedPage(size, "");
       });
     },
-    [orgs, fetchMyRecentMerged, setPageSize],
+    [owner, repo, fetchMergedPage, setPageSize],
   );
 
   const handleFetchMoreOpen = useCallback(() => {
-    const org = orgs[0];
-    if (!org) return;
+    if (!owner || !repo) return;
     appendNextPage("myPRs", (pageSize, cursor) =>
-      GetMyPRsPage(org, pageSize, cursor),
+      GetMyPRsForRepoPage(owner, repo, pageSize, cursor),
     );
-  }, [orgs, appendNextPage]);
+  }, [owner, repo, appendNextPage]);
 
   const handleFetchMoreMerged = useCallback(() => {
-    const org = orgs[0];
-    if (!org) return;
+    if (!owner || !repo) return;
     appendNextPage("myRecentMerged", (pageSize, cursor) =>
-      GetMyRecentMergedPage(org, 14, pageSize, cursor),
+      GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor),
     );
-  }, [orgs, appendNextPage]);
+  }, [owner, repo, appendNextPage]);
 
   const handleTabDirect = useCallback((index: number) => {
     const tabs: Tab[] = ["open", "merged"];
     if (index >= 0 && index < tabs.length) setActiveTab(tabs[index]);
   }, []);
 
+  // Fetch data when repo changes or tab switches
   useEffect(() => {
-    loadOrgs();
-  }, [loadOrgs]);
-
-  // Only fetch the active tab's data; merged tab is lazy-loaded on first switch.
-  useEffect(() => {
-    if (!isAuthenticated || orgs.length === 0) return;
+    if (!isAuthenticated || !owner || !repo) return;
     if (activeTab === "open") {
-      for (const org of orgs) {
-        fetchIfStale("myPRs", () => fetchMyPRs(org));
-      }
+      usePRStore.getState().fetchIfStale("myPRs", async () => {
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
+        await fetchOpenPage(usePRStore.getState().pages.myPRs.pageSize, "");
+      });
     } else {
-      for (const org of orgs) {
-        fetchIfStale("myRecentMerged", () => fetchMyRecentMerged(org));
-      }
+      usePRStore.getState().fetchIfStale("myRecentMerged", async () => {
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
+        await fetchMergedPage(usePRStore.getState().pages.myRecentMerged.pageSize, "");
+      });
     }
-  }, [isAuthenticated, orgs, activeTab, fetchMyPRs, fetchMyRecentMerged, fetchIfStale]);
+  }, [isAuthenticated, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
 
   if (!isAuthenticated) {
     return (
@@ -142,13 +262,13 @@ export function MyPRsPage() {
     );
   }
 
-  if (orgs.length === 0) {
+  if (!selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <AlertCircle className="mx-auto h-10 w-10 text-muted-foreground" />
+          <FolderGit2 className="mx-auto h-10 w-10 text-muted-foreground" />
           <p className="mt-3 text-sm text-muted-foreground">
-            Add a GitHub organization in Settings to start tracking pull requests.
+            Select a repository from the sidebar to view pull requests.
           </p>
         </div>
       </div>
@@ -161,7 +281,8 @@ export function MyPRsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">My Pull Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pull requests you have authored.
+            Pull requests you have authored in{" "}
+            <span className="font-medium text-foreground">{owner}/{repo}</span>.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -251,4 +372,28 @@ export function MyPRsPage() {
       )}
     </div>
   );
+}
+
+// Minimal page navigation resolver (same logic as prStore's internal resolveNavigation).
+import type { PaginationState } from "@/stores/prStore";
+
+function resolveNav(
+  pg: PaginationState,
+  direction: PageDirection,
+): { cursor: string; newPage: number; newStack: string[] } | null {
+  switch (direction) {
+    case "first":
+      return { cursor: "", newPage: 1, newStack: [""] };
+    case "next": {
+      if (!pg.hasNextPage) return null;
+      const newStack = [...pg.cursorStack, pg.endCursor];
+      return { cursor: pg.endCursor, newPage: pg.currentPage + 1, newStack };
+    }
+    case "prev": {
+      if (pg.currentPage <= 1) return null;
+      const newStack = pg.cursorStack.slice(0, -1);
+      const cursor = newStack[newStack.length - 1] ?? "";
+      return { cursor, newPage: pg.currentPage - 1, newStack };
+    }
+  }
 }

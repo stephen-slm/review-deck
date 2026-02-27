@@ -28,6 +28,21 @@ func (c *Client) GetViewer(ctx context.Context) (*ViewerInfo, error) {
 	}, nil
 }
 
+// RepoExists checks whether a GitHub repository exists and is accessible
+// with the current token. Returns nil on success or an error if not found.
+func (c *Client) RepoExists(ctx context.Context, owner, name string) error {
+	var query struct {
+		Repository struct {
+			Name string
+		} `graphql:"repository(owner: $owner, name: $name)"`
+	}
+	variables := map[string]interface{}{
+		"owner": githubv4.String(owner),
+		"name":  githubv4.String(name),
+	}
+	return c.graphql.Query(ctx, &query, variables)
+}
+
 // SearchOrgMembers returns org members whose login matches a prefix query.
 func (c *Client) SearchOrgMembers(ctx context.Context, org string, query string) ([]User, error) {
 	// GitHub GraphQL doesn't have a direct org member search, so we use the

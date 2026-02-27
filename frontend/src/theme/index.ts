@@ -1,21 +1,15 @@
 import { lightTheme } from "./light";
-import { nordTheme } from "./nord";
-import { opencodeThemes } from "./opencode";
+import { darkTheme } from "./dark";
 import { ThemeChoice, ThemeDefinition, ThemeName, ThemeTokens } from "./tokens";
 
 // ---------------------------------------------------------------------------
-// Theme registry — 2 built-in + 28 OpenCode = 30 concrete themes
+// Theme registry — 2 built-in themes: light and dark
 // ---------------------------------------------------------------------------
 
-const themes: Record<ThemeName, ThemeDefinition> = {
+const themes: Record<string, ThemeDefinition> = {
   light: lightTheme,
-  nord: nordTheme,
+  dark: darkTheme,
 };
-
-// Register all OpenCode themes dynamically.
-for (const t of opencodeThemes) {
-  themes[t.name] = t;
-}
 
 // ---------------------------------------------------------------------------
 // Exports

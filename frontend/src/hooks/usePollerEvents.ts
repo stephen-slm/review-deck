@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { EventsOn, EventsOff } from "../../wailsjs/runtime/runtime";
 import { SetSetting } from "../../wailsjs/go/services/SettingsService";
 import { usePRStore } from "@/stores/prStore";
+import { useRepoStore } from "@/stores/repoStore";
 import { github } from "../../wailsjs/go/models";
 import { useToast } from "@/components/ui/Toast";
 
@@ -99,6 +100,17 @@ export function usePollerEvents() {
         return;
       }
 
+      // The poller fetches data for ALL tracked repos, but the frontend is
+      // repo-scoped. Filter to only keep PRs matching the currently selected
+      // repo so we don't overwrite the view with data from other repos.
+      const selected = useRepoStore.getState().selectedRepo;
+      const filterForRepo = (prs: github.PullRequest[]): github.PullRequest[] => {
+        if (!selected) return prs;
+        return prs.filter(
+          (pr) => pr.repoOwner === selected.repoOwner && pr.repoName === selected.repoName,
+        );
+      };
+
       const now = Date.now();
       const nowStr = String(now);
 
@@ -107,7 +119,7 @@ export function usePollerEvents() {
       // Also update lastFetchedAt and persist timestamps so cache freshness
       // survives app restarts.
       if (result.myPRs) {
-        const prs = result.myPRs as github.PullRequest[];
+        const prs = filterForRepo(result.myPRs as github.PullRequest[]);
         usePRStore.setState((s) => ({
           pages: { ...s.pages, myPRs: pollerPage(s.pages.myPRs, prs) },
           lastFetchedAt: { ...s.lastFetchedAt, myPRs: now },
@@ -115,7 +127,7 @@ export function usePollerEvents() {
         SetSetting("cache_ts:myPRs", nowStr).catch(() => {});
       }
       if (result.reviewRequests) {
-        const prs = result.reviewRequests as github.PullRequest[];
+        const prs = filterForRepo(result.reviewRequests as github.PullRequest[]);
         usePRStore.setState((s) => ({
           pages: { ...s.pages, reviewRequests: pollerPage(s.pages.reviewRequests, prs) },
           lastFetchedAt: { ...s.lastFetchedAt, reviewRequests: now },
@@ -123,7 +135,7 @@ export function usePollerEvents() {
         SetSetting("cache_ts:reviewRequests", nowStr).catch(() => {});
       }
       if (result.reviewedByMe) {
-        const prs = result.reviewedByMe as github.PullRequest[];
+        const prs = filterForRepo(result.reviewedByMe as github.PullRequest[]);
         usePRStore.setState((s) => ({
           pages: { ...s.pages, reviewedByMe: pollerPage(s.pages.reviewedByMe, prs) },
           lastFetchedAt: { ...s.lastFetchedAt, reviewedByMe: now },
@@ -131,7 +143,7 @@ export function usePollerEvents() {
         SetSetting("cache_ts:reviewedByMe", nowStr).catch(() => {});
       }
       if (result.teamReviewRequests) {
-        const prs = result.teamReviewRequests as github.PullRequest[];
+        const prs = filterForRepo(result.teamReviewRequests as github.PullRequest[]);
         usePRStore.setState((s) => ({
           pages: { ...s.pages, teamReviewRequests: pollerPage(s.pages.teamReviewRequests, prs) },
           lastFetchedAt: { ...s.lastFetchedAt, teamReviewRequests: now },
@@ -139,7 +151,7 @@ export function usePollerEvents() {
         SetSetting("cache_ts:teamReviewRequests", nowStr).catch(() => {});
       }
       if (result.recentMerged) {
-        const prs = result.recentMerged as github.PullRequest[];
+        const prs = filterForRepo(result.recentMerged as github.PullRequest[]);
         usePRStore.setState((s) => ({
           pages: { ...s.pages, myRecentMerged: pollerPage(s.pages.myRecentMerged, prs) },
           lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: now },

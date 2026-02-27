@@ -165,6 +165,37 @@ var migrations = []string{
 
 	// Migration 7: Add merge queue tracking to pull requests.
 	`ALTER TABLE pull_requests ADD COLUMN is_in_merge_queue INTEGER NOT NULL DEFAULT 0;`,
+
+	// Migration 8: Tracked repositories (local folder → GitHub repo).
+	`CREATE TABLE IF NOT EXISTS tracked_repos (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		local_path TEXT NOT NULL,
+		repo_owner TEXT NOT NULL,
+		repo_name  TEXT NOT NULL,
+		remote_url TEXT NOT NULL,
+		enabled    INTEGER NOT NULL DEFAULT 1,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(repo_owner, repo_name)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_tracked_repos_owner ON tracked_repos(repo_owner);`,
+
+	// Migration 9: AI review cache (Claude code review results, TTL 7 days).
+	`CREATE TABLE IF NOT EXISTS ai_reviews (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		pr_node_id   TEXT NOT NULL,
+		repo_owner   TEXT NOT NULL,
+		repo_name    TEXT NOT NULL,
+		pr_number    INTEGER NOT NULL,
+		review       TEXT NOT NULL,
+		cost         REAL NOT NULL DEFAULT 0,
+		duration_ms  INTEGER NOT NULL DEFAULT 0,
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(pr_node_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_ai_reviews_pr ON ai_reviews(pr_node_id);
+	CREATE INDEX IF NOT EXISTS idx_ai_reviews_repo ON ai_reviews(repo_owner, repo_name);`,
 }
 
 // Migrate runs all pending migrations.

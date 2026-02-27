@@ -368,6 +368,72 @@ func (c *Client) GetReviewedByUserPage(ctx context.Context, org, user string, si
 	return c.searchPRsPage(ctx, buildQuery(q, filterBots, excludedRepos), pageSize, cursor)
 }
 
+// ---- Repo-scoped fetch-all variants (used by poller) ----
+
+// GetMyOpenPRsForRepo returns ALL open PRs authored by the given user in a specific repo.
+func (c *Client) GetMyOpenPRsForRepo(ctx context.Context, owner, repo, user string, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr author:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo), filterBots, nil)
+	return c.searchAllPRs(ctx, query)
+}
+
+// GetMyRecentMergedPRsForRepo returns ALL recently merged PRs for a specific repo.
+func (c *Client) GetMyRecentMergedPRsForRepo(ctx context.Context, owner, repo, user string, since time.Time, filterBots bool) ([]PullRequest, error) {
+	query := buildQuery(fmt.Sprintf("is:pr author:%s is:merged merged:>=%s repo:%s/%s sort:updated-desc",
+		user, since.Format("2006-01-02"), owner, repo), filterBots, nil)
+	return c.searchAllPRs(ctx, query)
+}
+
+// GetReviewRequestsForRepo returns ALL open PRs requesting the user's review in a specific repo.
+func (c *Client) GetReviewRequestsForRepo(ctx context.Context, owner, repo, user string, since time.Time, filterBots bool) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr review-requested:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchAllPRs(ctx, buildQuery(q, filterBots, nil))
+}
+
+// GetReviewedByUserForRepo returns ALL open PRs reviewed by the user in a specific repo.
+func (c *Client) GetReviewedByUserForRepo(ctx context.Context, owner, repo, user string, since time.Time, filterBots bool) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr reviewed-by:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchAllPRs(ctx, buildQuery(q, filterBots, nil))
+}
+
+// ---- Repo-scoped paginated variants (used by frontend) ----
+
+// GetMyOpenPRsForRepoPage returns a single page of open PRs for a specific repo.
+func (c *Client) GetMyOpenPRsForRepoPage(ctx context.Context, owner, repo, user string, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := buildQuery(fmt.Sprintf("is:pr author:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo), filterBots, nil)
+	return c.searchPRsPage(ctx, q, pageSize, cursor)
+}
+
+// GetMyRecentMergedPRsForRepoPage returns a single page of merged PRs for a specific repo.
+func (c *Client) GetMyRecentMergedPRsForRepoPage(ctx context.Context, owner, repo, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := buildQuery(fmt.Sprintf("is:pr author:%s is:merged merged:>=%s repo:%s/%s sort:updated-desc",
+		user, since.Format("2006-01-02"), owner, repo), filterBots, nil)
+	return c.searchPRsPage(ctx, q, pageSize, cursor)
+}
+
+// GetReviewRequestsForRepoPage returns a single page of review requests for a specific repo.
+func (c *Client) GetReviewRequestsForRepoPage(ctx context.Context, owner, repo, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr review-requested:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, nil), pageSize, cursor)
+}
+
+// GetReviewedByUserForRepoPage returns a single page of PRs reviewed by the user for a specific repo.
+func (c *Client) GetReviewedByUserForRepoPage(ctx context.Context, owner, repo, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr reviewed-by:%s is:open repo:%s/%s sort:updated-desc", user, owner, repo)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, nil), pageSize, cursor)
+}
+
 // ---- On-demand detail queries (used by PRDetailPage) ----
 
 // checkRunsQuery fetches individual check runs for a PR by node ID.
