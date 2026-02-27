@@ -405,6 +405,9 @@ export function PRDetailPage() {
       useVimStore.getState().setListLength(ic + rt);
     } else if (activeTab === "files") {
       useVimStore.getState().setListLength(prFiles?.length ?? 0);
+    } else if (activeTab === "ai-review") {
+      // Length 1 so Enter (onOpen) fires at selectedIndex 0.
+      useVimStore.getState().setListLength(1);
     } else {
       useVimStore.getState().setListLength(0);
     }
@@ -471,6 +474,8 @@ export function PRDetailPage() {
       actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
       actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+      // Enter starts a review (idle), re-runs (result shown), or retries (error).
+      actions.onOpen = () => { if (!claudeReviewing) handleStartClaudeReview(); };
     }
 
     useVimStore.getState().registerActions(actions);

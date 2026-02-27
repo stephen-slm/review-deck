@@ -56,6 +56,41 @@ type AIReviewResult struct {
 	CreatedAt string  `json:"created_at"`
 }
 
+// extractClaudeError pulls a human-readable message from the Claude CLI's
+// error result string, which often embeds raw JSON API responses.
+// e.g. "Failed to authenticate. API Error: 401 {\"type\":\"error\",...}"
+// becomes "Failed to authenticate. OAuth token has expired. ..."
+func extractClaudeError(raw string) string {
+	// Try to find an embedded JSON object with a nested error.message.
+	if idx := strings.Index(raw, "{"); idx >= 0 {
+		prefix := strings.TrimSpace(raw[:idx])
+		// Remove "API Error: 401" etc from prefix.
+		if apiIdx := strings.Index(prefix, "API Error:"); apiIdx >= 0 {
+			prefix = strings.TrimSpace(prefix[:apiIdx])
+		}
+		var wrapper struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(raw[idx:]), &wrapper); err == nil && wrapper.Error.Message != "" {
+			if prefix != "" {
+				return prefix + " " + wrapper.Error.Message
+			}
+			return wrapper.Error.Message
+		}
+	}
+	// If we can't parse the embedded JSON, return the first sentence.
+	if dot := strings.Index(raw, ". "); dot >= 0 && dot < 200 {
+		return raw[:dot+1]
+	}
+	// Truncate very long messages.
+	if len(raw) > 200 {
+		return raw[:200] + "..."
+	}
+	return raw
+}
+
 // WorkspaceService provides local workspace actions: checkout, terminal, and
 // Claude Code review. It is bound to Wails and callable from the frontend.
 type WorkspaceService struct {
@@ -296,7 +331,7 @@ func (s *WorkspaceService) StartClaudeReview(repoOwner, repoName string, prNumbe
 		}
 
 		if result.IsError {
-			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": result.Result})
+			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": extractClaudeError(result.Result)})
 			return
 		}
 
