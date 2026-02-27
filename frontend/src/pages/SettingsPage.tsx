@@ -4,10 +4,10 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { useVimStore } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown, Sparkles } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown, Sparkles, FileText } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
-import { GetDefaultClaudePrompt } from "../../wailsjs/go/services/WorkspaceService";
+import { GetDefaultClaudePrompt, GetDefaultDescriptionPrompt } from "../../wailsjs/go/services/WorkspaceService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 
@@ -24,7 +24,7 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost } = useSettingsStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, setRepoAIAgent, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -69,7 +69,8 @@ export function SettingsPage() {
     loadFlagRules();
     loadAiReviewPrompt();
     loadAiMaxCost();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost]);
+    loadAiDescriptionPrompt();
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -1104,6 +1105,50 @@ export function SettingsPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </section>
+
+            {/* AI Description Prompt */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">PR Description Generation</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Configure the AI-powered PR description generator. This prompt instructs the AI how to
+                write PR descriptions from the diff.
+              </p>
+
+              <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-foreground">
+                    Description prompt
+                  </label>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const defaultPrompt = await GetDefaultDescriptionPrompt();
+                        setAiDescriptionPrompt(defaultPrompt);
+                      } catch {
+                        setAiDescriptionPrompt("");
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Reset to default
+                  </button>
+                </div>
+                <textarea
+                  value={aiDescriptionPrompt}
+                  onChange={(e) => setAiDescriptionPrompt(e.target.value)}
+                  placeholder="Leave empty to use the default prompt. The prompt instructs the AI how to write PR descriptions."
+                  rows={8}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to use the built-in default prompt. Changes apply to the next description generation.
+                </p>
               </div>
             </section>
           </>

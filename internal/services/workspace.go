@@ -31,6 +31,22 @@ const defaultReviewPrompt = `You are a senior code reviewer. Analyze this pull r
 
 Keep your response focused and under 500 words.`
 
+// defaultDescriptionPrompt is the system prompt for generating PR descriptions.
+const defaultDescriptionPrompt = `You are a senior software engineer writing a pull request description. Based on the diff provided, generate a clear and comprehensive PR description in GitHub-flavored Markdown.
+
+Structure your response as:
+
+## Summary
+A clear 1-3 sentence summary of what this PR does and why.
+
+## Changes
+- Bulleted list of the key changes made, grouped logically.
+
+## Testing
+- Brief notes on how the changes should be tested, or what was tested.
+
+Be concise but thorough. Focus on the "what" and "why", not line-by-line details. Output ONLY the markdown description — no preamble, no wrapping code fences.`
+
 // claudeResult is the JSON output from `claude -p --output-format json`.
 type claudeResult struct {
 	Type      string  `json:"type"`
@@ -95,6 +111,10 @@ type WorkspaceService struct {
 	// Guards the running review goroutine.
 	mu           sync.Mutex
 	cancelReview context.CancelFunc
+
+	// Guards the running description generation goroutine.
+	muDesc            sync.Mutex
+	cancelDescription context.CancelFunc
 }
 
 // NewWorkspaceService creates a new WorkspaceService.
@@ -430,4 +450,156 @@ func (s *WorkspaceService) CancelClaudeReview() {
 		s.cancelReview()
 		s.cancelReview = nil
 	}
+}
+
+// ---------- AI PR Description Generation ----------
+
+// GetDefaultDescriptionPrompt returns the built-in default description prompt.
+func (s *WorkspaceService) GetDefaultDescriptionPrompt() string {
+	return defaultDescriptionPrompt
+}
+
+// getDescriptionPrompt returns the user-configured description prompt or the default.
+func (s *WorkspaceService) getDescriptionPrompt() string {
+	prompt, err := s.db.GetSetting("ai_description_prompt")
+	if err != nil || strings.TrimSpace(prompt) == "" {
+		return defaultDescriptionPrompt
+	}
+	return prompt
+}
+
+// StartGenerateDescription kicks off an async AI description generation for a PR.
+// It emits Wails events: "description:started", "description:result", "description:error".
+func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, prNumber int, agent string) error {
+	if s.ctx == nil {
+		return fmt.Errorf("app context not set")
+	}
+
+	if !gitutil.IsGhInstalled() {
+		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	resolvedAgent := s.resolveAgent(repo, agent)
+
+	switch resolvedAgent {
+	case "claude":
+		if !gitutil.IsClaudeInstalled() {
+			return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+		}
+	case "codex":
+		if !gitutil.IsCodexInstalled() {
+			return fmt.Errorf("the Codex CLI is not installed — install it via: npm i -g @openai/codex")
+		}
+	default:
+		return fmt.Errorf("unknown AI agent: %s (expected 'claude' or 'codex')", resolvedAgent)
+	}
+
+	prompt := s.getDescriptionPrompt()
+	maxCost := s.getMaxCost()
+
+	// Cancel any existing description generation.
+	s.muDesc.Lock()
+	if s.cancelDescription != nil {
+		s.cancelDescription()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	s.cancelDescription = cancel
+	s.muDesc.Unlock()
+
+	appCtx := s.ctx
+
+	go func() {
+		defer cancel()
+		wailsRuntime.EventsEmit(appCtx, "description:started", prNumber)
+
+		// 1. Get the PR diff via `gh pr diff`.
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
+		diffCmd.Dir = repo.LocalPath
+		diff, err := diffCmd.Output()
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
+			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			}
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": errMsg})
+			return
+		}
+
+		if len(bytes.TrimSpace(diff)) == 0 {
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": "PR diff is empty"})
+			return
+		}
+
+		// 2. Run the selected AI agent with the description prompt.
+		var descriptionText string
+		var cost float64
+		var durationMs int
+
+		switch resolvedAgent {
+		case "claude":
+			descriptionText, cost, durationMs, err = s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
+		case "codex":
+			descriptionText, cost, durationMs, err = s.runCodex(ctx, repo.LocalPath, diff, prompt)
+		}
+
+		if ctx.Err() == context.DeadlineExceeded {
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": fmt.Sprintf("%s description generation timed out (3 minute limit)", resolvedAgent)})
+			return
+		}
+		if err != nil {
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": err.Error()})
+			return
+		}
+
+		wailsRuntime.EventsEmit(appCtx, "description:result", map[string]interface{}{
+			"description": descriptionText,
+			"cost":        cost,
+			"duration":    durationMs,
+		})
+	}()
+
+	return nil
+}
+
+// CancelGenerateDescription cancels a running description generation.
+func (s *WorkspaceService) CancelGenerateDescription() {
+	s.muDesc.Lock()
+	defer s.muDesc.Unlock()
+	if s.cancelDescription != nil {
+		s.cancelDescription()
+		s.cancelDescription = nil
+	}
+}
+
+// ApplyPRDescription updates a PR's body on GitHub via `gh pr edit --body`.
+func (s *WorkspaceService) ApplyPRDescription(repoOwner, repoName string, prNumber int, body string) error {
+	if !gitutil.IsGhInstalled() {
+		return fmt.Errorf("the GitHub CLI (gh) is not installed")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--body", body)
+	cmd.Dir = repo.LocalPath
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderrBuf.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return fmt.Errorf("failed to update PR description: %s", errMsg)
+	}
+
+	return nil
 }

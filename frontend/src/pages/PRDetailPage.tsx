@@ -34,7 +34,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelClaudeReview, GetCurrentBranch, GetAIReview, DeleteAIReview } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelClaudeReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
@@ -195,6 +195,12 @@ export function PRDetailPage() {
   const [claudeResult, setClaudeResult] = useState<{ result: string; cost: number; duration: number; createdAt: string } | null>(null);
   const [claudeError, setClaudeError] = useState<string | null>(null);
 
+  // AI description generation state
+  const [descGenerating, setDescGenerating] = useState(false);
+  const [generatedDesc, setGeneratedDesc] = useState<string | null>(null);
+  const [descError, setDescError] = useState<string | null>(null);
+  const [applyingDesc, setApplyingDesc] = useState(false);
+
   // Check if this PR's repo is tracked locally
   const trackedRepo = useMemo(() => {
     if (!pr) return undefined;
@@ -255,6 +261,28 @@ export function PRDetailPage() {
     };
   }, []);
 
+  // Listen for description generation events
+  useEffect(() => {
+    const offStarted = EventsOn("description:started", () => {
+      setDescGenerating(true);
+      setGeneratedDesc(null);
+      setDescError(null);
+    });
+    const offResult = EventsOn("description:result", (data: { description: string; cost: number; duration: number }) => {
+      setDescGenerating(false);
+      setGeneratedDesc(data.description);
+    });
+    const offError = EventsOn("description:error", (data: { error: string }) => {
+      setDescGenerating(false);
+      setDescError(data.error);
+    });
+    return () => {
+      offStarted();
+      offResult();
+      offError();
+    };
+  }, []);
+
   const handleCheckout = useCallback(async () => {
     if (!pr || checkingOut) return;
     setCheckingOut(true);
@@ -299,6 +327,47 @@ export function PRDetailPage() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
   }, [addToast]);
+
+  const handleGenerateDescription = useCallback(async () => {
+    if (!pr || descGenerating) return;
+    try {
+      setGeneratedDesc(null);
+      setDescError(null);
+      await StartGenerateDescription(pr.repoOwner, pr.repoName, pr.number, "");
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, descGenerating, addToast]);
+
+  const handleCancelDescription = useCallback(async () => {
+    try {
+      await CancelGenerateDescription();
+      setDescGenerating(false);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast]);
+
+  const handleApplyDescription = useCallback(async () => {
+    if (!pr || !generatedDesc || applyingDesc) return;
+    setApplyingDesc(true);
+    try {
+      await ApplyPRDescription(pr.repoOwner, pr.repoName, pr.number, generatedDesc);
+      addToast("PR description updated on GitHub", "success");
+      // Refresh the PR to show the updated body.
+      setRefreshing(true);
+      try {
+        const updated = await GetSinglePR(pr.repoOwner, pr.repoName, pr.number);
+        if (updated) setFetchedPR(updated);
+      } catch {}
+      setRefreshing(false);
+      setGeneratedDesc(null);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setApplyingDesc(false);
+    }
+  }, [pr, generatedDesc, applyingDesc, addToast]);
 
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
@@ -638,19 +707,117 @@ export function PRDetailPage() {
             <>
               {/* Body */}
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">
-                  Description
-                </h3>
-                {pr.body ? (
-                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
-                      {pr.body}
-                    </ReactMarkdown>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Description
+                  </h3>
+                  {hasLocalPath && toolAvailability?.gh && (toolAvailability?.claude || toolAvailability?.codex) && (
+                    <div className="flex items-center gap-1.5">
+                      {descGenerating ? (
+                        <button
+                          onClick={handleCancelDescription}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Cancel
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleGenerateDescription}
+                          disabled={descGenerating}
+                          title="Generate a PR description using AI"
+                          className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          Generate
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* AI description generation in progress */}
+                {descGenerating && (
+                  <div className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm text-purple-700 dark:text-purple-300">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating description...
                   </div>
-                ) : (
-                  <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
-                    No description provided.
-                  </p>
+                )}
+
+                {/* AI description generation error */}
+                {descError && !descGenerating && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    <div className="flex items-center justify-between">
+                      <span>{descError}</span>
+                      <button
+                        onClick={handleGenerateDescription}
+                        className="ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium hover:bg-destructive/10"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI-generated description preview */}
+                {generatedDesc && !descGenerating && (
+                  <div className="space-y-2 rounded-lg border-2 border-purple-500/40 bg-purple-500/5 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                        AI-Generated Preview
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={handleGenerateDescription}
+                          title="Regenerate description"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Regenerate
+                        </button>
+                        <button
+                          onClick={() => setGeneratedDesc(null)}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Discard
+                        </button>
+                        <button
+                          onClick={handleApplyDescription}
+                          disabled={applyingDesc}
+                          className="inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {applyingDesc ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <CheckCircle className="h-3 w-3" />
+                          )}
+                          {applyingDesc ? "Applying..." : "Apply to PR"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
+                        {generatedDesc}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+
+                {/* Existing PR body */}
+                {!generatedDesc && !descGenerating && !descError && (
+                  pr.body ? (
+                    <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
+                        {pr.body}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm italic text-muted-foreground">
+                      No description provided.
+                    </p>
+                  )
                 )}
               </section>
 
