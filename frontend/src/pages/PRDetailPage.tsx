@@ -148,6 +148,16 @@ export function PRDetailPage() {
     [pr, flagRules],
   );
 
+  const COPILOT_BOT = "copilot-pull-request-reviewer[bot]";
+  const hideCopilot = useSettingsStore((s) => s.hideCopilotReviews);
+
+  // Filter copilot bot from reviews shown on Description tab and Reviewers sidebar.
+  const filteredReviews = useMemo(() => {
+    if (!pr?.reviews) return null;
+    if (!hideCopilot) return pr.reviews;
+    return pr.reviews.filter((r) => r.author !== COPILOT_BOT);
+  }, [pr?.reviews, hideCopilot]);
+
   const [activeTab, setActiveTab] = useState<DetailTab>("description");
 
   // Lazy-loaded check runs
@@ -498,7 +508,7 @@ export function PRDetailPage() {
                   Description
                 </h3>
                 {pr.body ? (
-                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] max-h-[600px] overflow-y-auto rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                       {pr.body}
                     </ReactMarkdown>
@@ -511,13 +521,13 @@ export function PRDetailPage() {
               </section>
 
               {/* Reviews */}
-              {pr.reviews && pr.reviews.length > 0 && (
+              {filteredReviews && filteredReviews.length > 0 && (
                 <section className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground">
                     Reviews
                   </h3>
                   <div className="space-y-2">
-                    {pr.reviews.map((review, i) => (
+                    {filteredReviews.map((review, i) => (
                       <div
                         key={review.id || i}
                         className="rounded-lg border border-border bg-card px-3 py-2"
@@ -674,7 +684,7 @@ export function PRDetailPage() {
           </SidebarSection>
 
           {/* Reviewers: completed reviews + pending requests */}
-          <ReviewersSidebar reviews={pr.reviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} onAssigned={handleRefresh} />
+          <ReviewersSidebar reviews={filteredReviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} onAssigned={handleRefresh} />
 
           {/* Labels */}
           {pr.labels && pr.labels.length > 0 && (
