@@ -741,13 +741,7 @@ export function PRDetailPage() {
 
 // ---- Action button components (detail page) ----
 
-const mergeOptions = [
-  { method: "MERGE", label: "Create a merge commit" },
-  { method: "SQUASH", label: "Squash and merge" },
-  { method: "REBASE", label: "Rebase and merge" },
-] as const;
-
-/** Prominent merge button with method dropdown for the detail page sidebar. */
+/** Prominent squash-and-merge button for the detail page sidebar. */
 function DetailMergeButton({
   prNodeId,
   mergeable,
@@ -763,7 +757,6 @@ function DetailMergeButton({
   onMerged?: () => void;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
@@ -771,27 +764,18 @@ function DetailMergeButton({
 
   const canMerge = !isDraft && mergeable === "MERGEABLE";
 
-  // Expose toggle to parent via triggerRef.
+  // Expose trigger to parent via triggerRef (used by vim "m" key).
   useEffect(() => {
-    if (triggerRef) triggerRef.current = () => { if (canMerge) setIsOpen((o) => !o); };
+    if (triggerRef) triggerRef.current = () => { if (canMerge) handleMerge(); };
     return () => { if (triggerRef) triggerRef.current = null; };
-  }, [triggerRef, canMerge]);
+  });
 
-  // Register vim escape override to close dropdown instead of navigating back.
-  useEffect(() => {
-    if (isOpen) {
-      useVimStore.setState({ onEscape: () => setIsOpen(false) });
-      return () => useVimStore.setState({ onEscape: null });
-    }
-  }, [isOpen]);
-
-  const handleMerge = async (method: string) => {
+  const handleMerge = async () => {
     setIsMerging(true);
     setMergeError(null);
     try {
-      const result = await mergePR(prNodeId, method);
+      const result = await mergePR(prNodeId, "SQUASH");
       setMergeResult(result);
-      setIsOpen(false);
       onMerged?.();
     } catch (err: unknown) {
       setMergeError(err instanceof Error ? err.message : String(err));
@@ -816,41 +800,23 @@ function DetailMergeButton({
       : mergeable === "CONFLICTING"
         ? "This branch has conflicts"
         : "Cannot merge this PR"
-    : "Merge this pull request";
+    : "Squash and merge";
 
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleMerge}
         disabled={!canMerge || isMerging}
         title={title}
         className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <GitMerge className={`h-4 w-4 ${isMerging ? "animate-pulse" : ""}`} />
-        Merge
-        <ChevronDown className="ml-auto h-3.5 w-3.5" />
+        Squash and merge
       </button>
 
-      {isOpen && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover shadow-md">
-          <div className="p-1">
-            {mergeOptions.map((opt) => (
-              <button
-                key={opt.method}
-                onClick={() => handleMerge(opt.method)}
-                disabled={isMerging}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent disabled:opacity-50"
-              >
-                <GitMerge className="h-3.5 w-3.5 text-green-500" />
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {mergeError && (
-            <div className="border-t border-border px-2 py-1.5 text-xs text-destructive">
-              {mergeError}
-            </div>
-          )}
+      {mergeError && (
+        <div className="mt-1 rounded-md border border-border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md">
+          {mergeError}
         </div>
       )}
     </div>

@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { GitMerge, ChevronDown, CheckCircle } from "lucide-react";
+import { useState } from "react";
+import { GitMerge, CheckCircle } from "lucide-react";
 import { usePRStore } from "@/stores/prStore";
-import { useVimStore } from "@/stores/vimStore";
 
 interface MergeButtonProps {
   prNodeId: string;
@@ -12,12 +11,6 @@ interface MergeButtonProps {
   onMerged?: () => void;
 }
 
-const mergeOptions = [
-  { method: "MERGE", label: "Create a merge commit" },
-  { method: "SQUASH", label: "Squash and merge" },
-  { method: "REBASE", label: "Rebase and merge" },
-] as const;
-
 export function MergeButton({
   prNodeId,
   mergeable,
@@ -26,49 +19,22 @@ export function MergeButton({
   isInMergeQueue,
   onMerged,
 }: MergeButtonProps) {
-  const [isOpen, setIsOpen] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const { mergePR } = usePRStore();
 
   const canMerge =
     state === "OPEN" && !isDraft && mergeable === "MERGEABLE";
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
-      }
-    }
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [isOpen]);
-
-  // Register vim escape override to close dropdown instead of navigating back.
-  useEffect(() => {
-    if (isOpen) {
-      useVimStore.setState({ onEscape: () => setIsOpen(false) });
-      return () => useVimStore.setState({ onEscape: null });
-    }
-  }, [isOpen]);
-
   if (state !== "OPEN") return null;
 
-  const handleMerge = async (method: string) => {
+  const handleMerge = async () => {
     setIsMerging(true);
     setMergeError(null);
     try {
-      const result = await mergePR(prNodeId, method);
+      const result = await mergePR(prNodeId, "SQUASH");
       setMergeResult(result);
-      setIsOpen(false);
       if (result === "merged") onMerged?.();
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -94,40 +60,22 @@ export function MergeButton({
       : mergeable === "CONFLICTING"
       ? "This branch has conflicts"
       : "Cannot merge this PR"
-    : "Merge this pull request";
+    : "Squash and merge";
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleMerge}
         disabled={!canMerge || isMerging}
         title={title}
         className="inline-flex items-center gap-1 rounded p-1 text-muted-foreground transition-colors hover:text-green-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground"
       >
         <GitMerge className={`h-3.5 w-3.5 ${isMerging ? "animate-pulse" : ""}`} />
-        <ChevronDown className="h-2.5 w-2.5" />
       </button>
 
-      {isOpen && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-popover shadow-md">
-          <div className="p-1">
-            {mergeOptions.map((opt) => (
-              <button
-                key={opt.method}
-                onClick={() => handleMerge(opt.method)}
-                disabled={isMerging}
-                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-popover-foreground transition-colors hover:bg-accent disabled:opacity-50"
-              >
-                <GitMerge className="h-3.5 w-3.5 text-green-500" />
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {mergeError && (
-            <div className="border-t border-border px-2 py-1.5 text-xs text-destructive">
-              {mergeError}
-            </div>
-          )}
+      {mergeError && (
+        <div className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md">
+          {mergeError}
         </div>
       )}
     </div>

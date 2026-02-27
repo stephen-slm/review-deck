@@ -23,7 +23,7 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_TTL_MS = 2 * 60 * 1000;
 
 /** Default number of items per page */
-const DEFAULT_PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 25;
 
 export type CacheKey = "myPRs" | "myRecentMerged" | "reviewRequests" | "teamReviewRequests" | "reviewedByMe";
 

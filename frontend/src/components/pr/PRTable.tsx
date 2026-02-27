@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine } from "lucide-react";
+import { ArrowUpDown, ExternalLink, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -51,6 +51,10 @@ interface PRTableProps {
   hiddenPRs?: Set<string>;
   /** Called when client-side filters reduce visible rows below page size and more data is available. */
   onFetchMore?: () => void;
+  /** Current user's GitHub login — enables the "hide approved by me" filter. */
+  viewerLogin?: string;
+  /** Set of PR nodeIds that match flag rules — shown with a red border. */
+  flaggedNodeIds?: Set<string>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -85,6 +89,8 @@ export function PRTable({
   onHide,
   hiddenPRs,
   onFetchMore,
+  viewerLogin,
+  flaggedNodeIds,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -93,6 +99,7 @@ export function PRTable({
   const [globalFilter, setGlobalFilter] = useState("");
   const [localHideStacked, setLocalHideStacked] = useState<boolean | null>(null);
   const [localHideDrafts, setLocalHideDrafts] = useState<boolean | null>(null);
+  const [hideApproved, setHideApproved] = useState(false);
   const hideStacked = localHideStacked ?? globalHideStacked;
   const hideDrafts = localHideDrafts ?? globalHideDrafts;
   const { copiedKey, flash } = useCopyFeedback();
@@ -117,12 +124,17 @@ export function PRTable({
     if (hiddenPRs && hiddenPRs.size > 0) {
       result = result.filter((pr) => !hiddenPRs.has(pr.nodeId));
     }
+    if (hideApproved && viewerLogin) {
+      result = result.filter((pr) =>
+        !pr.reviews?.some((r) => r.author === viewerLogin && r.state === "APPROVED"),
+      );
+    }
     return result;
-  }, [data, hideStacked, hideDrafts, hiddenPRs]);
+  }, [data, hideStacked, hideDrafts, hiddenPRs, hideApproved, viewerLogin]);
 
   // Auto-fill: when filtering reduces visible rows below page size and the
   // server has more pages, request additional items to fill the table.
-  const anyFilterActive = hideStacked || hideDrafts || (hiddenPRs && hiddenPRs.size > 0);
+  const anyFilterActive = hideStacked || hideDrafts || hideApproved || (hiddenPRs && hiddenPRs.size > 0);
   useEffect(() => {
     if (
       anyFilterActive &&
@@ -179,6 +191,7 @@ export function PRTable({
       } : null,
       onToggleDrafts: () => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts)),
       onToggleStacked: () => setLocalHideStacked((prev) => !(prev ?? globalHideStacked)),
+      onToggleApproved: viewerLogin ? () => setHideApproved((prev) => !prev) : null,
     });
 
     return () => useVimStore.getState().clearActions();
@@ -454,6 +467,20 @@ export function PRTable({
           <PenLine className="h-3.5 w-3.5" />
           {hideDrafts ? "Drafts hidden" : "Drafts"}
         </button>
+        {viewerLogin && (
+          <button
+            onClick={() => setHideApproved((prev) => !prev)}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+              hideApproved
+                ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            }`}
+            title={hideApproved ? "Approved PRs hidden (click to show)" : "Showing all PRs (click to hide approved by me)"}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {hideApproved ? "Approved hidden" : "Approved"}
+          </button>
+        )}
         {data.length > 0 && (
           <div className="relative" ref={copyMenuRef}>
             <button
@@ -589,6 +616,7 @@ export function PRTable({
                   && rowIndex <= Math.max(visualAnchor, selectedIndex);
                 const isPicked = pickedIndices.has(rowIndex);
                 const isHighlighted = isInVisualRange || isPicked;
+                const isFlagged = flaggedNodeIds?.has(pr.nodeId) ?? false;
                 return (
                   <tr
                     key={row.id}
@@ -602,7 +630,9 @@ export function PRTable({
                         ? "ring-1 ring-blue-500 bg-blue-500/15"
                         : isVimSelected
                           ? "ring-1 ring-primary bg-accent/40"
-                          : ""
+                          : isFlagged
+                            ? "ring-1 ring-destructive/60 bg-destructive/5"
+                            : ""
                     }`}
                   >
                     {row.getVisibleCells().map((cell) => (

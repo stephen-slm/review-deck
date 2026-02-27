@@ -45,6 +45,8 @@ export interface VimState {
   onToggleDrafts: (() => void) | null;
   /** Toggle stacked PR visibility — called by 's' keybinding. */
   onToggleStacked: (() => void) | null;
+  /** Toggle "approved by me" PR visibility — called by 'f' keybinding. */
+  onToggleApproved: (() => void) | null;
   /** Resolve selected comment thread — called by 'r' keybinding. */
   onResolve: (() => void) | null;
   /** Unresolve selected comment thread — called by 'u' keybinding. */
@@ -79,7 +81,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onResolve" | "onUnresolve" | "onRequestChanges"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -106,6 +108,7 @@ const emptyActions = {
   onTabDirect: null,
   onToggleDrafts: null,
   onToggleStacked: null,
+  onToggleApproved: null,
   onResolve: null,
   onUnresolve: null,
   onRequestChanges: null,

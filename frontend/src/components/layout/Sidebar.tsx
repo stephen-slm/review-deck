@@ -1,22 +1,24 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
   GitPullRequest,
   Eye,
   CheckCircle,
+  AlertTriangle,
   Settings,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { usePRStore } from "@/stores/prStore";
+import { useFlagStore } from "@/stores/flagStore";
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof LayoutDashboard;
-  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe";
+  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged";
 }
 
 const navItems: NavItem[] = [
@@ -34,17 +36,42 @@ const navItems: NavItem[] = [
     icon: CheckCircle,
     badgeKey: "reviewedByMe",
   },
+  {
+    to: "/flagged",
+    label: "Flagged",
+    icon: AlertTriangle,
+    badgeKey: "flagged",
+  },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const { isAuthenticated, user, checkAuth } = useAuthStore();
   const pages = usePRStore((s) => s.pages);
+  const isFlagged = useFlagStore((s) => s.isFlagged);
+  // Subscribe to rules so we re-render when flag rules change.
+  const flagRules = useFlagStore((s) => s.rules);
+
+  // Compute flagged count: merge review requests + reviewed by me, deduplicate,
+  // and count those matching any enabled flag rule.
+  const flaggedCount = useMemo(() => {
+    const seen = new Set<string>();
+    let count = 0;
+    const allItems = [...pages.reviewRequests.items, ...pages.reviewedByMe.items];
+    for (const pr of allItems) {
+      if (seen.has(pr.nodeId)) continue;
+      seen.add(pr.nodeId);
+      if (isFlagged(pr)) count++;
+    }
+    return count;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages.reviewRequests.items, pages.reviewedByMe.items, flagRules]);
 
   const badgeCounts: Record<string, number> = {
     myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
     reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
     reviewedByMe: pages.reviewedByMe.totalCount || pages.reviewedByMe.items.length,
+    flagged: flaggedCount,
   };
 
   useEffect(() => {
@@ -85,7 +112,9 @@ export function Sidebar() {
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                     item.badgeKey === "reviewRequests"
                       ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                      : "bg-secondary text-secondary-foreground"
+                      : item.badgeKey === "flagged"
+                        ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+                        : "bg-secondary text-secondary-foreground"
                   )}
                 >
                   {count}

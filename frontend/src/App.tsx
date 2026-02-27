@@ -6,6 +6,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { MyPRsPage } from "./pages/MyPRsPage";
 import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { ReviewedByMePage } from "./pages/ReviewedByMePage";
+import { FlaggedPRsPage } from "./pages/FlaggedPRsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { PRDetailPage } from "./pages/PRDetailPage";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
@@ -14,6 +15,7 @@ import { useVimNavigation } from "./hooks/useVimNavigation";
 import { useWindowFocus } from "./hooks/useWindowFocus";
 import { usePRStore } from "./stores/prStore";
 import { useSettingsStore } from "./stores/settingsStore";
+import { useFlagStore } from "./stores/flagStore";
 
 function AppContent() {
   // Listen for backend poller events and push data into stores.
@@ -31,6 +33,7 @@ function AppContent() {
     useSettingsStore.getState().loadHideStackedPRs();
     useSettingsStore.getState().loadHideDraftPRs();
     useSettingsStore.getState().loadPRRefreshInterval();
+    useFlagStore.getState().loadRules();
   }, []);
 
   return (
@@ -49,6 +52,7 @@ function AppContent() {
               element={<ReviewRequestsPage />}
             />
             <Route path="/reviewed" element={<ReviewedByMePage />} />
+            <Route path="/flagged" element={<FlaggedPRsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/pr/:nodeId" element={<PRDetailPage />} />
           </Routes>

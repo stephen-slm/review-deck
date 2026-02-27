@@ -31,6 +31,7 @@ const LIST_HINTS: Hint[] = [
   { keys: "c", label: "copy selection" },
   { keys: "t", label: "toggle drafts" },
   { keys: "s", label: "toggle stacked" },
+  { keys: "f", label: "toggle approved" },
 ];
 
 const REVIEW_REQUEST_HINTS: Hint[] = [

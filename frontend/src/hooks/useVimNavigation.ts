@@ -9,6 +9,7 @@ const TAB_ROUTES = [
   "/my-prs",
   "/review-requests",
   "/reviewed",
+  "/flagged",
   "/settings",
 ];
 
@@ -57,6 +58,7 @@ export function useVimNavigation() {
       "$mod+3": vim(() => navigate(TAB_ROUTES[2])),
       "$mod+4": vim(() => navigate(TAB_ROUTES[3])),
       "$mod+5": vim(() => navigate(TAB_ROUTES[4])),
+      "$mod+6": vim(() => navigate(TAB_ROUTES[5])),
 
       // ---- Page tab navigation (1-4) — only active when a page registers onTabDirect ----
       "1": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(0); }),
@@ -235,6 +237,12 @@ export function useVimNavigation() {
       "s": vim(() => {
         const { onToggleStacked } = store();
         if (onToggleStacked) onToggleStacked();
+      }),
+
+      // ---- Toggle "approved by me" visibility (f) ----
+      "f": vim(() => {
+        const { onToggleApproved } = store();
+        if (onToggleApproved) onToggleApproved();
       }),
 
       // ---- Smooth scroll: Shift+J (down) / Shift+K (up) ----

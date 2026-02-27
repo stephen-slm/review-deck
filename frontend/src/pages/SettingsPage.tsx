@@ -3,10 +3,11 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
 import { themeChoices, getTheme, ThemeChoice } from "@/theme";
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette, Code } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, GitFork, Palette, Code, AlertTriangle } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers, SyncOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
+import { useFlagStore } from "@/stores/flagStore";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
@@ -23,6 +24,13 @@ export function SettingsPage() {
   const [membersByOrg, setMembersByOrg] = useState<Record<string, github.User[]>>({});
   const [showPrioritySuggestions, setShowPrioritySuggestions] = useState(false);
 
+  // Flag rules state
+  const { rules: flagRules, loadRules: loadFlagRules, addRule, removeRule, toggleRule } = useFlagStore();
+  const [newRuleType, setNewRuleType] = useState<"keyword" | "size">("keyword");
+  const [newRuleKeyword, setNewRuleKeyword] = useState("");
+  const [newRuleSizeOp, setNewRuleSizeOp] = useState<"gt" | "lt" | "eq">("gt");
+  const [newRuleSizeValue, setNewRuleSizeValue] = useState("");
+
   useEffect(() => {
     loadOrgs();
     loadFilterBots();
@@ -34,7 +42,8 @@ export function SettingsPage() {
     loadSourceBasePath();
     loadHideDraftPRs();
     loadPRRefreshInterval();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath]);
+    loadFlagRules();
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath, loadFlagRules]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -851,6 +860,151 @@ export function SettingsPage() {
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Flag Rules Section */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Flagged PR Rules</h3>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          PRs matching enabled rules are highlighted with a red border and
+          aggregated in the Flagged tab. Keywords are matched case-insensitively
+          against title, body, branch, and labels. Size is additions + deletions.
+        </p>
+
+        {/* Add rule form */}
+        <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <select
+              value={newRuleType}
+              onChange={(e) => setNewRuleType(e.target.value as "keyword" | "size")}
+              className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="keyword">Keyword</option>
+              <option value="size">Size</option>
+            </select>
+
+            {newRuleType === "keyword" ? (
+              <input
+                type="text"
+                value={newRuleKeyword}
+                onChange={(e) => setNewRuleKeyword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newRuleKeyword.trim()) {
+                    addRule({ enabled: true, type: "keyword", keyword: newRuleKeyword.trim() });
+                    setNewRuleKeyword("");
+                  }
+                }}
+                placeholder="e.g. breaking, migration, security"
+                className="flex-1 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            ) : (
+              <>
+                <select
+                  value={newRuleSizeOp}
+                  onChange={(e) => setNewRuleSizeOp(e.target.value as "gt" | "lt" | "eq")}
+                  className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="gt">&gt; greater than</option>
+                  <option value="lt">&lt; less than</option>
+                  <option value="eq">= equal to</option>
+                </select>
+                <input
+                  type="number"
+                  min={0}
+                  value={newRuleSizeValue}
+                  onChange={(e) => setNewRuleSizeValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const val = parseInt(newRuleSizeValue, 10);
+                      if (!isNaN(val) && val >= 0) {
+                        addRule({ enabled: true, type: "size", sizeOp: newRuleSizeOp, sizeValue: val });
+                        setNewRuleSizeValue("");
+                      }
+                    }
+                  }}
+                  placeholder="lines"
+                  className="w-24 rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </>
+            )}
+
+            <button
+              onClick={() => {
+                if (newRuleType === "keyword") {
+                  if (!newRuleKeyword.trim()) return;
+                  addRule({ enabled: true, type: "keyword", keyword: newRuleKeyword.trim() });
+                  setNewRuleKeyword("");
+                } else {
+                  const val = parseInt(newRuleSizeValue, 10);
+                  if (isNaN(val) || val < 0) return;
+                  addRule({ enabled: true, type: "size", sizeOp: newRuleSizeOp, sizeValue: val });
+                  setNewRuleSizeValue("");
+                }
+              }}
+              disabled={
+                newRuleType === "keyword"
+                  ? !newRuleKeyword.trim()
+                  : !newRuleSizeValue || isNaN(parseInt(newRuleSizeValue, 10))
+              }
+              className="inline-flex items-center gap-1 rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </button>
+          </div>
+        </div>
+
+        {/* Existing rules list */}
+        {flagRules.length > 0 ? (
+          <ul className="space-y-1">
+            {flagRules.map((rule) => (
+              <li
+                key={rule.id}
+                className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-2"
+              >
+                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${rule.enabled ? "text-red-500" : "text-muted-foreground/40"}`} />
+                <span className={`flex-1 text-sm font-medium ${rule.enabled ? "text-foreground" : "text-muted-foreground line-through"}`}>
+                  {rule.type === "keyword" ? (
+                    <>keyword: <code className="rounded bg-muted px-1 py-0.5 text-xs">{rule.keyword}</code></>
+                  ) : (
+                    <>size {rule.sizeOp === "gt" ? ">" : rule.sizeOp === "lt" ? "<" : "="} {rule.sizeValue} lines</>
+                  )}
+                </span>
+                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {rule.type}
+                </span>
+                <button
+                  role="switch"
+                  aria-checked={rule.enabled}
+                  onClick={() => toggleRule(rule.id)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background ${
+                    rule.enabled ? "bg-primary" : "bg-muted"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                      rule.enabled ? "translate-x-4" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+                <button
+                  onClick={() => removeRule(rule.id)}
+                  className="rounded p-0.5 text-muted-foreground transition-colors hover:text-destructive"
+                  title="Remove rule"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+            No flag rules configured. Add one above to start flagging PRs.
+          </p>
+        )}
       </section>
 
       {/* IDE Integration Section */}

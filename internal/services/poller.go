@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -176,6 +177,23 @@ func (p *Poller) filterBotsEnabled() bool {
 	return val == "true"
 }
 
+// reviewMaxAgeDays reads the review_max_age_days setting from the database.
+// Returns the configured value or 7 as a default.
+func (p *Poller) reviewMaxAgeDays() int {
+	val, err := p.db.GetSetting("review_max_age_days")
+	if err != nil || val == "" {
+		return 7
+	}
+	days, err := strconv.Atoi(val)
+	if err != nil || days < 1 {
+		return 7
+	}
+	if days > 90 {
+		return 90
+	}
+	return days
+}
+
 // getExcludedRepos returns excluded repos for an org formatted as "org/repo".
 func (p *Poller) getExcludedRepos(org string) []string {
 	repos, err := p.db.GetExcludedRepos(org)
@@ -274,6 +292,7 @@ func (p *Poller) poll(ctx context.Context) {
 	result := PollResult{Timestamp: time.Now()}
 
 	filterBots := p.filterBotsEnabled()
+	reviewSince := time.Now().AddDate(0, 0, -p.reviewMaxAgeDays())
 
 	for _, org := range orgs {
 		excludedRepos := p.getExcludedRepos(org)
@@ -289,7 +308,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewRequestsForUser(ctx, org, login, filterBots, excludedRepos); err == nil {
+		if prs, err := client.GetReviewRequestsForUser(ctx, org, login, reviewSince, filterBots, excludedRepos); err == nil {
 			result.ReviewRequests = append(result.ReviewRequests, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -301,7 +320,7 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetReviewedByUser(ctx, org, login, filterBots, excludedRepos); err == nil {
+		if prs, err := client.GetReviewedByUser(ctx, org, login, reviewSince, filterBots, excludedRepos); err == nil {
 			result.ReviewedByMe = append(result.ReviewedByMe, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -313,8 +332,8 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		since := time.Now().AddDate(0, 0, -14)
-		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, since, filterBots, excludedRepos); err == nil {
+		mergedSince := time.Now().AddDate(0, 0, -14)
+		if prs, err := client.GetMyRecentMergedPRs(ctx, org, login, mergedSince, filterBots, excludedRepos); err == nil {
 			result.RecentMerged = append(result.RecentMerged, prs...)
 			_ = p.db.UpsertPullRequests(prs)
 		} else if isRateLimited(err) {
@@ -330,7 +349,7 @@ func (p *Poller) poll(ctx context.Context) {
 		enabledTeams, err := p.db.GetEnabledTeamSlugs(org)
 		if err == nil {
 			for _, team := range enabledTeams {
-				if prs, err := client.GetTeamReviewRequests(ctx, org, team, filterBots, excludedRepos); err == nil {
+				if prs, err := client.GetTeamReviewRequests(ctx, org, team, reviewSince, filterBots, excludedRepos); err == nil {
 					result.TeamReviewRequests = append(result.TeamReviewRequests, prs...)
 					_ = p.db.UpsertPullRequests(prs)
 				} else if isRateLimited(err) {

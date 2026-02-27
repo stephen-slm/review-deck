@@ -280,21 +280,33 @@ func (c *Client) GetMyRecentMergedPRs(ctx context.Context, org, user string, sin
 }
 
 // GetReviewRequestsForUser returns ALL open PRs where the user has a pending review request.
-func (c *Client) GetReviewRequestsForUser(ctx context.Context, org, user string, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
-	query := buildQuery(fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org), filterBots, excludedRepos)
-	return c.searchAllPRs(ctx, query)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetReviewRequestsForUser(ctx context.Context, org, user string, since time.Time, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchAllPRs(ctx, buildQuery(q, filterBots, excludedRepos))
 }
 
 // GetTeamReviewRequests returns ALL open PRs where the given team has a pending review request.
-func (c *Client) GetTeamReviewRequests(ctx context.Context, org, team string, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
-	query := buildQuery(fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org), filterBots, excludedRepos)
-	return c.searchAllPRs(ctx, query)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetTeamReviewRequests(ctx context.Context, org, team string, since time.Time, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchAllPRs(ctx, buildQuery(q, filterBots, excludedRepos))
 }
 
 // GetReviewedByUser returns ALL open PRs that the user has reviewed.
-func (c *Client) GetReviewedByUser(ctx context.Context, org, user string, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
-	query := buildQuery(fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org), filterBots, excludedRepos)
-	return c.searchAllPRs(ctx, query)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetReviewedByUser(ctx context.Context, org, user string, since time.Time, filterBots bool, excludedRepos []string) ([]PullRequest, error) {
+	q := fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchAllPRs(ctx, buildQuery(q, filterBots, excludedRepos))
 }
 
 // ---- Paginated variants (used by frontend) ----
@@ -327,21 +339,33 @@ func (c *Client) GetMyRecentMergedPRsPage(ctx context.Context, org, user string,
 }
 
 // GetReviewRequestsPage returns a single page of review requests for the user.
-func (c *Client) GetReviewRequestsPage(ctx context.Context, org, user string, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
-	q := buildQuery(fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org), filterBots, excludedRepos)
-	return c.searchPRsPage(ctx, q, pageSize, cursor)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetReviewRequestsPage(ctx context.Context, org, user string, since time.Time, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr review-requested:%s is:open org:%s sort:updated-desc", user, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, excludedRepos), pageSize, cursor)
 }
 
 // GetTeamReviewRequestsPage returns a single page of team review requests.
-func (c *Client) GetTeamReviewRequestsPage(ctx context.Context, org, team string, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
-	q := buildQuery(fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org), filterBots, excludedRepos)
-	return c.searchPRsPage(ctx, q, pageSize, cursor)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetTeamReviewRequestsPage(ctx context.Context, org, team string, since time.Time, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr team-review-requested:%s/%s is:open org:%s sort:updated-desc", org, team, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, excludedRepos), pageSize, cursor)
 }
 
 // GetReviewedByUserPage returns a single page of PRs reviewed by the user.
-func (c *Client) GetReviewedByUserPage(ctx context.Context, org, user string, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
-	q := buildQuery(fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org), filterBots, excludedRepos)
-	return c.searchPRsPage(ctx, q, pageSize, cursor)
+// If since is non-zero, only PRs updated on or after that date are returned.
+func (c *Client) GetReviewedByUserPage(ctx context.Context, org, user string, since time.Time, pageSize int, cursor string, filterBots bool, excludedRepos []string) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr reviewed-by:%s is:open org:%s sort:updated-desc", user, org)
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, excludedRepos), pageSize, cursor)
 }
 
 // ---- On-demand detail queries (used by PRDetailPage) ----

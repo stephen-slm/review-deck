@@ -6,10 +6,13 @@ import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
 import { github } from "../../wailsjs/go/models";
+import { useFlagStore } from "@/stores/flagStore";
 import { GetReviewRequestsPage } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
+  const isFlagged = useFlagStore((s) => s.isFlagged);
+  const flagRules = useFlagStore((s) => s.rules);
   const { orgs, loadOrgs, loadAllPriorities, getPriorityNames } = useSettingsStore();
   const {
     pages,
@@ -85,6 +88,13 @@ export function ReviewRequestsPage() {
       return bPri - aPri; // priority items first
     });
   }, [pg.items, priorityNames]);
+
+  // Build set of flagged PR nodeIds for red border styling.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const flaggedNodeIds = useMemo(
+    () => new Set(pg.items.filter((pr) => isFlagged(pr)).map((pr) => pr.nodeId)),
+    [pg.items, flagRules],
+  );
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
@@ -162,6 +172,7 @@ export function ReviewRequestsPage() {
         onHide={hidePR}
         hiddenPRs={hiddenPRs}
         onFetchMore={handleFetchMore}
+        flaggedNodeIds={flaggedNodeIds}
       />
     </div>
   );

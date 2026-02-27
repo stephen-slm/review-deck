@@ -1,14 +1,17 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useMemo } from "react";
 import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { useFlagStore } from "@/stores/flagStore";
 import { GetReviewedByMePage } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewedByMePage() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const isFlagged = useFlagStore((s) => s.isFlagged);
+  const flagRules = useFlagStore((s) => s.rules);
   const { orgs, loadOrgs } = useSettingsStore();
   const {
     pages,
@@ -65,6 +68,13 @@ export function ReviewedByMePage() {
   useEffect(() => {
     loadOrgs();
   }, [loadOrgs]);
+
+  // Build set of flagged PR nodeIds for red border styling.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const flaggedNodeIds = useMemo(
+    () => new Set(pg.items.filter((pr) => isFlagged(pr)).map((pr) => pr.nodeId)),
+    [pg.items, flagRules],
+  );
 
   useEffect(() => {
     if (isAuthenticated && orgs.length > 0) {
@@ -139,6 +149,8 @@ export function ReviewedByMePage() {
         onPageSizeChange={handlePageSizeChange}
         onRefresh={forceRefresh}
         onFetchMore={handleFetchMore}
+        viewerLogin={user?.login}
+        flaggedNodeIds={flaggedNodeIds}
       />
     </div>
   );

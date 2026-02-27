@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,23 @@ func (s *PullRequestService) filterBotsEnabled() bool {
 	return val == "true"
 }
 
+// reviewSince returns the cutoff time for review-related queries based on the
+// review_max_age_days setting (default 7, range 1-90).
+func (s *PullRequestService) reviewSince() time.Time {
+	val, err := s.db.GetSetting("review_max_age_days")
+	if err != nil || val == "" {
+		return time.Now().AddDate(0, 0, -7)
+	}
+	days, err := strconv.Atoi(val)
+	if err != nil || days < 1 {
+		return time.Now().AddDate(0, 0, -7)
+	}
+	if days > 90 {
+		days = 90
+	}
+	return time.Now().AddDate(0, 0, -days)
+}
+
 // getExcludedRepos returns excluded repos for an org formatted as "org/repo" for query exclusion.
 func (s *PullRequestService) getExcludedRepos(org string) []string {
 	repos, err := s.db.GetExcludedRepos(org)
@@ -105,7 +123,7 @@ func (s *PullRequestService) GetReviewRequestsPage(org string, pageSize int, cur
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewRequestsPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetReviewRequestsPage(context.Background(), org, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -118,7 +136,7 @@ func (s *PullRequestService) GetTeamReviewRequestsPage(org, team string, pageSiz
 	if s.client == nil {
 		return nil, fmt.Errorf("not authenticated")
 	}
-	page, err := s.client.GetTeamReviewRequestsPage(context.Background(), org, team, pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetTeamReviewRequestsPage(context.Background(), org, team, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch team review requests: %w", err)
 	}
@@ -132,7 +150,7 @@ func (s *PullRequestService) GetReviewedByMePage(org string, pageSize int, curso
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewedByUserPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetReviewedByUserPage(context.Background(), org, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
@@ -177,7 +195,7 @@ func (s *PullRequestService) GetReviewRequests(org string) ([]gh.PullRequest, er
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -190,7 +208,7 @@ func (s *PullRequestService) GetTeamReviewRequests(org, team string) ([]gh.PullR
 	if s.client == nil {
 		return nil, fmt.Errorf("not authenticated")
 	}
-	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch team review requests: %w", err)
 	}
@@ -204,7 +222,7 @@ func (s *PullRequestService) GetReviewedByMe(org string) ([]gh.PullRequest, erro
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewedByUser(context.Background(), org, login, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetReviewedByUser(context.Background(), org, login, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
