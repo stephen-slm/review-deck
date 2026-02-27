@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import {
   FileCode,
   Plus,
@@ -26,6 +26,9 @@ interface DiffViewProps {
   repo?: string;
   /** Ref populated with a function to toggle expand/collapse of the currently selected file. */
   toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
+  /** Controlled expanded files state — lifted to parent to persist across tab switches. */
+  expandedFiles: Set<string>;
+  onExpandedFilesChange: (files: Set<string>) => void;
 }
 
 /** Parse a unified diff patch string into individual diff lines. */
@@ -153,13 +156,13 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
 
       {/* Diff content */}
       {isExpanded && (
-        <div className="overflow-x-auto border-t border-border">
+        <div className="border-t border-border">
           {diffLines.length === 0 ? (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
               {file.status === "renamed" ? "File renamed without changes" : "Binary file or no diff available"}
             </div>
           ) : (
-            <table className="w-full border-collapse font-mono text-xs">
+            <table className="w-full table-fixed border-collapse font-mono text-xs">
               <tbody>
                 {diffLines.map((line, i) => {
                   if (line.type === "hunk") {
@@ -201,7 +204,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
                       <td className={`w-10 select-none border-r border-border/30 px-2 py-0.5 text-right ${lineNumClass}`}>
                         {line.type !== "del" ? line.newLine : ""}
                       </td>
-                      <td className={`whitespace-pre px-3 py-0.5 ${textClass}`}>
+                      <td className={`whitespace-pre-wrap break-words px-3 py-0.5 ${textClass}`}>
                         <span className="mr-1 select-none opacity-50">
                           {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
                         </span>
@@ -219,8 +222,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
   );
 }
 
-export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef }: DiffViewProps) {
-  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -238,7 +240,7 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
     if (files && files.length > 0 && expandedFiles.size === 0) {
       // Auto-expand up to 20 files; collapse the rest for performance.
       const initial = new Set(files.slice(0, 20).map((f) => f.filename));
-      setExpandedFiles(initial);
+      onExpandedFilesChange(initial);
     }
   }, [files]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -255,15 +257,13 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
   }, [selectedIndex]);
 
   const toggleFile = (filename: string) => {
-    setExpandedFiles((prev) => {
-      const next = new Set(prev);
-      if (next.has(filename)) {
-        next.delete(filename);
-      } else {
-        next.add(filename);
-      }
-      return next;
-    });
+    const next = new Set(expandedFiles);
+    if (next.has(filename)) {
+      next.delete(filename);
+    } else {
+      next.add(filename);
+    }
+    onExpandedFilesChange(next);
   };
 
   // Expose a function to toggle the currently selected file via ref.
@@ -279,11 +279,11 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
   }); // no deps — keeps closure fresh
 
   const expandAll = () => {
-    if (files) setExpandedFiles(new Set(files.map((f) => f.filename)));
+    if (files) onExpandedFilesChange(new Set(files.map((f) => f.filename)));
   };
 
   const collapseAll = () => {
-    setExpandedFiles(new Set());
+    onExpandedFilesChange(new Set());
   };
 
   // Summary stats.
@@ -317,7 +317,7 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
   }
 
   return (
-    <section className="space-y-3">
+    <section className="max-h-[600px] overflow-y-auto space-y-3">
       {/* Summary bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3 text-sm">

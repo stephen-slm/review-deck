@@ -52,6 +52,7 @@ const DETAIL_HINTS: Hint[] = [
   { keys: "a", label: "assign reviewer" },
   { keys: "m", label: "merge" },
   { keys: "A", label: "approve" },
+  { keys: "d", label: "request changes" },
 ];
 
 const SCROLL_HINTS: Hint[] = [

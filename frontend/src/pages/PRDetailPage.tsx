@@ -155,6 +155,8 @@ export function PRDetailPage() {
   const [prFiles, setPRFiles] = useState<github.PRFile[] | null>(null);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState<string | null>(null);
+  // Expanded files state — lifted here so it persists across tab switches and auto-refreshes.
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
@@ -164,6 +166,7 @@ export function PRDetailPage() {
   const commentToggleRef = useRef<(() => void) | null>(null);
   const commentResolveRef = useRef<(() => void) | null>(null);
   const commentUnresolveRef = useRef<(() => void) | null>(null);
+  const requestChangesRef = useRef<(() => void) | null>(null);
 
   // Fetch check runs when the checks tab is first selected
   useEffect(() => {
@@ -285,6 +288,7 @@ export function PRDetailPage() {
       onAssignReviewer: () => reviewerToggleRef.current?.(),
       onMerge: () => mergeToggleRef.current?.(),
       onApprove: () => approveRef.current?.(),
+      onRequestChanges: () => requestChangesRef.current?.(),
       onCopy: () => { if (pr) copyToClipboard(pr.url); },
     };
 
@@ -485,7 +489,7 @@ export function PRDetailPage() {
                   Description
                 </h3>
                 {pr.body ? (
-                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+                  <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] max-h-[600px] overflow-y-auto rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
                       {pr.body}
                     </ReactMarkdown>
@@ -593,6 +597,8 @@ export function PRDetailPage() {
               owner={pr.repoOwner}
               repo={pr.repoName}
               toggleSelectedRef={fileToggleRef}
+              expandedFiles={expandedFiles}
+              onExpandedFilesChange={setExpandedFiles}
             />
           )}
         </div>
@@ -604,6 +610,9 @@ export function PRDetailPage() {
             <div className="space-y-2">
               {pr.state === "OPEN" && (
                 <DetailApproveButton prNodeId={pr.nodeId} reviews={pr.reviews} author={pr.author} triggerRef={approveRef} onApproved={handleRefresh} />
+              )}
+              {pr.state === "OPEN" && (
+                <DetailRequestChangesButton prNodeId={pr.nodeId} author={pr.author} triggerRef={requestChangesRef} onSubmitted={handleRefresh} />
               )}
               {pr.state === "OPEN" && (
                 <DetailMergeButton
@@ -935,6 +944,130 @@ function DetailApproveButton({
       </button>
       {error && (
         <p className="mt-1 text-xs text-destructive">{error}</p>
+      )}
+    </div>
+  );
+}
+
+/** Request changes button with a textarea dropdown for the review body. */
+function DetailRequestChangesButton({
+  prNodeId,
+  author,
+  triggerRef,
+  onSubmitted,
+}: {
+  prNodeId: string;
+  author: string;
+  triggerRef?: React.MutableRefObject<(() => void) | null>;
+  onSubmitted?: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [body, setBody] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { requestChangesPR } = usePRStore();
+  const viewerLogin = useAuthStore((s) => s.user?.login);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const isOwnPR = !!viewerLogin && viewerLogin === author;
+
+  // Expose toggle to parent via triggerRef.
+  useEffect(() => {
+    if (triggerRef) triggerRef.current = () => { if (!isOwnPR) setIsOpen((o) => !o); };
+    return () => { if (triggerRef) triggerRef.current = null; };
+  });
+
+  // Register vim escape override to close dropdown.
+  useEffect(() => {
+    if (isOpen) {
+      useVimStore.setState({ onEscape: () => setIsOpen(false) });
+      // Focus the textarea when opened.
+      setTimeout(() => textareaRef.current?.focus(), 50);
+      return () => useVimStore.setState({ onEscape: null });
+    }
+  }, [isOpen]);
+
+  const handleSubmit = async () => {
+    if (!body.trim()) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await requestChangesPR(prNodeId, body.trim());
+      setBody("");
+      setIsOpen(false);
+      onSubmitted?.();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const disabled = isOwnPR;
+  const title = isOwnPR
+    ? "You cannot request changes on your own pull request"
+    : "Request changes on this pull request";
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        disabled={disabled}
+        title={title}
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-red-600 bg-transparent px-3 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-600/20 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300"
+      >
+        <XCircle className={`h-4 w-4 ${isSubmitting ? "animate-pulse" : ""}`} />
+        Request Changes
+        <ChevronDown className="ml-auto h-3.5 w-3.5" />
+      </button>
+
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-border bg-popover shadow-md">
+          <div className="p-3 space-y-2">
+            <label className="block text-xs font-medium text-muted-foreground">
+              Describe the changes needed
+            </label>
+            <textarea
+              ref={textareaRef}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              onKeyDown={(e) => {
+                // Cmd/Ctrl+Enter to submit
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+                // Escape — close the dropdown and stop propagation so tinykeys
+                // doesn't also fire its cascade (blur → navigate back).
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsOpen(false);
+                }
+              }}
+              placeholder="What needs to change..."
+              rows={4}
+              className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground">
+                <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">{navigator.platform.includes("Mac") ? "\u2318" : "Ctrl"}+Enter</kbd> to submit
+              </span>
+              <button
+                onClick={handleSubmit}
+                disabled={isSubmitting || !body.trim()}
+                className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {isSubmitting ? "Submitting..." : "Submit Review"}
+              </button>
+            </div>
+          </div>
+          {error && (
+            <div className="border-t border-border px-3 py-1.5 text-xs text-destructive">
+              {error}
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

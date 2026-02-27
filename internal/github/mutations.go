@@ -122,6 +122,32 @@ func (c *Client) ApprovePR(ctx context.Context, prNodeID string, body string) er
 	return nil
 }
 
+// RequestChangesPR submits a "request changes" review on a pull request.
+// A non-empty body is required by the GitHub API for change-request reviews.
+func (c *Client) RequestChangesPR(ctx context.Context, prNodeID string, body string) error {
+	var mutation struct {
+		AddPullRequestReview struct {
+			PullRequestReview struct {
+				ID string `graphql:"id"`
+			}
+		} `graphql:"addPullRequestReview(input: $input)"`
+	}
+
+	event := githubv4.PullRequestReviewEventRequestChanges
+	b := githubv4.String(body)
+	input := githubv4.AddPullRequestReviewInput{
+		PullRequestID: githubv4.ID(prNodeID),
+		Event:         &event,
+		Body:          &b,
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return fmt.Errorf("request changes on pull request: %w", err)
+	}
+	return nil
+}
+
 // AddLabels adds labels to a pull request (or any labelable).
 func (c *Client) AddLabels(ctx context.Context, labelableID string, labelIDs []string) error {
 	var mutation struct {

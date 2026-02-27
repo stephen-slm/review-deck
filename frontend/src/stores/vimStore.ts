@@ -49,6 +49,8 @@ export interface VimState {
   onResolve: (() => void) | null;
   /** Unresolve selected comment thread — called by 'u' keybinding. */
   onUnresolve: (() => void) | null;
+  /** Request changes on a PR — called by 'd' keybinding. */
+  onRequestChanges: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -77,7 +79,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onResolve" | "onUnresolve"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onResolve" | "onUnresolve" | "onRequestChanges"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -106,6 +108,7 @@ const emptyActions = {
   onToggleStacked: null,
   onResolve: null,
   onUnresolve: null,
+  onRequestChanges: null,
   onEscape: null,
 };
 

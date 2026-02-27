@@ -48,6 +48,8 @@ export function MergePR(arg1:string,arg2:string):Promise<string>;
 
 export function RemoveLabels(arg1:string,arg2:Array<string>):Promise<void>;
 
+export function RequestChangesPR(arg1:string,arg2:string):Promise<void>;
+
 export function RequestReviews(arg1:string,arg2:Array<string>,arg3:Array<string>):Promise<void>;
 
 export function ResolveThread(arg1:string):Promise<void>;

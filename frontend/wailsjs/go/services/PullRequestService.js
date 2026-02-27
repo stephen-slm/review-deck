@@ -90,6 +90,10 @@ export function RemoveLabels(arg1, arg2) {
   return window['go']['services']['PullRequestService']['RemoveLabels'](arg1, arg2);
 }
 
+export function RequestChangesPR(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['RequestChangesPR'](arg1, arg2);
+}
+
 export function RequestReviews(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['RequestReviews'](arg1, arg2, arg3);
 }

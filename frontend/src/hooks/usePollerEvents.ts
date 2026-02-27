@@ -34,14 +34,30 @@ interface Notification {
  * hitting the server (the cursors from a search query wouldn't be valid
  * for the poller's complete dataset anyway).
  */
-function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
+function pollerPage(prev: { pageSize: number; items: unknown[] }, prs: github.PullRequest[]) {
   const pageSize = prev.pageSize;
-  const totalPages = Math.max(1, Math.ceil(prs.length / pageSize));
+  // If auto-fill previously grew page 1 beyond pageSize, preserve that count
+  // so the user doesn't lose visible rows when the poller refreshes.
+  const grownSize = Math.max(pageSize, prev.items.length);
+  const page1Size = Math.min(grownSize, prs.length);
+  const remaining = prs.slice(page1Size);
+  const remainingPages = Math.max(0, Math.ceil(remaining.length / pageSize));
+  const totalPages = 1 + remainingPages;
 
   // Pre-populate page cache with all pages.
   const pageCache: Record<number, { items: github.PullRequest[]; pageInfo: github.PageInfo; fetchedAt: number }> = {};
-  for (let p = 1; p <= totalPages; p++) {
-    const start = (p - 1) * pageSize;
+  // Page 1 may be larger than pageSize if auto-fill grew it.
+  pageCache[1] = {
+    items: prs.slice(0, page1Size),
+    pageInfo: new github.PageInfo({
+      hasNextPage: totalPages > 1,
+      endCursor: "poller-1",
+      totalCount: prs.length,
+    }),
+    fetchedAt: Date.now(),
+  };
+  for (let p = 2; p <= totalPages; p++) {
+    const start = page1Size + (p - 2) * pageSize;
     pageCache[p] = {
       items: prs.slice(start, start + pageSize),
       pageInfo: new github.PageInfo({
@@ -54,7 +70,7 @@ function pollerPage(prev: { pageSize: number }, prs: github.PullRequest[]) {
   }
 
   return {
-    items: prs.slice(0, pageSize),
+    items: prs.slice(0, page1Size),
     currentPage: 1,
     pageSize,
     // The poller fetches ALL data, so there are no more server pages to fetch.

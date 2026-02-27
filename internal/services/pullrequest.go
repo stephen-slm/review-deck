@@ -263,6 +263,17 @@ func (s *PullRequestService) ApprovePR(prNodeID string, body string) error {
 	return s.client.ApprovePR(context.Background(), prNodeID, body)
 }
 
+// RequestChangesPR submits a "request changes" review on a pull request.
+func (s *PullRequestService) RequestChangesPR(prNodeID string, body string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	if body == "" {
+		return fmt.Errorf("a review body is required when requesting changes")
+	}
+	return s.client.RequestChangesPR(context.Background(), prNodeID, body)
+}
+
 // ResolveThread resolves a review thread.
 func (s *PullRequestService) ResolveThread(threadID string) error {
 	if s.client == nil {

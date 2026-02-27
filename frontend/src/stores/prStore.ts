@@ -8,6 +8,7 @@ import {
   GetTeamReviewRequestsPage,
   MergePR,
   ApprovePR,
+  RequestChangesPR,
   RequestReviews,
 } from "../../wailsjs/go/services/PullRequestService";
 import {
@@ -123,6 +124,7 @@ interface PRState {
   // ---- Actions ----
   mergePR: (prNodeID: string, method: string) => Promise<string>;
   approvePR: (prNodeID: string, body?: string) => Promise<void>;
+  requestChangesPR: (prNodeID: string, body: string) => Promise<void>;
   requestReviews: (prNodeID: string, userIDs: string[], teamIDs: string[]) => Promise<void>;
 
   /**
@@ -524,6 +526,16 @@ export const usePRStore = create<PRState>((set, get) => ({
     }
   },
 
+  requestChangesPR: async (prNodeID: string, body: string) => {
+    try {
+      await RequestChangesPR(prNodeID, body);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: message });
+      throw err;
+    }
+  },
+
   requestReviews: async (prNodeID: string, userIDs: string[], teamIDs: string[]) => {
     try {
       await RequestReviews(prNodeID, userIDs, teamIDs);
@@ -565,16 +577,25 @@ export const usePRStore = create<PRState>((set, get) => ({
       const prs = page.pullRequests || [];
       set((s) => {
         const cur = s.pages[key];
+        const newItems = [...cur.items, ...prs.filter((p) => !cur.items.some((e) => e.nodeId === p.nodeId))];
         return {
           pages: {
             ...s.pages,
             [key]: {
               ...cur,
-              // Append new items, deduplicating by nodeId.
-              items: [...cur.items, ...prs.filter((p) => !cur.items.some((e) => e.nodeId === p.nodeId))],
+              items: newItems,
               hasNextPage: page.pageInfo.hasNextPage,
               endCursor: page.pageInfo.endCursor,
               totalCount: page.pageInfo.totalCount,
+              // Update the current page cache so the grown result persists across navigation.
+              pageCache: {
+                ...cur.pageCache,
+                [cur.currentPage]: {
+                  items: newItems,
+                  pageInfo: page.pageInfo,
+                  fetchedAt: Date.now(),
+                },
+              },
             },
           },
           isLoading: { ...s.isLoading, [key]: false },

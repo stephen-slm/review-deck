@@ -192,6 +192,12 @@ export function useVimNavigation() {
         if (onApprove) onApprove();
       }),
 
+      // ---- Request changes on PR (d) ----
+      "d": vim(() => {
+        const { onRequestChanges } = store();
+        if (onRequestChanges) onRequestChanges();
+      }),
+
       // ---- Visual selection mode (v) ----
       "v": vim(() => {
         store().toggleVisualMode();
