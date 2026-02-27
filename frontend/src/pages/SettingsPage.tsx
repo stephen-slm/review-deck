@@ -4,25 +4,27 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { useVimStore } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown } from "lucide-react";
+import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown, Sparkles } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
+import { GetDefaultClaudePrompt } from "../../wailsjs/go/services/WorkspaceService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 
-type SettingsTab = "general" | "filters" | "teams" | "rules" | "advanced";
+type SettingsTab = "general" | "filters" | "teams" | "rules" | "ai" | "advanced";
 
 const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[] = [
   { key: "general", label: "General", icon: Settings2 },
   { key: "filters", label: "Filters", icon: Bot },
   { key: "teams", label: "Teams & Priority", icon: Crown },
   { key: "rules", label: "Flag Rules", icon: AlertTriangle },
+  { key: "ai", label: "AI", icon: Sparkles },
   { key: "advanced", label: "Advanced", icon: Timer },
 ];
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority } = useSettingsStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -65,7 +67,9 @@ export function SettingsPage() {
     loadHideDraftPRs();
     loadPRRefreshInterval();
     loadFlagRules();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules]);
+    loadAiReviewPrompt();
+    loadAiMaxCost();
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -1017,6 +1021,82 @@ export function SettingsPage() {
               </p>
             )}
           </section>
+        )}
+
+        {activeTab === "ai" && (
+          <>
+            {/* AI Review Prompt */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">AI Review</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Configure the Claude-powered code review. The prompt is sent as a system instruction
+                when reviewing PR diffs.
+              </p>
+
+              <div className="rounded-lg border border-border bg-card p-3 space-y-4">
+                {/* Prompt textarea */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-foreground">
+                      Review prompt
+                    </label>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const defaultPrompt = await GetDefaultClaudePrompt();
+                          setAiReviewPrompt(defaultPrompt);
+                        } catch {
+                          // fallback — clear to use backend default
+                          setAiReviewPrompt("");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    value={aiReviewPrompt}
+                    onChange={(e) => setAiReviewPrompt(e.target.value)}
+                    placeholder="Leave empty to use the default prompt. The prompt instructs Claude how to review PR diffs."
+                    rows={10}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to use the built-in default prompt. Changes apply to the next review.
+                  </p>
+                </div>
+
+                {/* Max cost */}
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Max cost per review
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Maximum USD cost for a single AI review. Set to 0 or leave empty for no limit.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={aiMaxCost}
+                      onChange={(e) => setAiMaxCost(e.target.value)}
+                      placeholder="0.00"
+                      className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+              </div>
+            </section>
+          </>
         )}
 
         {activeTab === "advanced" && (
