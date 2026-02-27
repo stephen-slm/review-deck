@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -136,8 +137,8 @@ func (s *WorkspaceService) CheckToolAvailability() ToolAvailability {
 	}
 }
 
-// GetDefaultClaudePrompt returns the built-in default review prompt.
-func (s *WorkspaceService) GetDefaultClaudePrompt() string {
+// GetDefaultReviewPrompt returns the built-in default review prompt.
+func (s *WorkspaceService) GetDefaultReviewPrompt() string {
 	return defaultReviewPrompt
 }
 
@@ -250,7 +251,7 @@ func (s *WorkspaceService) DeleteAIReview(prNodeID string) error {
 
 // StartAIReview kicks off an async AI code review for a PR.
 // agent can be "claude" or "codex" — if empty, the per-repo or global default is used.
-// It emits Wails events: "claude:started", "claude:result", "claude:error".
+// It emits Wails events: "ai:started", "ai:result", "ai:error".
 func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber int, prNodeID string, agent string) error {
 	if s.ctx == nil {
 		return fmt.Errorf("app context not set")
@@ -297,7 +298,7 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 
 	go func() {
 		defer cancel()
-		wailsRuntime.EventsEmit(appCtx, "claude:started", prNumber)
+		wailsRuntime.EventsEmit(appCtx, "ai:started", prNumber)
 
 		// 1. Get the PR diff via `gh pr diff`.
 		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
@@ -308,12 +309,12 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
 			}
-			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": errMsg})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": errMsg})
 			return
 		}
 
 		if len(bytes.TrimSpace(diff)) == 0 {
-			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": "PR diff is empty"})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": "PR diff is empty"})
 			return
 		}
 
@@ -330,11 +331,11 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		}
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": fmt.Sprintf("%s review timed out (3 minute limit)", resolvedAgent)})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": fmt.Sprintf("%s review timed out (3 minute limit)", resolvedAgent)})
 			return
 		}
 		if err != nil {
-			wailsRuntime.EventsEmit(appCtx, "claude:error", map[string]interface{}{"error": err.Error()})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": err.Error()})
 			return
 		}
 
@@ -344,7 +345,7 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		}
 
 		now := time.Now().UTC().Format(time.RFC3339)
-		wailsRuntime.EventsEmit(appCtx, "claude:result", map[string]interface{}{
+		wailsRuntime.EventsEmit(appCtx, "ai:result", map[string]interface{}{
 			"review":     reviewText,
 			"cost":       cost,
 			"duration":   durationMs,
@@ -402,10 +403,22 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 	return result.Result, result.Cost, result.Duration, nil
 }
 
-// runCodex executes codex -q with the diff embedded in the prompt.
+// runCodex executes codex -q with the diff written to a temp file to avoid
+// OS argument length limits (ARG_MAX ~256KB on macOS).
 func (s *WorkspaceService) runCodex(ctx context.Context, repoDir string, diff []byte, prompt string) (review string, cost float64, durationMs int, err error) {
-	// Build a single prompt with the system instructions and the diff.
-	fullPrompt := fmt.Sprintf("%s\n\nReview this pull request diff:\n\n%s", prompt, string(diff))
+	// Write the diff to a temp file so it doesn't blow up ARG_MAX.
+	tmpFile, err := os.CreateTemp("", "review-deck-diff-*.patch")
+	if err != nil {
+		return "", 0, 0, fmt.Errorf("failed to create temp diff file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+	if _, err := tmpFile.Write(diff); err != nil {
+		tmpFile.Close()
+		return "", 0, 0, fmt.Errorf("failed to write temp diff file: %w", err)
+	}
+	tmpFile.Close()
+
+	fullPrompt := fmt.Sprintf("%s\n\nReview the pull request diff in the file: %s", prompt, tmpFile.Name())
 
 	cmd := exec.CommandContext(ctx, "codex",
 		"-q",
@@ -421,7 +434,7 @@ func (s *WorkspaceService) runCodex(ctx context.Context, repoDir string, diff []
 
 	if runErr := cmd.Run(); runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", 0, 0, fmt.Errorf("Codex review timed out (3 minute limit)")
+			return "", 0, 0, fmt.Errorf("Codex timed out (3 minute limit)")
 		}
 		errMsg := strings.TrimSpace(stderrBuf.String())
 		if errMsg == "" {
@@ -442,8 +455,8 @@ func (s *WorkspaceService) runCodex(ctx context.Context, repoDir string, diff []
 	return output, 0, elapsed, nil
 }
 
-// CancelClaudeReview cancels a running AI review.
-func (s *WorkspaceService) CancelClaudeReview() {
+// CancelAIReview cancels a running AI review.
+func (s *WorkspaceService) CancelAIReview() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cancelReview != nil {

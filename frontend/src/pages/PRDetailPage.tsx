@@ -34,7 +34,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelClaudeReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
@@ -190,10 +190,10 @@ export function PRDetailPage() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [currentBranch, setCurrentBranch] = useState<string | null>(null);
 
-  // Claude review state
-  const [claudeReviewing, setClaudeReviewing] = useState(false);
-  const [claudeResult, setClaudeResult] = useState<{ result: string; cost: number; duration: number; createdAt: string } | null>(null);
-  const [claudeError, setClaudeError] = useState<string | null>(null);
+  // AI review state
+  const [aiReviewing, setAiReviewing] = useState(false);
+  const [aiResult, setAiResult] = useState<{ result: string; cost: number; duration: number; createdAt: string } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // AI description generation state
   const [descGenerating, setDescGenerating] = useState(false);
@@ -224,7 +224,7 @@ export function PRDetailPage() {
     if (!pr?.nodeId) return;
     GetAIReview(pr.nodeId).then((cached) => {
       if (cached && cached.review) {
-        setClaudeResult({
+        setAiResult({
           result: cached.review,
           cost: cached.cost ?? 0,
           duration: cached.duration ?? 0,
@@ -234,25 +234,25 @@ export function PRDetailPage() {
     }).catch(() => {});
   }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for Claude review events
+  // Listen for AI review events
   useEffect(() => {
-    const offStarted = EventsOn("claude:started", () => {
-      setClaudeReviewing(true);
-      setClaudeResult(null);
-      setClaudeError(null);
+    const offStarted = EventsOn("ai:started", () => {
+      setAiReviewing(true);
+      setAiResult(null);
+      setAiError(null);
     });
-    const offResult = EventsOn("claude:result", (data: { review: string; cost: number; duration: number; created_at: string }) => {
-      setClaudeReviewing(false);
-      setClaudeResult({
+    const offResult = EventsOn("ai:result", (data: { review: string; cost: number; duration: number; created_at: string }) => {
+      setAiReviewing(false);
+      setAiResult({
         result: data.review,
         cost: data.cost ?? 0,
         duration: (data.duration ?? 0) / 1000,
         createdAt: data.created_at ?? "",
       });
     });
-    const offError = EventsOn("claude:error", (data: { error: string }) => {
-      setClaudeReviewing(false);
-      setClaudeError(data.error);
+    const offError = EventsOn("ai:error", (data: { error: string }) => {
+      setAiReviewing(false);
+      setAiError(data.error);
     });
     return () => {
       offStarted();
@@ -306,23 +306,23 @@ export function PRDetailPage() {
     }
   }, [pr, addToast]);
 
-  const handleStartClaudeReview = useCallback(async () => {
-    if (!pr || claudeReviewing) return;
+  const handleStartAIReview = useCallback(async () => {
+    if (!pr || aiReviewing) return;
     try {
       // Clear cached review so re-run always fetches fresh.
       await DeleteAIReview(pr.nodeId);
-      setClaudeResult(null);
+      setAiResult(null);
       // Empty agent string = use per-repo or global default.
       await StartAIReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId, "");
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
-  }, [pr, claudeReviewing, addToast]);
+  }, [pr, aiReviewing, addToast]);
 
-  const handleCancelClaudeReview = useCallback(async () => {
+  const handleCancelAIReview = useCallback(async () => {
     try {
-      await CancelClaudeReview();
-      setClaudeReviewing(false);
+      await CancelAIReview();
+      setAiReviewing(false);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
@@ -481,6 +481,9 @@ export function PRDetailPage() {
     } else if (activeTab === "ai-review") {
       // Length 1 so Enter (onOpen) fires at selectedIndex 0.
       useVimStore.getState().setListLength(1);
+    } else if (activeTab === "description") {
+      // Length 1 so Enter (onOpen) fires for generate description.
+      useVimStore.getState().setListLength(1);
     } else {
       useVimStore.getState().setListLength(0);
     }
@@ -511,6 +514,10 @@ export function PRDetailPage() {
       actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
       actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+      // Enter generates a PR description (when tools are available and not already generating).
+      if (hasLocalPath && toolAvailability?.gh && (toolAvailability?.claude || toolAvailability?.codex)) {
+        actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
+      }
     } else if (activeTab === "checks") {
       actions.onOpen = (idx: number) => {
         if (checkRuns && checkRuns[idx]?.detailsUrl) BrowserOpenURL(checkRuns[idx].detailsUrl);
@@ -548,7 +555,7 @@ export function PRDetailPage() {
       actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       // Enter starts a review (idle), re-runs (result shown), or retries (error).
-      actions.onOpen = () => { if (!claudeReviewing) handleStartClaudeReview(); };
+      actions.onOpen = () => { if (!aiReviewing) handleStartAIReview(); };
     }
 
     useVimStore.getState().registerActions(actions);
@@ -923,14 +930,14 @@ export function PRDetailPage() {
           )}
 
           {activeTab === "ai-review" && (
-            <ClaudeReviewPanel
-              reviewing={claudeReviewing}
-              result={claudeResult}
-              error={claudeError}
+            <AIReviewPanel
+              reviewing={aiReviewing}
+              result={aiResult}
+              error={aiError}
               hasLocalPath={hasLocalPath}
               hasTools={!!toolAvailability?.gh && (!!toolAvailability?.claude || !!toolAvailability?.codex)}
-              onStart={handleStartClaudeReview}
-              onCancel={handleCancelClaudeReview}
+              onStart={handleStartAIReview}
+              onCancel={handleCancelAIReview}
             />
           )}
         </div>
@@ -992,21 +999,21 @@ export function PRDetailPage() {
                     Open Terminal
                   </button>
                   <button
-                    onClick={() => { handleStartClaudeReview(); setActiveTab("ai-review"); }}
-                    disabled={claudeReviewing || !(toolAvailability?.claude || toolAvailability?.codex) || !toolAvailability?.gh}
+                    onClick={() => { handleStartAIReview(); setActiveTab("ai-review"); }}
+                    disabled={aiReviewing || !(toolAvailability?.claude || toolAvailability?.codex) || !toolAvailability?.gh}
                     title={
                       !toolAvailability?.gh
                         ? "gh CLI not installed"
                         : !(toolAvailability?.claude || toolAvailability?.codex)
                           ? "No AI CLI installed (claude or codex)"
-                          : claudeReviewing
+                          : aiReviewing
                             ? "Review in progress..."
                             : "Start AI code review"
                     }
                     className="inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-purple-500 bg-transparent px-3 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
                   >
-                    <Sparkles className={`h-4 w-4 ${claudeReviewing ? "animate-pulse" : ""}`} />
-                    {claudeReviewing ? "Reviewing..." : "AI Review"}
+                    <Sparkles className={`h-4 w-4 ${aiReviewing ? "animate-pulse" : ""}`} />
+                    {aiReviewing ? "Reviewing..." : "AI Review"}
                   </button>
                 </>
               )}
@@ -1919,9 +1926,9 @@ function CommentCard({
   );
 }
 
-// ---- Claude Review Panel ----
+// ---- AI Review Panel ----
 
-function ClaudeReviewPanel({
+function AIReviewPanel({
   reviewing,
   result,
   error,
@@ -1957,11 +1964,12 @@ function ClaudeReviewPanel({
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
         <Sparkles className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
-          Claude CLI or gh CLI is not installed.
+          Required CLI tools are not installed.
         </p>
         <p className="text-xs text-muted-foreground">
-          Both <code className="rounded bg-muted px-1 py-0.5 text-xs">gh</code> and{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">claude</code> must be installed and on PATH.
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">gh</code> and an AI CLI
+          (<code className="rounded bg-muted px-1 py-0.5 text-xs">claude</code> or{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">codex</code>) must be installed and on PATH.
         </p>
       </div>
     );
@@ -1975,7 +1983,7 @@ function ClaudeReviewPanel({
         <div className="text-center">
           <p className="text-sm font-medium text-foreground">AI Code Review</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Run a Claude-powered review of this pull request's diff.
+            Run an AI-powered review of this pull request's diff.
           </p>
         </div>
         <button
@@ -1997,7 +2005,7 @@ function ClaudeReviewPanel({
         <div className="text-center">
           <p className="text-sm font-medium text-foreground">Reviewing...</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Claude is analyzing the PR diff. This may take a few minutes.
+            AI is analyzing the PR diff. This may take a few minutes.
           </p>
         </div>
         <button

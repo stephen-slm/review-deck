@@ -94,6 +94,11 @@ interface SettingsState {
   loadSourceBasePath: () => Promise<void>;
   setSourceBasePath: (path: string) => Promise<void>;
 
+  /** Global default AI agent ("claude", "codex", or "" = auto-detect) */
+  aiDefaultAgent: string;
+  loadAiDefaultAgent: () => Promise<void>;
+  setAiDefaultAgent: (agent: string) => Promise<void>;
+
   /** Custom AI review prompt (empty = use default) */
   aiReviewPrompt: string;
   loadAiReviewPrompt: () => Promise<void>;
@@ -449,6 +454,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setSourceBasePath: async (path: string) => {
     await SetSetting("source_base_path", path);
     set({ sourceBasePath: path });
+  },
+
+  aiDefaultAgent: "",
+  loadAiDefaultAgent: async () => {
+    try {
+      const val = await GetSetting("ai_default_agent");
+      set({ aiDefaultAgent: val || "" });
+    } catch {
+      set({ aiDefaultAgent: "" });
+    }
+  },
+  setAiDefaultAgent: async (agent: string) => {
+    await SetSetting("ai_default_agent", agent);
+    set({ aiDefaultAgent: agent });
   },
 
   aiReviewPrompt: "",

@@ -6,8 +6,8 @@ export function ApplyPRDescription(arg1, arg2, arg3, arg4) {
   return window['go']['services']['WorkspaceService']['ApplyPRDescription'](arg1, arg2, arg3, arg4);
 }
 
-export function CancelClaudeReview() {
-  return window['go']['services']['WorkspaceService']['CancelClaudeReview']();
+export function CancelAIReview() {
+  return window['go']['services']['WorkspaceService']['CancelAIReview']();
 }
 
 export function CancelGenerateDescription() {
@@ -34,12 +34,12 @@ export function GetCurrentBranch(arg1, arg2) {
   return window['go']['services']['WorkspaceService']['GetCurrentBranch'](arg1, arg2);
 }
 
-export function GetDefaultClaudePrompt() {
-  return window['go']['services']['WorkspaceService']['GetDefaultClaudePrompt']();
-}
-
 export function GetDefaultDescriptionPrompt() {
   return window['go']['services']['WorkspaceService']['GetDefaultDescriptionPrompt']();
+}
+
+export function GetDefaultReviewPrompt() {
+  return window['go']['services']['WorkspaceService']['GetDefaultReviewPrompt']();
 }
 
 export function OpenTerminal(arg1, arg2) {

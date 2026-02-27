@@ -7,7 +7,7 @@ import { useVimStore } from "@/stores/vimStore";
 import { KeyRound, LogOut, Plus, Trash2, CheckCircle, XCircle, Loader2, Bot, Timer, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, Palette, AlertTriangle, Settings2, Shield, Crown, Sparkles, FileText } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
-import { GetDefaultClaudePrompt, GetDefaultDescriptionPrompt } from "../../wailsjs/go/services/WorkspaceService";
+import { GetDefaultReviewPrompt, GetDefaultDescriptionPrompt } from "../../wailsjs/go/services/WorkspaceService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 
@@ -24,7 +24,7 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiDefaultAgent, loadAiDefaultAgent, setAiDefaultAgent, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, setRepoAIAgent, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -67,10 +67,11 @@ export function SettingsPage() {
     loadHideDraftPRs();
     loadPRRefreshInterval();
     loadFlagRules();
+    loadAiDefaultAgent();
     loadAiReviewPrompt();
     loadAiMaxCost();
     loadAiDescriptionPrompt();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiDefaultAgent, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-6 switch tabs.
   useEffect(() => {
@@ -1054,11 +1055,34 @@ export function SettingsPage() {
                 <h3 className="text-lg font-semibold">AI Review</h3>
               </div>
               <p className="text-sm text-muted-foreground">
-                Configure the Claude-powered code review. The prompt is sent as a system instruction
+                Configure the AI-powered code review. The prompt is sent as a system instruction
                 when reviewing PR diffs.
               </p>
 
               <div className="rounded-lg border border-border bg-card p-3 space-y-4">
+                {/* Default AI agent */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Default AI agent
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Global default used when a repo has no per-repo agent configured.
+                    </p>
+                  </div>
+                  <select
+                    value={aiDefaultAgent}
+                    onChange={(e) => setAiDefaultAgent(e.target.value)}
+                    className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Auto (first available)</option>
+                    <option value="claude">Claude</option>
+                    <option value="codex">Codex</option>
+                  </select>
+                </div>
+
+                <div className="border-t border-border" />
+
                 {/* Prompt textarea */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1068,7 +1092,7 @@ export function SettingsPage() {
                     <button
                       onClick={async () => {
                         try {
-                          const defaultPrompt = await GetDefaultClaudePrompt();
+                          const defaultPrompt = await GetDefaultReviewPrompt();
                           setAiReviewPrompt(defaultPrompt);
                         } catch {
                           // fallback — clear to use backend default
@@ -1084,7 +1108,7 @@ export function SettingsPage() {
                   <textarea
                     value={aiReviewPrompt}
                     onChange={(e) => setAiReviewPrompt(e.target.value)}
-                    placeholder="Leave empty to use the default prompt. The prompt instructs Claude how to review PR diffs."
+                    placeholder="Leave empty to use the default prompt. The prompt instructs the AI how to review PR diffs."
                     rows={10}
                     className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />

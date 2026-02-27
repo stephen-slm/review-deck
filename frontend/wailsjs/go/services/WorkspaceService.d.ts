@@ -5,7 +5,7 @@ import {context} from '../models';
 
 export function ApplyPRDescription(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
-export function CancelClaudeReview():Promise<void>;
+export function CancelAIReview():Promise<void>;
 
 export function CancelGenerateDescription():Promise<void>;
 
@@ -19,9 +19,9 @@ export function GetAIReview(arg1:string):Promise<services.AIReviewResult>;
 
 export function GetCurrentBranch(arg1:string,arg2:string):Promise<string>;
 
-export function GetDefaultClaudePrompt():Promise<string>;
-
 export function GetDefaultDescriptionPrompt():Promise<string>;
+
+export function GetDefaultReviewPrompt():Promise<string>;
 
 export function OpenTerminal(arg1:string,arg2:string):Promise<void>;
 
