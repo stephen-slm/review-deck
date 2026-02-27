@@ -26,6 +26,7 @@ function AppContent() {
     usePRStore.getState().loadHiddenPRs();
     useSettingsStore.getState().loadHideStackedPRs();
     useSettingsStore.getState().loadHideDraftPRs();
+    useSettingsStore.getState().loadPRRefreshInterval();
   }, []);
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   GitPullRequest,
@@ -13,6 +13,7 @@ import {
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useVimStore } from "@/stores/vimStore";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "@/components/pr/StateBadge";
@@ -59,14 +60,26 @@ function StatCard({ label, value, icon, href, sublabel }: StatCardProps) {
 interface PRRowProps {
   pr: github.PullRequest;
   showAuthor?: boolean;
+  isSelected?: boolean;
 }
 
-function PRRow({ pr, showAuthor }: PRRowProps) {
+function PRRow({ pr, showAuthor, isSelected }: PRRowProps) {
   const navigate = useNavigate();
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isSelected && rowRef.current) {
+      rowRef.current.scrollIntoView({ block: "nearest" });
+    }
+  }, [isSelected]);
+
   return (
     <div
+      ref={rowRef}
       onClick={() => navigate(`/pr/${pr.nodeId}`)}
-      className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-1.5 transition-colors hover:bg-muted/30"
+      className={`flex cursor-pointer items-center gap-3 rounded-md px-3 py-1.5 transition-colors ${
+        isSelected ? "bg-accent/60" : "hover:bg-muted/30"
+      }`}
     >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -119,6 +132,9 @@ interface PRListSectionProps {
   showAuthor?: boolean;
   href?: string;
   maxItems?: number;
+  sectionIndex?: number;
+  isFocused?: boolean;
+  selectedRowIndex?: number;
 }
 
 function PRListSection({
@@ -130,13 +146,28 @@ function PRListSection({
   showAuthor,
   href,
   maxItems = 5,
+  sectionIndex,
+  isFocused,
+  selectedRowIndex,
 }: PRListSectionProps) {
   const navigate = useNavigate();
+  const sectionRef = useRef<HTMLDivElement>(null);
   const displayPrs = prs.slice(0, maxItems);
   const remaining = prs.length - maxItems;
 
+  useEffect(() => {
+    if (isFocused && sectionRef.current) {
+      sectionRef.current.scrollIntoView({ block: "nearest" });
+    }
+  }, [isFocused]);
+
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div
+      ref={sectionRef}
+      className={`rounded-lg border bg-card transition-colors ${
+        isFocused ? "border-primary ring-1 ring-primary/40" : "border-border"
+      }`}
+    >
         <div className="flex items-center justify-between border-b border-border px-3 py-2">
         <div className="flex items-center gap-2">
           {icon}
@@ -145,6 +176,11 @@ function PRListSection({
             <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
               {prs.length}
             </span>
+          )}
+          {sectionIndex != null && (
+            <kbd className="ml-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+              {sectionIndex + 1}
+            </kbd>
           )}
         </div>
         {href && (
@@ -167,8 +203,13 @@ function PRListSection({
           </div>
         ) : (
           <>
-            {displayPrs.map((pr) => (
-              <PRRow key={pr.nodeId} pr={pr} showAuthor={showAuthor} />
+            {displayPrs.map((pr, idx) => (
+              <PRRow
+                key={pr.nodeId}
+                pr={pr}
+                showAuthor={showAuthor}
+                isSelected={isFocused && selectedRowIndex === idx}
+              />
             ))}
             {remaining > 0 && href && (
               <div className="px-4 py-2 text-center">
@@ -199,6 +240,8 @@ export function DashboardPage() {
     clearError,
   } = usePRStore();
 
+  const navigate = useNavigate();
+
   const myPRs = pages.myPRs.items;
   const myRecentMerged = pages.myRecentMerged.items;
   const reviewRequests = pages.reviewRequests.items;
@@ -224,6 +267,80 @@ export function DashboardPage() {
       fetchAll(orgs); // uses cache — skips categories that are still fresh
     }
   }, [isAuthenticated, orgs, fetchAll]);
+
+  // ---- Section focus / vim navigation ----
+  const [focusedSection, setFocusedSection] = useState<number>(-1);
+  const selectedIndex = useVimStore((s) => s.selectedIndex);
+
+  // Compute stats
+  const needsAttention = useMemo(
+    () => reviewRequests.filter((pr) => pr.reviewDecision !== "APPROVED"),
+    [reviewRequests],
+  );
+  const myPRsNeedingWork = useMemo(
+    () => myPRs.filter((pr) => pr.reviewDecision === "CHANGES_REQUESTED" || pr.checksStatus === "FAILURE"),
+    [myPRs],
+  );
+
+  // The 4 section PR lists (capped to maxItems=5 to match display)
+  const sectionPRs = useMemo(() => [
+    needsAttention.slice(0, 5),
+    myPRsNeedingWork.slice(0, 5),
+    myPRs.slice(0, 5),
+    myRecentMerged.slice(0, 5),
+  ], [needsAttention, myPRsNeedingWork, myPRs, myRecentMerged]);
+
+  // When focused section changes, update vimStore listLength for j/k navigation
+  useEffect(() => {
+    if (focusedSection >= 0 && focusedSection < sectionPRs.length) {
+      useVimStore.getState().setListLength(sectionPRs[focusedSection].length);
+      useVimStore.getState().setSelectedIndex(-1);
+    } else {
+      useVimStore.getState().setListLength(0);
+      useVimStore.getState().setSelectedIndex(-1);
+    }
+  }, [focusedSection, sectionPRs]);
+
+  // Register vim actions
+  useEffect(() => {
+    const getPRForIndex = (idx: number): github.PullRequest | undefined => {
+      if (focusedSection < 0) return undefined;
+      return sectionPRs[focusedSection]?.[idx];
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actions: any = {
+      onRefresh: forceRefresh,
+      onTabDirect: (idx: number) => {
+        if (idx >= 0 && idx < 4) {
+          setFocusedSection((prev) => prev === idx ? -1 : idx);
+        }
+      },
+      onOpen: (idx: number) => {
+        const pr = getPRForIndex(idx);
+        if (pr) navigate(`/pr/${pr.nodeId}`);
+      },
+      onOpenExternal: (idx: number) => {
+        const pr = getPRForIndex(idx);
+        if (pr) BrowserOpenURL(pr.url);
+      },
+      onEscape: () => {
+        if (focusedSection >= 0) {
+          setFocusedSection(-1);
+        }
+      },
+    };
+
+    // When no section is focused, j/k scroll the page
+    if (focusedSection < 0) {
+      const scrollEl = document.getElementById("scroll-region");
+      actions.onMoveDown = () => scrollEl?.scrollBy({ top: 150, behavior: "smooth" });
+      actions.onMoveUp = () => scrollEl?.scrollBy({ top: -150, behavior: "smooth" });
+    }
+
+    useVimStore.getState().registerActions(actions);
+    return () => useVimStore.getState().clearActions();
+  }); // no deps — re-registers each render with fresh closures
 
   if (!isAuthenticated) {
     return (
@@ -251,15 +368,6 @@ export function DashboardPage() {
       </div>
     );
   }
-
-  // Compute stats
-  const needsAttention = reviewRequests.filter(
-    (pr) => pr.reviewDecision !== "APPROVED"
-  );
-  const myPRsNeedingWork = myPRs.filter(
-    (pr) =>
-      pr.reviewDecision === "CHANGES_REQUESTED" || pr.checksStatus === "FAILURE"
-  );
 
   return (
     <div className="space-y-4">
@@ -339,6 +447,9 @@ export function DashboardPage() {
           emptyMessage="No pending reviews. You're all caught up!"
           showAuthor
           href="/review-requests"
+          sectionIndex={0}
+          isFocused={focusedSection === 0}
+          selectedRowIndex={focusedSection === 0 ? selectedIndex : -1}
         />
 
         {/* Your PRs that need work */}
@@ -349,6 +460,9 @@ export function DashboardPage() {
           isLoading={loadingFlags.myPRs}
           emptyMessage="All your PRs are looking good!"
           href="/my-prs"
+          sectionIndex={1}
+          isFocused={focusedSection === 1}
+          selectedRowIndex={focusedSection === 1 ? selectedIndex : -1}
         />
 
         {/* Your open PRs */}
@@ -359,6 +473,9 @@ export function DashboardPage() {
           isLoading={loadingFlags.myPRs}
           emptyMessage="No open pull requests."
           href="/my-prs"
+          sectionIndex={2}
+          isFocused={focusedSection === 2}
+          selectedRowIndex={focusedSection === 2 ? selectedIndex : -1}
         />
 
         {/* Recently merged */}
@@ -368,6 +485,9 @@ export function DashboardPage() {
           prs={myRecentMerged}
           isLoading={loadingFlags.myRecentMerged}
           emptyMessage="No recently merged PRs."
+          sectionIndex={3}
+          isFocused={focusedSection === 3}
+          selectedRowIndex={focusedSection === 3 ? selectedIndex : -1}
         />
       </div>
     </div>

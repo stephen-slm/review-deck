@@ -10,7 +10,7 @@ import { github } from "../../wailsjs/go/models";
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
+  const { orgs, loadOrgs, addOrg, removeOrg, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, hideCopilotReviews, loadHideCopilotReviews, setHideCopilotReviews, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, excludedReposByOrg, loadAllExcludedRepos, addExcludedRepo, removeExcludedRepo, sourceBasePath, loadSourceBasePath, setSourceBasePath } = useSettingsStore();
 
   const [token, setToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -33,7 +33,8 @@ export function SettingsPage() {
     loadPollInterval();
     loadSourceBasePath();
     loadHideDraftPRs();
-  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadSourceBasePath]);
+    loadPRRefreshInterval();
+  }, [loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadHideCopilotReviews, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadSourceBasePath]);
 
   // Register j/k as page scroll on this non-list page.
   useEffect(() => {
@@ -822,6 +823,31 @@ export function SettingsPage() {
                 className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-border pt-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                PR detail refresh interval
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                How often the PR detail page auto-refreshes data from GitHub.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={10}
+                max={300}
+                value={prRefreshIntervalSeconds}
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) setPRRefreshInterval(val);
+                }}
+                className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <span className="text-sm text-muted-foreground">sec</span>
             </div>
           </div>
         </div>

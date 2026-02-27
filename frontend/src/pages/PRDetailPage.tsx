@@ -24,12 +24,14 @@ import {
   Activity,
   ThumbsUp,
   ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
 function proxyImageSrc(src: string | undefined): string | undefined {
@@ -159,6 +161,7 @@ export function PRDetailPage() {
   const mergeToggleRef = useRef<(() => void) | null>(null);
   const approveRef = useRef<(() => void) | null>(null);
   const fileToggleRef = useRef<(() => void) | null>(null);
+  const commentToggleRef = useRef<(() => void) | null>(null);
 
   // Fetch check runs when the checks tab is first selected
   useEffect(() => {
@@ -232,15 +235,17 @@ export function PRDetailPage() {
     }
   }, [storePR?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-refresh every 30 seconds.
+  // Auto-refresh at the configured interval.
+  const prRefreshIntervalSeconds = useSettingsStore((s) => s.prRefreshIntervalSeconds);
   useEffect(() => {
+    const ms = prRefreshIntervalSeconds * 1000;
     const interval = setInterval(() => {
       if (prRef.current && !refreshingRef.current) {
         handleRefresh();
       }
-    }, 30_000);
+    }, ms);
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prRefreshIntervalSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reset selection when the active tab changes.
   useEffect(() => {
@@ -278,6 +283,7 @@ export function PRDetailPage() {
       onAssignReviewer: () => reviewerToggleRef.current?.(),
       onMerge: () => mergeToggleRef.current?.(),
       onApprove: () => approveRef.current?.(),
+      onCopy: () => { if (pr) copyToClipboard(pr.url); },
     };
 
     if (activeTab === "description") {
@@ -297,6 +303,7 @@ export function PRDetailPage() {
         }
       };
     } else if (activeTab === "comments") {
+      actions.onSpace = () => commentToggleRef.current?.();
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       actions.onOpen = (idx: number) => {
         const issueComments = comments?.issueComments || [];
@@ -347,7 +354,7 @@ export function PRDetailPage() {
   ];
 
   return (
-    <div className="min-w-0 max-w-5xl space-y-4">
+    <div className="min-w-0 space-y-4">
       {/* Back + Refresh */}
       <div className="flex items-center gap-3">
         <button
@@ -549,6 +556,7 @@ export function PRDetailPage() {
               comments={comments}
               loading={commentsLoading}
               error={commentsError}
+              toggleSelectedRef={commentToggleRef}
               onToggleResolved={(threadId: string, resolved: boolean) => {
                 const update = (val: boolean) =>
                   setComments((prev) => {
@@ -1026,7 +1034,10 @@ function ChecksTab({
           <div
             key={check.name + i}
             ref={(el) => { itemRefs.current[i] = el; }}
+            onClick={() => { if (check.detailsUrl) BrowserOpenURL(check.detailsUrl); }}
             className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors ${
+              check.detailsUrl ? "cursor-pointer hover:bg-muted/30" : ""
+            } ${
               i === selectedIndex
                 ? "ring-1 ring-primary bg-accent/40 border-primary/50"
                 : "border-border bg-card"
@@ -1038,13 +1049,7 @@ function ChecksTab({
               {check.conclusion ? check.conclusion.toLowerCase().replace("_", " ") : check.status.toLowerCase().replace("_", " ")}
             </span>
             {check.detailsUrl && (
-              <button
-                onClick={() => BrowserOpenURL(check.detailsUrl)}
-                className="ml-1 text-muted-foreground transition-colors hover:text-foreground"
-                title="View details"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
+              <ExternalLink className="ml-1 h-3.5 w-3.5 text-muted-foreground" />
             )}
           </div>
         ))}
@@ -1057,18 +1062,75 @@ function CommentsTab({
   comments,
   loading,
   error,
+  toggleSelectedRef,
   onToggleResolved,
 }: {
   comments: github.PRComments | null;
   loading: boolean;
   error: string | null;
+  toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const hideCopilot = useSettingsStore((s) => s.hideCopilotReviews);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
 
+  // Collapsed state: set of item IDs that are collapsed.
+  // Issue comments use their `id`, review threads use their `id`.
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  const initializedRef = useRef(false);
+
   const COPILOT_BOT = "copilot-pull-request-reviewer[bot]";
+
+  const rawIssueComments = comments?.issueComments || [];
+  const rawReviewThreads = comments?.reviewThreads || [];
+
+  const issueComments = hideCopilot
+    ? rawIssueComments.filter((c) => c.author !== COPILOT_BOT)
+    : rawIssueComments;
+  const reviewThreads = hideCopilot
+    ? rawReviewThreads.filter((t) => !(t.comments?.length > 0 && t.comments[0].author === COPILOT_BOT))
+    : rawReviewThreads;
+
+  // Auto-collapse resolved threads on first load.
+  useEffect(() => {
+    if (initializedRef.current || reviewThreads.length === 0) return;
+    initializedRef.current = true;
+    const resolvedIds = new Set(
+      reviewThreads.filter((t) => t.isResolved).map((t) => t.id),
+    );
+    if (resolvedIds.size > 0) setCollapsedIds(resolvedIds);
+  }, [reviewThreads]);
+
+  const toggleCollapsed = (id: string) => {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
+  // Expose toggle for the currently selected item via ref (Space key).
+  useEffect(() => {
+    if (toggleSelectedRef) {
+      toggleSelectedRef.current = () => {
+        if (selectedIndex < 0) return;
+        if (selectedIndex < issueComments.length) {
+          const comment = issueComments[selectedIndex];
+          if (comment) toggleCollapsed(comment.id);
+        } else {
+          const threadIdx = selectedIndex - issueComments.length;
+          const thread = reviewThreads[threadIdx];
+          if (thread) toggleCollapsed(thread.id);
+        }
+      };
+      return () => { toggleSelectedRef.current = null; };
+    }
+  }); // no deps — keeps closure fresh
 
   // Auto-scroll the selected comment/thread into view.
   useEffect(() => {
@@ -1093,15 +1155,6 @@ function CommentsTab({
     );
   }
 
-  const rawIssueComments = comments?.issueComments || [];
-  const rawReviewThreads = comments?.reviewThreads || [];
-
-  const issueComments = hideCopilot
-    ? rawIssueComments.filter((c) => c.author !== COPILOT_BOT)
-    : rawIssueComments;
-  const reviewThreads = hideCopilot
-    ? rawReviewThreads.filter((t) => !(t.comments?.length > 0 && t.comments[0].author === COPILOT_BOT))
-    : rawReviewThreads;
   const hasContent = issueComments.length > 0 || reviewThreads.length > 0;
 
   if (!hasContent) {
@@ -1121,23 +1174,54 @@ function CommentsTab({
             Conversation ({issueComments.length})
           </h3>
           <div className="space-y-2">
-            {issueComments.map((comment, i) => (
-              <div
-                key={comment.id}
-                ref={(el) => { itemRefs.current[i] = el; }}
-                onClick={() => { if (comment.url) BrowserOpenURL(comment.url); }}
-                className={`cursor-pointer rounded-lg transition-colors hover:ring-1 hover:ring-muted-foreground/30 ${
-                  i === selectedIndex ? "ring-1 ring-primary ring-offset-1 ring-offset-background" : ""
-                }`}
-              >
-                <CommentCard
-                  author={comment.author}
-                  authorAvatar={comment.authorAvatar}
-                  body={comment.body}
-                  createdAt={comment.createdAt}
-                />
-              </div>
-            ))}
+            {issueComments.map((comment, i) => {
+              const isCollapsed = collapsedIds.has(comment.id);
+              return (
+                <div
+                  key={comment.id}
+                  ref={(el) => { itemRefs.current[i] = el; }}
+                  className={`rounded-lg transition-colors ${
+                    i === selectedIndex ? "ring-1 ring-primary ring-offset-1 ring-offset-background" : ""
+                  }`}
+                >
+                  {/* Clickable header row */}
+                  <div
+                    onClick={() => toggleCollapsed(comment.id)}
+                    className="flex cursor-pointer items-center gap-2 px-3 py-1.5 hover:bg-muted/30"
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    {comment.authorAvatar && (
+                      <img src={comment.authorAvatar} className="h-4 w-4 rounded-full" alt="" />
+                    )}
+                    <span className="text-xs font-medium text-foreground">{comment.author}</span>
+                    <span className="text-xs text-muted-foreground">{timeAgo(comment.createdAt)}</span>
+                    {isCollapsed && (
+                      <span className="ml-auto truncate text-xs text-muted-foreground/70">{comment.body.slice(0, 80)}{comment.body.length > 80 ? "..." : ""}</span>
+                    )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (comment.url) BrowserOpenURL(comment.url); }}
+                      className="ml-auto shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                      title="Open in GitHub"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </button>
+                  </div>
+                  {/* Body */}
+                  {!isCollapsed && (
+                    <CommentCard
+                      author={comment.author}
+                      authorAvatar={comment.authorAvatar}
+                      body={comment.body}
+                      createdAt={comment.createdAt}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1151,6 +1235,7 @@ function CommentsTab({
           <div className="space-y-3">
             {reviewThreads.map((thread, i) => {
               const globalIdx = issueComments.length + i;
+              const isCollapsed = collapsedIds.has(thread.id);
               return (
               <div
                 key={thread.id}
@@ -1161,11 +1246,18 @@ function CommentsTab({
                     : "border-border bg-card"
                 }`}
               >
-                {/* Thread header */}
+                {/* Thread header — click toggles collapse */}
                 <div
-                  onClick={() => { if (thread.url) BrowserOpenURL(thread.url); }}
-                  className="flex cursor-pointer items-center gap-2 border-b border-border px-4 py-2 hover:bg-muted/30"
+                  onClick={() => toggleCollapsed(thread.id)}
+                  className={`flex cursor-pointer items-center gap-2 px-4 py-2 hover:bg-muted/30 ${
+                    isCollapsed ? "" : "border-b border-border"
+                  }`}
                 >
+                  {isCollapsed ? (
+                    <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
                   <FileCode className="h-3.5 w-3.5 text-muted-foreground" />
                   <code className="truncate text-xs text-muted-foreground">
                     {thread.path}
@@ -1188,20 +1280,29 @@ function CommentsTab({
                       Unresolved
                     </button>
                   )}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); if (thread.url) BrowserOpenURL(thread.url); }}
+                    className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                    title="Open in GitHub"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
                 </div>
-                {/* Thread comments */}
-                <div className="divide-y divide-border">
-                  {(thread.comments || []).map((comment) => (
-                    <CommentCard
-                      key={comment.id}
-                      author={comment.author}
-                      authorAvatar={comment.authorAvatar}
-                      body={comment.body}
-                      createdAt={comment.createdAt}
-                      compact
-                    />
-                  ))}
-                </div>
+                {/* Thread comments — hidden when collapsed */}
+                {!isCollapsed && (
+                  <div className="divide-y divide-border">
+                    {(thread.comments || []).map((comment) => (
+                      <CommentCard
+                        key={comment.id}
+                        author={comment.author}
+                        authorAvatar={comment.authorAvatar}
+                        body={comment.body}
+                        createdAt={comment.createdAt}
+                        compact
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
               );
             })}

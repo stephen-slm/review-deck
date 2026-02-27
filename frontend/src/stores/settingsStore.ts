@@ -25,6 +25,7 @@ const DEFAULT_THEME: ThemeChoice = "system";
 
 const DEFAULT_CACHE_TTL_MINUTES = 5;
 const DEFAULT_POLL_INTERVAL_MINUTES = 5;
+const DEFAULT_PR_REFRESH_INTERVAL_SECONDS = 30;
 
 interface SettingsState {
   orgs: string[];
@@ -35,6 +36,8 @@ interface SettingsState {
   theme: ThemeChoice;
   cacheTTLMinutes: number;
   pollIntervalMinutes: number;
+  /** How often the PR detail page auto-refreshes (in seconds). */
+  prRefreshIntervalSeconds: number;
   /** Tracked teams keyed by org name */
   teamsByOrg: Record<string, storage.TrackedTeam[]>;
   /** Review priorities keyed by org name */
@@ -58,6 +61,8 @@ interface SettingsState {
   setCacheTTL: (minutes: number) => Promise<void>;
   loadPollInterval: () => Promise<void>;
   setPollInterval: (minutes: number) => Promise<void>;
+  loadPRRefreshInterval: () => Promise<void>;
+  setPRRefreshInterval: (seconds: number) => Promise<void>;
   loadTeams: (org: string) => Promise<void>;
   loadAllTeams: () => Promise<void>;
   syncTeams: (org: string) => Promise<void>;
@@ -91,6 +96,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   theme: DEFAULT_THEME,
   cacheTTLMinutes: DEFAULT_CACHE_TTL_MINUTES,
   pollIntervalMinutes: DEFAULT_POLL_INTERVAL_MINUTES,
+  prRefreshIntervalSeconds: DEFAULT_PR_REFRESH_INTERVAL_SECONDS,
   teamsByOrg: {},
   prioritiesByOrg: {},
   excludedReposByOrg: {},
@@ -227,6 +233,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const clamped = Math.max(1, Math.min(60, Math.round(minutes)));
     await SetPollInterval(clamped);
     set({ pollIntervalMinutes: clamped });
+  },
+
+  loadPRRefreshInterval: async () => {
+    try {
+      const val = await GetSetting("pr_refresh_interval_seconds");
+      const seconds = parseInt(val, 10);
+      if (!isNaN(seconds) && seconds >= 10) {
+        set({ prRefreshIntervalSeconds: seconds });
+      }
+    } catch {
+      // Setting doesn't exist yet — use default.
+    }
+  },
+
+  setPRRefreshInterval: async (seconds: number) => {
+    const clamped = Math.max(10, Math.min(300, Math.round(seconds)));
+    await SetSetting("pr_refresh_interval_seconds", String(clamped));
+    set({ prRefreshIntervalSeconds: clamped });
   },
 
   loadTeams: async (org: string) => {
