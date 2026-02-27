@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle } from "lucide-react";
@@ -107,21 +106,14 @@ export function MyPRsPage() {
     );
   }, [orgs, appendNextPage]);
 
+  const handleTabDirect = useCallback((index: number) => {
+    const tabs: Tab[] = ["open", "merged"];
+    if (index >= 0 && index < tabs.length) setActiveTab(tabs[index]);
+  }, []);
+
   useEffect(() => {
     loadOrgs();
   }, [loadOrgs]);
-
-  // Register 1/2 keys for tab switching on this page.
-  // Runs every render (no deps) to stay in sync with PRTable's registerActions
-  // which also re-registers every render and calls clearActions on cleanup.
-  useEffect(() => {
-    const tabs: Tab[] = ["open", "merged"];
-    useVimStore.getState().registerActions({
-      onTabDirect: (index: number) => {
-        if (index >= 0 && index < tabs.length) setActiveTab(tabs[index]);
-      },
-    });
-  }); // intentionally no deps — re-registers each render
 
   // Only fetch the active tab's data; merged tab is lazy-loaded on first switch.
   useEffect(() => {
@@ -244,6 +236,7 @@ export function MyPRsPage() {
           onPageChange={handlePageChangeOpen}
           onPageSizeChange={handlePageSizeChangeOpen}
           onFetchMore={handleFetchMoreOpen}
+          onTabDirect={handleTabDirect}
         />
       ) : (
         <PRTable
@@ -255,6 +248,7 @@ export function MyPRsPage() {
           onPageChange={handlePageChangeMerged}
           onPageSizeChange={handlePageSizeChangeMerged}
           onFetchMore={handleFetchMoreMerged}
+          onTabDirect={handleTabDirect}
         />
       )}
     </div>

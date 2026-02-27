@@ -55,6 +55,10 @@ interface PRTableProps {
   viewerLogin?: string;
   /** Set of PR nodeIds that match flag rules — shown with a red border. */
   flaggedNodeIds?: Set<string>;
+  /** In-page tab direct handler (e.g. 1/2 to switch Open/Merged tabs). */
+  onTabDirect?: ((index: number) => void) | null;
+  /** Map of PR nodeId → list of flag reason strings. When provided, a "Reason" column is shown. */
+  flagReasons?: Map<string, string[]>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -91,6 +95,8 @@ export function PRTable({
   onFetchMore,
   viewerLogin,
   flaggedNodeIds,
+  onTabDirect,
+  flagReasons,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -192,6 +198,7 @@ export function PRTable({
       onToggleDrafts: () => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts)),
       onToggleStacked: () => setLocalHideStacked((prev) => !(prev ?? globalHideStacked)),
       onToggleApproved: viewerLogin ? () => setHideApproved((prev) => !prev) : null,
+      onTabDirect: onTabDirect || null,
     });
 
     return () => useVimStore.getState().clearActions();
@@ -323,6 +330,21 @@ export function PRTable({
           size: 60,
         }
       ),
+      columnHelper.display({
+        id: "diff",
+        header: "+/-",
+        cell: (info) => {
+          const { additions, deletions } = info.row.original;
+          return (
+            <span className="font-mono text-xs">
+              <span className="text-green-600 dark:text-green-400">+{additions}</span>
+              {" / "}
+              <span className="text-red-600 dark:text-red-400">-{deletions}</span>
+            </span>
+          );
+        },
+        size: 90,
+      }),
       columnHelper.accessor("reviewDecision", {
         header: "Review",
         cell: (info) => <ReviewStatusBadge reviewDecision={info.getValue()} />,
@@ -342,6 +364,25 @@ export function PRTable({
         ),
         size: 80,
       }),
+      ...(flagReasons ? [columnHelper.display({
+        id: "flagReason",
+        header: "Reason",
+        cell: (info) => {
+          const reasons = flagReasons.get(info.row.original.nodeId);
+          if (!reasons || reasons.length === 0) return null;
+          return (
+            <span className="text-xs text-muted-foreground" title={reasons.join(", ")}>
+              {reasons.map((r, i) => (
+                <span key={i}>
+                  {i > 0 && ", "}
+                  <code className="rounded bg-muted px-1 py-0.5 text-[10px]">{r}</code>
+                </span>
+              ))}
+            </span>
+          );
+        },
+        size: 150,
+      })] : []),
       columnHelper.display({
         id: "actions",
         header: "",
@@ -402,7 +443,7 @@ export function PRTable({
         size: (showMerge ? 30 : 0) + (showAssignReviewer ? 30 : 0) + (onHide ? 30 : 0) + 70,
       }),
     ];
-  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, onHide, copiedKey, handleCopyRow]);
+  }, [showAuthor, showMerge, showAssignReviewer, onRefresh, onHide, copiedKey, handleCopyRow, flagReasons]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({

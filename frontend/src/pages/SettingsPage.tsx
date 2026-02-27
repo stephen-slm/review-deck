@@ -877,14 +877,22 @@ export function SettingsPage() {
         {/* Add rule form */}
         <div className="rounded-lg border border-border bg-card p-3 space-y-3">
           <div className="flex items-center gap-2">
-            <select
-              value={newRuleType}
-              onChange={(e) => setNewRuleType(e.target.value as "keyword" | "size")}
-              className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            <button
+              type="button"
+              onClick={() => {
+                setNewRuleType((prev) => {
+                  const next = prev === "keyword" ? "size" : "keyword";
+                  setNewRuleKeyword("");
+                  setNewRuleSizeValue("");
+                  return next;
+                });
+              }}
+              className="inline-flex items-center gap-1 rounded-md border border-input bg-card px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              title={`Switch to ${newRuleType === "keyword" ? "Size" : "Keyword"} rule`}
             >
-              <option value="keyword">Keyword</option>
-              <option value="size">Size</option>
-            </select>
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {newRuleType === "keyword" ? "Keyword" : "Size"}
+            </button>
 
             {newRuleType === "keyword" ? (
               <input
@@ -902,15 +910,20 @@ export function SettingsPage() {
               />
             ) : (
               <>
-                <select
-                  value={newRuleSizeOp}
-                  onChange={(e) => setNewRuleSizeOp(e.target.value as "gt" | "lt" | "eq")}
-                  className="rounded-md border border-input bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewRuleSizeOp((prev) => {
+                      if (prev === "gt") return "lt";
+                      if (prev === "lt") return "eq";
+                      return "gt";
+                    });
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border border-input bg-card px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  title="Click to cycle: &gt; / &lt; / ="
                 >
-                  <option value="gt">&gt; greater than</option>
-                  <option value="lt">&lt; less than</option>
-                  <option value="eq">= equal to</option>
-                </select>
+                  {newRuleSizeOp === "gt" ? "> greater than" : newRuleSizeOp === "lt" ? "< less than" : "= equal to"}
+                </button>
                 <input
                   type="number"
                   min={0}

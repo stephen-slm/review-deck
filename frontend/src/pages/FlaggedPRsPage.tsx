@@ -15,6 +15,7 @@ export function FlaggedPRsPage() {
   const reviewRequestItems = usePRStore((s) => s.pages.reviewRequests.items);
   const reviewedByMeItems = usePRStore((s) => s.pages.reviewedByMe.items);
   const isFlagged = useFlagStore((s) => s.isFlagged);
+  const getFlagReasons = useFlagStore((s) => s.getFlagReasons);
   const rules = useFlagStore((s) => s.rules);
 
   // Merge + deduplicate + filter to flagged only.
@@ -34,6 +35,16 @@ export function FlaggedPRsPage() {
     () => new Set(flaggedItems.map((pr) => pr.nodeId)),
     [flaggedItems],
   );
+
+  // Build a map of nodeId → reason strings for the reason column.
+  const flagReasons = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const pr of flaggedItems) {
+      map.set(pr.nodeId, getFlagReasons(pr));
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flaggedItems, rules]);
 
   // Fake client-side pagination state — show everything on one page.
   const pagination: PaginationState = useMemo(
@@ -93,6 +104,7 @@ export function FlaggedPRsPage() {
         pagination={pagination}
         onPageChange={() => {}}
         flaggedNodeIds={flaggedNodeIds}
+        flagReasons={flagReasons}
       />
     </div>
   );

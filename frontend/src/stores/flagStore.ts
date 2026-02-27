@@ -36,6 +36,8 @@ interface FlagState {
 
   /** Check if a PR matches any enabled flag rule. */
   isFlagged: (pr: github.PullRequest) => boolean;
+  /** Return human-readable descriptions of all matching enabled rules for a PR. */
+  getFlagReasons: (pr: github.PullRequest) => string[];
 }
 
 function matchesRule(pr: github.PullRequest, rule: FlagRule): boolean {
@@ -118,5 +120,15 @@ export const useFlagStore = create<FlagState>((set, get) => ({
 
   isFlagged: (pr) => {
     return get().rules.some((rule) => matchesRule(pr, rule));
+  },
+
+  getFlagReasons: (pr) => {
+    return get().rules
+      .filter((rule) => matchesRule(pr, rule))
+      .map((rule) => {
+        if (rule.type === "keyword") return `keyword: ${rule.keyword}`;
+        const op = rule.sizeOp === "gt" ? ">" : rule.sizeOp === "lt" ? "<" : "=";
+        return `size ${op} ${rule.sizeValue}`;
+      });
   },
 }));
