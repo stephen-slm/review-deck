@@ -3,9 +3,10 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type } from "lucide-react";
+import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2 } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetDefaultReviewPrompt, GetDefaultDescriptionPrompt, GetDefaultTitlePrompt } from "../../wailsjs/go/services/WorkspaceService";
+import { useRepoStore } from "@/stores/repoStore";
 
 type GlobalTab = "general" | "ai" | "advanced";
 
@@ -20,6 +21,7 @@ const globalTabs: TabDef[] = [
 export function GlobalSettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
   const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt } = useSettingsStore();
+  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   const [activeTab, setActiveTab] = useState<GlobalTab>("general");
   const [token, setToken] = useState("");
@@ -36,7 +38,8 @@ export function GlobalSettingsPage() {
     loadAiDescriptionPrompt();
     loadAiDescriptionMaxCost();
     loadAiTitlePrompt();
-  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt]);
+    loadRepos();
+  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadRepos]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-3 switch tabs.
   useEffect(() => {
@@ -245,6 +248,84 @@ export function GlobalSettingsPage() {
                   );
                 })}
               </div>
+            </section>
+
+            {/* Tracked Repositories Section */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <FolderGit2 className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Tracked Repositories</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Repositories you are tracking. Click "Add" to select a local Git repo folder.
+              </p>
+
+              <button
+                onClick={() => addRepo()}
+                disabled={repoLoading}
+                className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80 disabled:opacity-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add repository
+              </button>
+
+              {repos.length > 0 ? (
+                <ul className="space-y-2">
+                  {repos.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-2.5"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-foreground">
+                          {r.repoOwner}/{r.repoName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {r.localPath}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => removeRepo(r.id)}
+                        className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  No repositories tracked yet. Add one above to get started.
+                </p>
+              )}
+
+              {/* Default repository picker */}
+              {repos.length > 1 && (
+                <div className="rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">Default repository</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Automatically selected when the app starts.
+                      </p>
+                    </div>
+                    <select
+                      value={selectedRepoId ?? ""}
+                      onChange={(e) => {
+                        const id = parseInt(e.target.value, 10);
+                        if (!isNaN(id)) selectRepo(id);
+                      }}
+                      className="max-w-[200px] truncate rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      {repos.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.repoOwner}/{r.repoName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
             </section>
           </>
         )}
