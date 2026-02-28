@@ -208,6 +208,19 @@ func (s *WorkspaceService) getMaxCost() float64 {
 	return f
 }
 
+// getDescriptionMaxCost returns the user-configured max cost per description generation in USD (0 = unlimited).
+func (s *WorkspaceService) getDescriptionMaxCost() float64 {
+	val, err := s.db.GetSetting("ai_description_max_cost")
+	if err != nil || strings.TrimSpace(val) == "" {
+		return 0
+	}
+	f, err := strconv.ParseFloat(strings.TrimSpace(val), 64)
+	if err != nil {
+		return 0
+	}
+	return f
+}
+
 // GetAIReview returns a cached AI review for a PR (if it exists and is <7 days old).
 func (s *WorkspaceService) GetAIReview(prNodeID string) (*AIReviewResult, error) {
 	r, err := s.db.GetAIReview(prNodeID)
@@ -410,7 +423,7 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 	}
 
 	prompt := s.getDescriptionPrompt()
-	maxCost := s.getMaxCost()
+	maxCost := s.getDescriptionMaxCost()
 
 	// Cancel any existing description generation.
 	s.muDesc.Lock()

@@ -108,6 +108,11 @@ interface SettingsState {
   aiDescriptionPrompt: string;
   loadAiDescriptionPrompt: () => Promise<void>;
   setAiDescriptionPrompt: (prompt: string) => Promise<void>;
+
+  /** Max cost per AI description generation in USD (0 = unlimited) */
+  aiDescriptionMaxCost: string;
+  loadAiDescriptionMaxCost: () => Promise<void>;
+  setAiDescriptionMaxCost: (cost: string) => Promise<void>;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -500,5 +505,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await SetSetting("ai_description_prompt", prompt);
     }
     set({ aiDescriptionPrompt: prompt });
+  },
+
+  aiDescriptionMaxCost: "",
+  loadAiDescriptionMaxCost: async () => {
+    try {
+      const val = await GetSetting("ai_description_max_cost");
+      set({ aiDescriptionMaxCost: val || "" });
+    } catch {
+      set({ aiDescriptionMaxCost: "" });
+    }
+  },
+  setAiDescriptionMaxCost: async (cost: string) => {
+    await SetSetting("ai_description_max_cost", cost);
+    set({ aiDescriptionMaxCost: cost });
   },
 }));

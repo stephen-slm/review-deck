@@ -11,20 +11,37 @@ import { GetDefaultReviewPrompt, GetDefaultDescriptionPrompt } from "../../wails
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 
-type SettingsTab = "general" | "filters" | "teams" | "rules" | "ai" | "advanced";
+type SettingsTab = "general" | "ai" | "advanced" | "repos" | "filters" | "teams" | "rules";
 
-const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[] = [
-  { key: "general", label: "General", icon: Settings2 },
-  { key: "filters", label: "Filters", icon: Bot },
-  { key: "teams", label: "Teams & Priority", icon: Crown },
-  { key: "rules", label: "Flag Rules", icon: AlertTriangle },
-  { key: "ai", label: "AI", icon: Sparkles },
-  { key: "advanced", label: "Advanced", icon: Timer },
+interface TabDef { key: SettingsTab; label: string; icon: typeof Settings2 }
+interface TabGroup { heading: string; tabs: TabDef[] }
+
+const settingsTabGroups: TabGroup[] = [
+  {
+    heading: "Global",
+    tabs: [
+      { key: "general", label: "General", icon: Settings2 },
+      { key: "ai", label: "AI", icon: Sparkles },
+      { key: "advanced", label: "Advanced", icon: Timer },
+    ],
+  },
+  {
+    heading: "Repository",
+    tabs: [
+      { key: "repos", label: "Repositories", icon: FolderGit2 },
+      { key: "filters", label: "Filters", icon: Bot },
+      { key: "teams", label: "Teams & Priority", icon: Crown },
+      { key: "rules", label: "Flag Rules", icon: AlertTriangle },
+    ],
+  },
 ];
+
+/** Flat ordered list of all tabs (used for vim h/l/1-7 navigation). */
+const allTabs: TabDef[] = settingsTabGroups.flatMap((g) => g.tabs);
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -70,12 +87,13 @@ export function SettingsPage() {
     loadAiReviewPrompt();
     loadAiMaxCost();
     loadAiDescriptionPrompt();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
+    loadAiDescriptionMaxCost();
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost]);
 
-  // Register vim keybindings: j/k scroll, h/l and 1-6 switch tabs.
+  // Register vim keybindings: j/k scroll, h/l and 1-7 switch tabs.
   useEffect(() => {
     const scrollEl = document.getElementById("scroll-region");
-    const tabKeys: SettingsTab[] = settingsTabs.map((t) => t.key);
+    const tabKeys: SettingsTab[] = allTabs.map((t) => t.key);
     const currentIdx = tabKeys.indexOf(activeTab);
 
     useVimStore.getState().registerActions({
@@ -141,32 +159,50 @@ export function SettingsPage() {
       <div>
         <h2 className="text-2xl font-bold tracking-tight">Settings</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Configure authentication, filters, and preferences.
+          Configure global preferences and per-repository settings.
         </p>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-0.5 border-b border-border overflow-x-auto">
-        {settingsTabs.map((tab, idx) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`relative inline-flex shrink-0 items-center gap-1 px-2.5 py-2 text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <tab.icon className="h-3.5 w-3.5" />
-            {tab.label}
-            <kbd className="ml-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
-              {idx + 1}
-            </kbd>
-            {activeTab === tab.key && (
-              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
-            )}
-          </button>
-        ))}
+      {/* Tabs — grouped under Global / Repository headings */}
+      <div className="flex items-end gap-0.5 border-b border-border overflow-x-auto">
+        {settingsTabGroups.map((group, gi) => {
+          // Running index across all groups for the numeric shortcut kbd.
+          const baseIdx = settingsTabGroups.slice(0, gi).reduce((sum, g) => sum + g.tabs.length, 0);
+          return (
+            <div key={group.heading} className="flex items-end">
+              {gi > 0 && (
+                <div className="mx-1.5 mb-2 h-5 w-px bg-border" />
+              )}
+              <div className="flex flex-col">
+                <span className="mb-0.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  {group.heading}
+                </span>
+                <div className="flex gap-0.5">
+                  {group.tabs.map((tab, ti) => (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className={`relative inline-flex shrink-0 items-center gap-1 px-2.5 py-2 text-sm font-medium transition-colors ${
+                        activeTab === tab.key
+                          ? "text-foreground"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <tab.icon className="h-3.5 w-3.5" />
+                      {tab.label}
+                      <kbd className="ml-0.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+                        {baseIdx + ti + 1}
+                      </kbd>
+                      {activeTab === tab.key && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Tab content */}
@@ -302,6 +338,11 @@ export function SettingsPage() {
               </div>
             </section>
 
+          </>
+        )}
+
+        {activeTab === "repos" && (
+          <>
             {/* Repositories Section */}
             <section className="space-y-4">
               <div className="flex items-center gap-2">
@@ -1120,36 +1161,62 @@ export function SettingsPage() {
                 write PR descriptions from the diff.
               </p>
 
-              <div className="rounded-lg border border-border bg-card p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-sm font-medium text-foreground">
-                    Description prompt
-                  </label>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const defaultPrompt = await GetDefaultDescriptionPrompt();
-                        setAiDescriptionPrompt(defaultPrompt);
-                      } catch {
-                        setAiDescriptionPrompt("");
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                    Reset to default
-                  </button>
+              <div className="rounded-lg border border-border bg-card p-3 space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-foreground">
+                      Description prompt
+                    </label>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const defaultPrompt = await GetDefaultDescriptionPrompt();
+                          setAiDescriptionPrompt(defaultPrompt);
+                        } catch {
+                          setAiDescriptionPrompt("");
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Reset to default
+                    </button>
+                  </div>
+                  <textarea
+                    value={aiDescriptionPrompt}
+                    onChange={(e) => setAiDescriptionPrompt(e.target.value)}
+                    placeholder="Leave empty to use the default prompt. The prompt instructs the AI how to write PR descriptions."
+                    rows={8}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Leave empty to use the built-in default prompt. Changes apply to the next description generation.
+                  </p>
                 </div>
-                <textarea
-                  value={aiDescriptionPrompt}
-                  onChange={(e) => setAiDescriptionPrompt(e.target.value)}
-                  placeholder="Leave empty to use the default prompt. The prompt instructs the AI how to write PR descriptions."
-                  rows={8}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to use the built-in default prompt. Changes apply to the next description generation.
-                </p>
+
+                {/* Max cost for description generation */}
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Max cost per description
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Maximum USD cost for a single description generation. Set to 0 or leave empty for no limit.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">$</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={aiDescriptionMaxCost}
+                      onChange={(e) => setAiDescriptionMaxCost(e.target.value)}
+                      placeholder="0.00"
+                      className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
               </div>
             </section>
           </>
