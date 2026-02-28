@@ -525,6 +525,7 @@ export function PRDetailPage() {
       // Enter generates a PR description (when tools are available and not already generating).
       if (hasLocalPath && toolAvailability?.gh && toolAvailability?.claude) {
         actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
+        actions.onGenerate = () => { if (!descGenerating) handleGenerateDescription(); };
       }
     } else if (activeTab === "checks") {
       actions.onOpen = (idx: number) => {
@@ -564,6 +565,7 @@ export function PRDetailPage() {
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       // Enter starts a review (idle), re-runs (result shown), or retries (error).
       actions.onOpen = () => { if (!aiReviewing) handleStartAIReview(); };
+      actions.onGenerate = () => { if (!aiReviewing) handleStartAIReview(); };
     }
 
     useVimStore.getState().registerActions(actions);

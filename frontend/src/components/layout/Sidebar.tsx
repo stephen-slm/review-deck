@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import {
   GitPullRequest,
@@ -15,12 +15,13 @@ import { useAuthStore } from "@/stores/authStore";
 import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { useVimStore } from "@/stores/vimStore";
+import { useFlagStore } from "@/stores/flagStore";
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof GitPullRequest;
-  badgeKey?: "myPRs" | "reviewRequests";
+  badgeKey?: "myPRs" | "reviewRequests" | "flagged";
 }
 
 const navItems: NavItem[] = [
@@ -31,7 +32,7 @@ const navItems: NavItem[] = [
     icon: Eye,
     badgeKey: "reviewRequests",
   },
-  { to: "/flagged", label: "Flagged", icon: AlertTriangle },
+  { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -44,9 +45,25 @@ export function Sidebar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
+  const isFlagged = useFlagStore((s) => s.isFlagged);
+  const flagRules = useFlagStore((s) => s.rules);
+
+  const flaggedCount = useMemo(() => {
+    const seen = new Set<string>();
+    const merged = [...pages.reviewRequests.items, ...(pages.reviewedByMe?.items || [])];
+    let count = 0;
+    for (const pr of merged) {
+      if (seen.has(pr.nodeId)) continue;
+      seen.add(pr.nodeId);
+      if (isFlagged(pr)) count++;
+    }
+    return count;
+  }, [pages.reviewRequests.items, pages.reviewedByMe?.items, isFlagged, flagRules]);
+
   const badgeCounts: Record<string, number> = {
     myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
     reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
+    flagged: flaggedCount,
   };
 
   useEffect(() => {
@@ -217,9 +234,11 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
-                    item.badgeKey === "reviewRequests"
-                      ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                      : "bg-secondary text-secondary-foreground"
+                    item.badgeKey === "flagged"
+                      ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+                      : item.badgeKey === "reviewRequests"
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
+                        : "bg-secondary text-secondary-foreground"
                   )}
                 >
                   {count}
