@@ -5,6 +5,7 @@ import { ToastProvider } from "./components/ui/Toast";
 import { MyPRsPage } from "./pages/MyPRsPage";
 import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { GlobalSettingsPage } from "./pages/GlobalSettingsPage";
 import { FlaggedPRsPage } from "./pages/FlaggedPRsPage";
 import { PRDetailPage } from "./pages/PRDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
@@ -73,6 +74,7 @@ function AppContent() {
             />
             <Route path="/flagged" element={<FlaggedPRsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/global-settings" element={<GlobalSettingsPage />} />
             <Route path="/pr/:nodeId" element={<PRDetailPage />} />
           </Routes>
         </div>

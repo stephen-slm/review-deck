@@ -6,12 +6,20 @@ export function ApplyPRDescription(arg1, arg2, arg3, arg4) {
   return window['go']['services']['WorkspaceService']['ApplyPRDescription'](arg1, arg2, arg3, arg4);
 }
 
+export function ApplyPRTitle(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['WorkspaceService']['ApplyPRTitle'](arg1, arg2, arg3, arg4);
+}
+
 export function CancelAIReview() {
   return window['go']['services']['WorkspaceService']['CancelAIReview']();
 }
 
 export function CancelGenerateDescription() {
   return window['go']['services']['WorkspaceService']['CancelGenerateDescription']();
+}
+
+export function CancelGenerateTitle() {
+  return window['go']['services']['WorkspaceService']['CancelGenerateTitle']();
 }
 
 export function CheckToolAvailability() {
@@ -42,6 +50,10 @@ export function GetDefaultReviewPrompt() {
   return window['go']['services']['WorkspaceService']['GetDefaultReviewPrompt']();
 }
 
+export function GetDefaultTitlePrompt() {
+  return window['go']['services']['WorkspaceService']['GetDefaultTitlePrompt']();
+}
+
 export function OpenTerminal(arg1, arg2) {
   return window['go']['services']['WorkspaceService']['OpenTerminal'](arg1, arg2);
 }
@@ -56,4 +68,8 @@ export function StartAIReview(arg1, arg2, arg3, arg4) {
 
 export function StartGenerateDescription(arg1, arg2, arg3) {
   return window['go']['services']['WorkspaceService']['StartGenerateDescription'](arg1, arg2, arg3);
+}
+
+export function StartGenerateTitle(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['WorkspaceService']['StartGenerateTitle'](arg1, arg2, arg3, arg4);
 }

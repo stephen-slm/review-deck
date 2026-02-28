@@ -30,6 +30,8 @@ export function GetPRCheckRuns(arg1:string):Promise<Array<github.CheckRun>>;
 
 export function GetPRComments(arg1:string):Promise<github.PRComments>;
 
+export function GetPRCommits(arg1:string):Promise<Array<github.PRCommit>>;
+
 export function GetPRFiles(arg1:string,arg2:string,arg3:number):Promise<Array<github.PRFile>>;
 
 export function GetRepoLabels(arg1:string,arg2:string):Promise<Array<github.Label>>;

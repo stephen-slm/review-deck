@@ -33,8 +33,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription } from "../../wailsjs/go/services/WorkspaceService";
+import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
@@ -107,7 +107,7 @@ import { useToast } from "@/components/ui/Toast";
 import { github, services } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
-type DetailTab = "description" | "checks" | "comments" | "files" | "ai-review";
+type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
@@ -183,6 +183,11 @@ export function PRDetailPage() {
   // Expanded files state — lifted here so it persists across tab switches and auto-refreshes.
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
+  // Lazy-loaded commits
+  const [commits, setCommits] = useState<github.PRCommit[] | null>(null);
+  const [commitsLoading, setCommitsLoading] = useState(false);
+  const [commitsError, setCommitsError] = useState<string | null>(null);
+
   // Workspace: tool availability, checkout state, current branch, Claude review
   const { addToast } = useToast();
   const repos = useRepoStore((s) => s.repos);
@@ -200,6 +205,12 @@ export function PRDetailPage() {
   const [generatedDesc, setGeneratedDesc] = useState<string | null>(null);
   const [descError, setDescError] = useState<string | null>(null);
   const [applyingDesc, setApplyingDesc] = useState(false);
+
+  // AI title generation state
+  const [titleGenerating, setTitleGenerating] = useState(false);
+  const [generatedTitle, setGeneratedTitle] = useState<string | null>(null);
+  const [titleError, setTitleError] = useState<string | null>(null);
+  const [applyingTitle, setApplyingTitle] = useState(false);
 
   // Check if this PR's repo is tracked locally
   const trackedRepo = useMemo(() => {
@@ -282,6 +293,28 @@ export function PRDetailPage() {
     const offError = EventsOn("description:error", (data: { error: string }) => {
       setDescGenerating(false);
       setDescError(data.error);
+    });
+    return () => {
+      offStarted();
+      offResult();
+      offError();
+    };
+  }, []);
+
+  // Listen for title generation events
+  useEffect(() => {
+    const offStarted = EventsOn("title:started", () => {
+      setTitleGenerating(true);
+      setGeneratedTitle(null);
+      setTitleError(null);
+    });
+    const offResult = EventsOn("title:result", (data: { title: string }) => {
+      setTitleGenerating(false);
+      setGeneratedTitle(data.title);
+    });
+    const offError = EventsOn("title:error", (data: { error: string }) => {
+      setTitleGenerating(false);
+      setTitleError(data.error);
     });
     return () => {
       offStarted();
@@ -375,6 +408,47 @@ export function PRDetailPage() {
     }
   }, [pr, generatedDesc, applyingDesc, addToast]);
 
+  const handleGenerateTitle = useCallback(async () => {
+    if (!pr || titleGenerating) return;
+    try {
+      setGeneratedTitle(null);
+      setTitleError(null);
+      await StartGenerateTitle(pr.repoOwner, pr.repoName, pr.number, pr.headRef);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, titleGenerating, addToast]);
+
+  const handleCancelTitle = useCallback(async () => {
+    try {
+      await CancelGenerateTitle();
+      setTitleGenerating(false);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast]);
+
+  const handleApplyTitle = useCallback(async () => {
+    if (!pr || !generatedTitle || applyingTitle) return;
+    setApplyingTitle(true);
+    try {
+      await ApplyPRTitle(pr.repoOwner, pr.repoName, pr.number, generatedTitle);
+      addToast("PR title updated on GitHub", "success");
+      // Refresh the PR to show the updated title.
+      setRefreshing(true);
+      try {
+        const updated = await GetSinglePR(pr.repoOwner, pr.repoName, pr.number);
+        if (updated) setFetchedPR(updated);
+      } catch {}
+      setRefreshing(false);
+      setGeneratedTitle(null);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setApplyingTitle(false);
+    }
+  }, [pr, generatedTitle, applyingTitle, addToast]);
+
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
   const mergeToggleRef = useRef<(() => void) | null>(null);
@@ -415,6 +489,16 @@ export function PRDetailPage() {
       .finally(() => setFilesLoading(false));
   }, [activeTab, prFiles, filesLoading, pr]);
 
+  // Fetch commits when the commits tab is first selected
+  useEffect(() => {
+    if (activeTab !== "commits" || commits !== null || commitsLoading || !nodeId) return;
+    setCommitsLoading(true);
+    GetPRCommits(nodeId)
+      .then(setCommits)
+      .catch((err) => setCommitsError(String(err)))
+      .finally(() => setCommitsLoading(false));
+  }, [activeTab, commits, commitsLoading, nodeId]);
+
   // Keep a ref to the latest PR info so the auto-refresh interval always
   // has access to current owner/repo/number without stale closures.
   const prRef = useRef<{ owner: string; repo: string; number: number } | null>(null);
@@ -442,6 +526,8 @@ export function PRDetailPage() {
       setCommentsError(null);
       setPRFiles(null);
       setFilesError(null);
+      setCommits(null);
+      setCommitsError(null);
     } catch (err) {
       setRefreshError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -484,6 +570,8 @@ export function PRDetailPage() {
       useVimStore.getState().setListLength(ic + rt);
     } else if (activeTab === "files") {
       useVimStore.getState().setListLength(prFiles?.length ?? 0);
+    } else if (activeTab === "commits") {
+      useVimStore.getState().setListLength(commits?.length ?? 0);
     } else if (activeTab === "ai-review") {
       // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
       useVimStore.getState().setListLength(1);
@@ -500,7 +588,7 @@ export function PRDetailPage() {
   // Register VIM actions for the detail page.
   // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
   useEffect(() => {
-    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "ai-review"];
+    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -558,6 +646,14 @@ export function PRDetailPage() {
     } else if (activeTab === "files") {
       actions.onSpace = () => fileToggleRef.current?.();
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+    } else if (activeTab === "commits") {
+      actions.onOpenExternal = (idx: number) => {
+        if (commits && commits[idx]?.oid && pr) {
+          BrowserOpenURL(`${pr.url}/commits/${commits[idx].oid}`);
+        } else if (pr) {
+          BrowserOpenURL(pr.url);
+        }
+      };
     } else if (activeTab === "ai-review") {
       const scrollEl = document.getElementById("scroll-region");
       actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
@@ -597,6 +693,7 @@ export function PRDetailPage() {
     { key: "checks", label: "Checks", icon: <Activity className="h-4 w-4" /> },
     { key: "comments", label: "Comments", icon: <MessageSquare className="h-4 w-4" /> },
     { key: "files", label: "Files", icon: <FileCode className="h-4 w-4" /> },
+    { key: "commits", label: "Commits", icon: <GitCommit className="h-4 w-4" /> },
     { key: "ai-review", label: "AI Review", icon: <Sparkles className="h-4 w-4" /> },
   ];
 
@@ -730,28 +827,114 @@ export function PRDetailPage() {
                   </h3>
                   {hasLocalPath && toolAvailability?.gh && toolAvailability?.claude && (
                     <div className="flex items-center gap-1.5">
+                      {titleGenerating ? (
+                        <button
+                          onClick={handleCancelTitle}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Cancel Title
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleGenerateTitle}
+                          disabled={titleGenerating || descGenerating}
+                          title="Generate a PR title using AI"
+                          className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          Title
+                        </button>
+                      )}
                       {descGenerating ? (
                         <button
                           onClick={handleCancelDescription}
                           className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                         >
                           <XCircle className="h-3 w-3" />
-                          Cancel
+                          Cancel Desc
                         </button>
                       ) : (
                         <button
                           onClick={handleGenerateDescription}
-                          disabled={descGenerating}
+                          disabled={descGenerating || titleGenerating}
                           title="Generate a PR description using AI"
                           className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
                         >
                           <Sparkles className="h-3 w-3" />
-                          Generate
+                          Description
                         </button>
                       )}
                     </div>
                   )}
                 </div>
+
+                {/* AI title generation in progress */}
+                {titleGenerating && (
+                  <div className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm text-purple-700 dark:text-purple-300">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating title...
+                  </div>
+                )}
+
+                {/* AI title generation error */}
+                {titleError && !titleGenerating && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    <div className="flex items-center justify-between">
+                      <span>{titleError}</span>
+                      <button
+                        onClick={handleGenerateTitle}
+                        className="ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium hover:bg-destructive/10"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI-generated title preview */}
+                {generatedTitle && !titleGenerating && (
+                  <div className="space-y-2 rounded-lg border-2 border-purple-500/40 bg-purple-500/5 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                        AI-Generated Title
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={handleGenerateTitle}
+                          title="Regenerate title"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <RefreshCw className="h-3 w-3" />
+                          Regenerate
+                        </button>
+                        <button
+                          onClick={() => setGeneratedTitle(null)}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Discard
+                        </button>
+                        <button
+                          onClick={handleApplyTitle}
+                          disabled={applyingTitle}
+                          className="inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {applyingTitle ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <CheckCircle className="h-3 w-3" />
+                          )}
+                          {applyingTitle ? "Applying..." : "Apply to PR"}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-card px-3 py-2">
+                      <p className="text-sm font-medium text-foreground">{generatedTitle}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* AI description generation in progress */}
                 {descGenerating && (
@@ -937,6 +1120,81 @@ export function PRDetailPage() {
               expandedFiles={expandedFiles}
               onExpandedFilesChange={setExpandedFiles}
             />
+          )}
+
+          {activeTab === "commits" && (
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Commits ({commits?.length ?? pr.commitCount})
+              </h3>
+              {commitsLoading ? (
+                <div className="flex items-center justify-center py-8 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span className="ml-2 text-sm">Loading commits...</span>
+                </div>
+              ) : commitsError ? (
+                <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                  {commitsError}
+                </div>
+              ) : commits && commits.length > 0 ? (
+                <ul className="space-y-1">
+                  {commits.map((commit, idx) => {
+                    const selected = useVimStore.getState().selectedIndex === idx;
+                    return (
+                      <li
+                        key={commit.oid}
+                        data-idx={idx}
+                        className={`group flex items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
+                          selected
+                            ? "border-primary bg-accent"
+                            : "border-border bg-card hover:bg-accent/50"
+                        }`}
+                      >
+                        <div className="mt-0.5 shrink-0">
+                          {commit.authorAvatar ? (
+                            <img
+                              src={commit.authorAvatar}
+                              alt={commit.authorLogin || commit.authorName}
+                              className="h-6 w-6 rounded-full"
+                            />
+                          ) : (
+                            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
+                              {(commit.authorLogin || commit.authorName || "?")[0]?.toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground leading-snug">
+                            {commit.messageHeadline}
+                          </p>
+                          <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>{commit.authorLogin || commit.authorName}</span>
+                            <span>&middot;</span>
+                            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">
+                              {commit.oid.slice(0, 7)}
+                            </code>
+                            <span>&middot;</span>
+                            <span>{timeAgo(commit.committedDate)}</span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5 text-xs">
+                          {commit.additions > 0 && (
+                            <span className="text-green-600 dark:text-green-400">+{commit.additions}</span>
+                          )}
+                          {commit.deletions > 0 && (
+                            <span className="text-red-600 dark:text-red-400">-{commit.deletions}</span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : (
+                <p className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+                  No commits found.
+                </p>
+              )}
+            </section>
           )}
 
           {activeTab === "ai-review" && (

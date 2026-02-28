@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
     badgeKey: "reviewRequests",
   },
   { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
-  { to: "/settings", label: "Settings", icon: Settings },
+  { to: "/settings", label: "Repo Settings", icon: Settings },
 ];
 
 export function Sidebar() {
@@ -265,9 +265,22 @@ export function Sidebar() {
                 {user.login[0]?.toUpperCase()}
               </div>
             )}
-            <span className="truncate text-xs text-muted-foreground">
+            <span className="flex-1 truncate text-xs text-muted-foreground">
               {user.login}
             </span>
+            <NavLink
+              to="/global-settings"
+              className={({ isActive }) =>
+                `rounded-md p-1 transition-colors ${
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                }`
+              }
+              title="Global Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </NavLink>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">Not connected</p>

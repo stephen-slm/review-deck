@@ -609,6 +609,65 @@ func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments,
 	return result, nil
 }
 
+// prCommitsQuery fetches commits for a PR by node ID.
+type prCommitsQuery struct {
+	Node struct {
+		PullRequest struct {
+			Commits struct {
+				Nodes []struct {
+					Commit struct {
+						OID             string `graphql:"oid"`
+						MessageHeadline string
+						Message         string
+						Additions       int
+						Deletions       int
+						Author          struct {
+							Name string
+							User *struct {
+								Login     string
+								AvatarURL string `graphql:"avatarUrl(size: 32)"`
+							}
+						}
+						CommittedDate time.Time
+					}
+				}
+			} `graphql:"commits(first: 250)"`
+		} `graphql:"... on PullRequest"`
+	} `graphql:"node(id: $id)"`
+}
+
+// GetPRCommits fetches all commits for a pull request.
+func (c *Client) GetPRCommits(ctx context.Context, nodeID string) ([]PRCommit, error) {
+	variables := map[string]interface{}{
+		"id": githubv4.ID(nodeID),
+	}
+
+	var q prCommitsQuery
+	if err := c.graphql.Query(ctx, &q, variables); err != nil {
+		return nil, fmt.Errorf("github graphql pr commits: %w", err)
+	}
+
+	var commits []PRCommit
+	for _, n := range q.Node.PullRequest.Commits.Nodes {
+		cm := n.Commit
+		commit := PRCommit{
+			OID:             cm.OID,
+			MessageHeadline: cm.MessageHeadline,
+			Message:         cm.Message,
+			AuthorName:      cm.Author.Name,
+			Additions:       cm.Additions,
+			Deletions:       cm.Deletions,
+			CommittedDate:   cm.CommittedDate,
+		}
+		if cm.Author.User != nil {
+			commit.AuthorLogin = cm.Author.User.Login
+			commit.AuthorAvatar = cm.Author.User.AvatarURL
+		}
+		commits = append(commits, commit)
+	}
+	return commits, nil
+}
+
 // GetRepoLabels fetches all labels for a repository.
 func (c *Client) GetRepoLabels(ctx context.Context, owner, repo string) ([]Label, error) {
 	var query struct {

@@ -5,9 +5,13 @@ import {context} from '../models';
 
 export function ApplyPRDescription(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
+export function ApplyPRTitle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+
 export function CancelAIReview():Promise<void>;
 
 export function CancelGenerateDescription():Promise<void>;
+
+export function CancelGenerateTitle():Promise<void>;
 
 export function CheckToolAvailability():Promise<services.ToolAvailability>;
 
@@ -23,6 +27,8 @@ export function GetDefaultDescriptionPrompt():Promise<string>;
 
 export function GetDefaultReviewPrompt():Promise<string>;
 
+export function GetDefaultTitlePrompt():Promise<string>;
+
 export function OpenTerminal(arg1:string,arg2:string):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
@@ -30,3 +36,5 @@ export function SetContext(arg1:context.Context):Promise<void>;
 export function StartAIReview(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function StartGenerateDescription(arg1:string,arg2:string,arg3:number):Promise<void>;
+
+export function StartGenerateTitle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;

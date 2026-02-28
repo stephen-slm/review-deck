@@ -39,7 +39,7 @@ const REVIEW_REQUEST_HINTS: Hint[] = [
 ];
 
 const DETAIL_HINTS: Hint[] = [
-  { keys: "1-4", label: "switch tab" },
+  { keys: "1-6", label: "switch tab" },
   { keys: "h/l", label: "prev/next tab" },
   { keys: "j/k", label: "scroll / navigate items" },
   { keys: "Space", label: "toggle expand file" },
@@ -60,7 +60,7 @@ const DETAIL_HINTS: Hint[] = [
 const SETTINGS_HINTS: Hint[] = [
   { keys: "j/k", label: "scroll page" },
   { keys: "h/l", label: "prev/next tab" },
-  { keys: "1-7", label: "switch settings tab" },
+  { keys: "1-4", label: "switch settings tab" },
 ];
 
 function getHintGroupsForPath(pathname: string): HintGroup[] {
@@ -83,7 +83,7 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }
-  if (pathname === "/settings") {
+  if (pathname === "/settings" || pathname === "/global-settings") {
     return [
       { title: "Settings", hints: SETTINGS_HINTS },
       { title: "Global", hints: GLOBAL_HINTS },

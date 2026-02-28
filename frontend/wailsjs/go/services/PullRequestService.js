@@ -54,6 +54,10 @@ export function GetPRComments(arg1) {
   return window['go']['services']['PullRequestService']['GetPRComments'](arg1);
 }
 
+export function GetPRCommits(arg1) {
+  return window['go']['services']['PullRequestService']['GetPRCommits'](arg1);
+}
+
 export function GetPRFiles(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['GetPRFiles'](arg1, arg2, arg3);
 }

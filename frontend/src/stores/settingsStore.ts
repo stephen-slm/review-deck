@@ -117,6 +117,11 @@ interface SettingsState {
   aiDescriptionMaxCost: string;
   loadAiDescriptionMaxCost: () => Promise<void>;
   setAiDescriptionMaxCost: (cost: string) => Promise<void>;
+
+  /** Custom AI title generation prompt (empty = use default) */
+  aiTitlePrompt: string;
+  loadAiTitlePrompt: () => Promise<void>;
+  setAiTitlePrompt: (prompt: string) => Promise<void>;
 }
 
 /** Return the repo-scoped setting key, e.g. `repo:acme:filter_bots`. */
@@ -575,5 +580,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setAiDescriptionMaxCost: async (cost: string) => {
     await SetSetting("ai_description_max_cost", cost);
     set({ aiDescriptionMaxCost: cost });
+  },
+
+  aiTitlePrompt: "",
+  loadAiTitlePrompt: async () => {
+    try {
+      const val = await GetSetting("ai_title_prompt");
+      set({ aiTitlePrompt: val || "" });
+    } catch {
+      set({ aiTitlePrompt: "" });
+    }
+  },
+  setAiTitlePrompt: async (prompt: string) => {
+    if (prompt.trim() === "") {
+      await SetSetting("ai_title_prompt", "");
+    } else {
+      await SetSetting("ai_title_prompt", prompt);
+    }
+    set({ aiTitlePrompt: prompt });
   },
 }));

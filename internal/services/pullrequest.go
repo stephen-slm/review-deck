@@ -521,6 +521,18 @@ func (s *PullRequestService) GetPRFiles(owner, repo string, number int) ([]gh.PR
 	return files, nil
 }
 
+// GetPRCommits fetches all commits for a specific PR.
+func (s *PullRequestService) GetPRCommits(nodeID string) ([]gh.PRCommit, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	commits, err := s.client.GetPRCommits(context.Background(), nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch pr commits: %w", err)
+	}
+	return commits, nil
+}
+
 // ---- Metrics ----
 
 // GetMetricsHistory returns historical metrics snapshots for the given number of days back.

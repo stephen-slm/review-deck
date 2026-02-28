@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,16 @@ A clear 1-3 sentence summary of what this PR does and why.
 - Brief notes on how the changes should be tested, or what was tested.
 
 Be concise but thorough. Focus on the "what" and "why", not line-by-line details. Output ONLY the markdown description — no preamble, no wrapping code fences.`
+
+// defaultTitlePrompt is the system prompt for generating PR titles.
+const defaultTitlePrompt = `You are a senior software engineer writing a pull request title. Based on the diff provided, generate a single concise PR title that summarizes the changes.
+
+Rules:
+- Output ONLY the title text — no quotes, no prefix, no preamble, no explanation.
+- Keep it under 72 characters.
+- Use imperative mood (e.g. "Add user authentication" not "Added user authentication").
+- Be specific about what changed, not vague.
+- Do not include ticket/issue numbers — those will be added automatically.`
 
 // claudeResult is the JSON output from `claude -p --output-format json`.
 type claudeResult struct {
@@ -114,6 +125,10 @@ type WorkspaceService struct {
 	// Guards the running description generation goroutine.
 	muDesc            sync.Mutex
 	cancelDescription context.CancelFunc
+
+	// Guards the running title generation goroutine.
+	muTitle     sync.Mutex
+	cancelTitle context.CancelFunc
 }
 
 // NewWorkspaceService creates a new WorkspaceService.
@@ -337,7 +352,7 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 		"--append-system-prompt", prompt,
 	}
 	if maxCost > 0 {
-		args = append(args, "--max-cost", fmt.Sprintf("%.4f", maxCost))
+		args = append(args, "--max-budget-usd", fmt.Sprintf("%.4f", maxCost))
 	}
 	args = append(args, "Review this pull request diff:")
 
@@ -513,6 +528,150 @@ func (s *WorkspaceService) ApplyPRDescription(repoOwner, repoName string, prNumb
 			errMsg = err.Error()
 		}
 		return fmt.Errorf("failed to update PR description: %s", errMsg)
+	}
+
+	return nil
+}
+
+// ---------- AI PR Title Generation ----------
+
+// ticketPrefixRe matches Jira-style ticket IDs at the start of a branch name
+// (e.g. "JIRA-123/add-login" → "JIRA-123").
+var ticketPrefixRe = regexp.MustCompile(`^([A-Z][A-Z0-9]+-\d+)`)
+
+// GetDefaultTitlePrompt returns the built-in default title prompt.
+func (s *WorkspaceService) GetDefaultTitlePrompt() string {
+	return defaultTitlePrompt
+}
+
+// getTitlePrompt returns the user-configured title prompt or the default.
+func (s *WorkspaceService) getTitlePrompt() string {
+	prompt, err := s.db.GetSetting("ai_title_prompt")
+	if err != nil || strings.TrimSpace(prompt) == "" {
+		return defaultTitlePrompt
+	}
+	return prompt
+}
+
+// StartGenerateTitle kicks off an async Claude title generation for a PR.
+// It emits Wails events: "title:started", "title:result", "title:error".
+func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumber int, branchName string) error {
+	if s.ctx == nil {
+		return fmt.Errorf("app context not set")
+	}
+
+	if !gitutil.IsGhInstalled() {
+		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+	}
+
+	if !gitutil.IsClaudeInstalled() {
+		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	prompt := s.getTitlePrompt()
+	maxCost := s.getDescriptionMaxCost() // reuse description max cost for title generation
+
+	// Cancel any existing title generation.
+	s.muTitle.Lock()
+	if s.cancelTitle != nil {
+		s.cancelTitle()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	s.cancelTitle = cancel
+	s.muTitle.Unlock()
+
+	appCtx := s.ctx
+
+	go func() {
+		defer cancel()
+		wailsRuntime.EventsEmit(appCtx, "title:started", prNumber)
+
+		// 1. Get the PR diff via `gh pr diff`.
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
+		diffCmd.Dir = repo.LocalPath
+		diff, err := diffCmd.Output()
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
+			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			}
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": errMsg})
+			return
+		}
+
+		if len(bytes.TrimSpace(diff)) == 0 {
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": "PR diff is empty"})
+			return
+		}
+
+		// 2. Run Claude with the title prompt.
+		titleText, _, _, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
+
+		if ctx.Err() == context.DeadlineExceeded {
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": "Claude title generation timed out (3 minute limit)"})
+			return
+		}
+		if err != nil {
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": err.Error()})
+			return
+		}
+
+		// Clean up the title — remove surrounding quotes, trim whitespace.
+		titleText = strings.TrimSpace(titleText)
+		titleText = strings.Trim(titleText, "\"'`")
+		titleText = strings.TrimSpace(titleText)
+
+		// 3. Extract ticket prefix from branch name and prepend if found.
+		if match := ticketPrefixRe.FindString(branchName); match != "" {
+			titleText = match + ": " + titleText
+		}
+
+		wailsRuntime.EventsEmit(appCtx, "title:result", map[string]interface{}{
+			"title": titleText,
+		})
+	}()
+
+	return nil
+}
+
+// CancelGenerateTitle cancels a running title generation.
+func (s *WorkspaceService) CancelGenerateTitle() {
+	s.muTitle.Lock()
+	defer s.muTitle.Unlock()
+	if s.cancelTitle != nil {
+		s.cancelTitle()
+		s.cancelTitle = nil
+	}
+}
+
+// ApplyPRTitle updates a PR's title on GitHub via `gh pr edit --title`.
+func (s *WorkspaceService) ApplyPRTitle(repoOwner, repoName string, prNumber int, title string) error {
+	if !gitutil.IsGhInstalled() {
+		return fmt.Errorf("the GitHub CLI (gh) is not installed")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--title", title)
+	cmd.Dir = repo.LocalPath
+
+	var stderrBuf bytes.Buffer
+	cmd.Stderr = &stderrBuf
+
+	if err := cmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(stderrBuf.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return fmt.Errorf("failed to update PR title: %s", errMsg)
 	}
 
 	return nil

@@ -133,6 +133,19 @@ type PullRequest struct {
 	MergedBy string `json:"mergedBy"`
 }
 
+// PRCommit represents a single commit in a pull request.
+type PRCommit struct {
+	OID             string    `json:"oid"`
+	MessageHeadline string    `json:"messageHeadline"`
+	Message         string    `json:"message"`
+	AuthorName      string    `json:"authorName"`
+	AuthorLogin     string    `json:"authorLogin"`
+	AuthorAvatar    string    `json:"authorAvatar"`
+	CommittedDate   time.Time `json:"committedDate"`
+	Additions       int       `json:"additions"`
+	Deletions       int       `json:"deletions"`
+}
+
 // PRFile represents a single file changed in a pull request, including
 // the unified diff patch returned by the GitHub REST API.
 type PRFile struct {
