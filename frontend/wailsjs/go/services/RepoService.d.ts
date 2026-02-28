@@ -21,6 +21,4 @@ export function SetClient(arg1:github.Client):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
-export function SetRepoAIAgent(arg1:number,arg2:string):Promise<void>;
-
 export function ValidateGitRepo(arg1:string):Promise<gitutil.RepoInfo>;

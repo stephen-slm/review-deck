@@ -319,8 +319,7 @@ export function PRDetailPage() {
       // Clear cached review so re-run always fetches fresh.
       await DeleteAIReview(pr.nodeId);
       setAiResult(null);
-      // Empty agent string = use per-repo or global default.
-      await StartAIReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId, "");
+      await StartAIReview(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
@@ -340,7 +339,7 @@ export function PRDetailPage() {
     try {
       setGeneratedDesc(null);
       setDescError(null);
-      await StartGenerateDescription(pr.repoOwner, pr.repoName, pr.number, "");
+      await StartGenerateDescription(pr.repoOwner, pr.repoName, pr.number);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
@@ -486,11 +485,13 @@ export function PRDetailPage() {
     } else if (activeTab === "files") {
       useVimStore.getState().setListLength(prFiles?.length ?? 0);
     } else if (activeTab === "ai-review") {
-      // Length 1 so Enter (onOpen) fires at selectedIndex 0.
+      // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
       useVimStore.getState().setListLength(1);
+      useVimStore.getState().setSelectedIndex(0);
     } else if (activeTab === "description") {
-      // Length 1 so Enter (onOpen) fires for generate description.
+      // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
       useVimStore.getState().setListLength(1);
+      useVimStore.getState().setSelectedIndex(0);
     } else {
       useVimStore.getState().setListLength(0);
     }
@@ -522,7 +523,7 @@ export function PRDetailPage() {
       actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       // Enter generates a PR description (when tools are available and not already generating).
-      if (hasLocalPath && toolAvailability?.gh && (toolAvailability?.claude || toolAvailability?.codex)) {
+      if (hasLocalPath && toolAvailability?.gh && toolAvailability?.claude) {
         actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
       }
     } else if (activeTab === "checks") {
@@ -725,7 +726,7 @@ export function PRDetailPage() {
                   <h3 className="text-sm font-semibold text-foreground">
                     Description
                   </h3>
-                  {hasLocalPath && toolAvailability?.gh && (toolAvailability?.claude || toolAvailability?.codex) && (
+                  {hasLocalPath && toolAvailability?.gh && toolAvailability?.claude && (
                     <div className="flex items-center gap-1.5">
                       {descGenerating ? (
                         <button
@@ -942,7 +943,7 @@ export function PRDetailPage() {
               result={aiResult}
               error={aiError}
               hasLocalPath={hasLocalPath}
-              hasTools={!!toolAvailability?.gh && (!!toolAvailability?.claude || !!toolAvailability?.codex)}
+              hasTools={!!toolAvailability?.gh && !!toolAvailability?.claude}
               onStart={handleStartAIReview}
               onCancel={handleCancelAIReview}
             />
@@ -1007,12 +1008,12 @@ export function PRDetailPage() {
                   </button>
                   <button
                     onClick={() => { handleStartAIReview(); setActiveTab("ai-review"); }}
-                    disabled={aiReviewing || !(toolAvailability?.claude || toolAvailability?.codex) || !toolAvailability?.gh}
+                    disabled={aiReviewing || !toolAvailability?.claude || !toolAvailability?.gh}
                     title={
                       !toolAvailability?.gh
                         ? "gh CLI not installed"
-                        : !(toolAvailability?.claude || toolAvailability?.codex)
-                          ? "No AI CLI installed (claude or codex)"
+                        : !toolAvailability?.claude
+                          ? "Claude CLI not installed"
                           : aiReviewing
                             ? "Review in progress..."
                             : "Start AI code review"
@@ -1974,9 +1975,8 @@ function AIReviewPanel({
           Required CLI tools are not installed.
         </p>
         <p className="text-xs text-muted-foreground">
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">gh</code> and an AI CLI
-          (<code className="rounded bg-muted px-1 py-0.5 text-xs">claude</code> or{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">codex</code>) must be installed and on PATH.
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">gh</code> and{" "}
+          <code className="rounded bg-muted px-1 py-0.5 text-xs">claude</code> CLI must be installed and on PATH.
         </p>
       </div>
     );

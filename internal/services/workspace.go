@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -63,7 +62,6 @@ type claudeResult struct {
 type ToolAvailability struct {
 	Gh     bool `json:"gh"`
 	Claude bool `json:"claude"`
-	Codex  bool `json:"codex"`
 }
 
 // AIReviewResult is the JSON-friendly result returned to the frontend.
@@ -128,12 +126,11 @@ func (s *WorkspaceService) SetContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
-// CheckToolAvailability reports which CLI tools (gh, claude, codex) are installed.
+// CheckToolAvailability reports which CLI tools (gh, claude) are installed.
 func (s *WorkspaceService) CheckToolAvailability() ToolAvailability {
 	return ToolAvailability{
 		Gh:     gitutil.IsGhInstalled(),
 		Claude: gitutil.IsClaudeInstalled(),
-		Codex:  gitutil.IsCodexInstalled(),
 	}
 }
 
@@ -211,22 +208,6 @@ func (s *WorkspaceService) getMaxCost() float64 {
 	return f
 }
 
-// resolveAgent determines which AI agent to use for a review.
-// Priority: explicit agent param > per-repo setting > global setting > "claude".
-func (s *WorkspaceService) resolveAgent(repo *storage.TrackedRepo, explicitAgent string) string {
-	if explicitAgent != "" {
-		return explicitAgent
-	}
-	if repo.AIAgent != "" {
-		return repo.AIAgent
-	}
-	global, err := s.db.GetSetting("ai_default_agent")
-	if err == nil && global != "" {
-		return global
-	}
-	return "claude"
-}
-
 // GetAIReview returns a cached AI review for a PR (if it exists and is <7 days old).
 func (s *WorkspaceService) GetAIReview(prNodeID string) (*AIReviewResult, error) {
 	r, err := s.db.GetAIReview(prNodeID)
@@ -249,10 +230,9 @@ func (s *WorkspaceService) DeleteAIReview(prNodeID string) error {
 	return s.db.DeleteAIReview(prNodeID)
 }
 
-// StartAIReview kicks off an async AI code review for a PR.
-// agent can be "claude" or "codex" — if empty, the per-repo or global default is used.
+// StartAIReview kicks off an async Claude code review for a PR.
 // It emits Wails events: "ai:started", "ai:result", "ai:error".
-func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber int, prNodeID string, agent string) error {
+func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber int, prNodeID string) error {
 	if s.ctx == nil {
 		return fmt.Errorf("app context not set")
 	}
@@ -261,24 +241,13 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
+	if !gitutil.IsClaudeInstalled() {
+		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+	}
+
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
 	if err != nil {
 		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
-	}
-
-	resolvedAgent := s.resolveAgent(repo, agent)
-
-	switch resolvedAgent {
-	case "claude":
-		if !gitutil.IsClaudeInstalled() {
-			return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
-		}
-	case "codex":
-		if !gitutil.IsCodexInstalled() {
-			return fmt.Errorf("the Codex CLI is not installed — install it via: npm i -g @openai/codex")
-		}
-	default:
-		return fmt.Errorf("unknown AI agent: %s (expected 'claude' or 'codex')", resolvedAgent)
 	}
 
 	prompt := s.getReviewPrompt()
@@ -318,20 +287,11 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 			return
 		}
 
-		// 2. Run the selected AI agent.
-		var reviewText string
-		var cost float64
-		var durationMs int
-
-		switch resolvedAgent {
-		case "claude":
-			reviewText, cost, durationMs, err = s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
-		case "codex":
-			reviewText, cost, durationMs, err = s.runCodex(ctx, repo.LocalPath, diff, prompt)
-		}
+		// 2. Run Claude.
+		reviewText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": fmt.Sprintf("%s review timed out (3 minute limit)", resolvedAgent)})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": "Claude review timed out (3 minute limit)"})
 			return
 		}
 		if err != nil {
@@ -403,58 +363,6 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 	return result.Result, result.Cost, result.Duration, nil
 }
 
-// runCodex executes codex -q with the diff written to a temp file to avoid
-// OS argument length limits (ARG_MAX ~256KB on macOS).
-func (s *WorkspaceService) runCodex(ctx context.Context, repoDir string, diff []byte, prompt string) (review string, cost float64, durationMs int, err error) {
-	// Write the diff to a temp file so it doesn't blow up ARG_MAX.
-	tmpFile, err := os.CreateTemp("", "review-deck-diff-*.patch")
-	if err != nil {
-		return "", 0, 0, fmt.Errorf("failed to create temp diff file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-	if _, err := tmpFile.Write(diff); err != nil {
-		tmpFile.Close()
-		return "", 0, 0, fmt.Errorf("failed to write temp diff file: %w", err)
-	}
-	tmpFile.Close()
-
-	fullPrompt := fmt.Sprintf("%s\n\nReview the pull request diff in the file: %s", prompt, tmpFile.Name())
-
-	cmd := exec.CommandContext(ctx, "codex",
-		"-q",
-		"--full-auto",
-		fullPrompt,
-	)
-	cmd.Dir = repoDir
-
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	startTime := time.Now()
-
-	if runErr := cmd.Run(); runErr != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", 0, 0, fmt.Errorf("Codex timed out (3 minute limit)")
-		}
-		errMsg := strings.TrimSpace(stderrBuf.String())
-		if errMsg == "" {
-			errMsg = strings.TrimSpace(stdoutBuf.String())
-		}
-		if errMsg == "" {
-			errMsg = runErr.Error()
-		}
-		return "", 0, 0, fmt.Errorf("%s", errMsg)
-	}
-
-	elapsed := int(time.Since(startTime).Milliseconds())
-	output := strings.TrimSpace(stdoutBuf.String())
-	if output == "" {
-		return "", 0, 0, fmt.Errorf("Codex returned empty output")
-	}
-
-	return output, 0, elapsed, nil
-}
-
 // CancelAIReview cancels a running AI review.
 func (s *WorkspaceService) CancelAIReview() {
 	s.mu.Lock()
@@ -481,9 +389,9 @@ func (s *WorkspaceService) getDescriptionPrompt() string {
 	return prompt
 }
 
-// StartGenerateDescription kicks off an async AI description generation for a PR.
+// StartGenerateDescription kicks off an async Claude description generation for a PR.
 // It emits Wails events: "description:started", "description:result", "description:error".
-func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, prNumber int, agent string) error {
+func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, prNumber int) error {
 	if s.ctx == nil {
 		return fmt.Errorf("app context not set")
 	}
@@ -492,24 +400,13 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
+	if !gitutil.IsClaudeInstalled() {
+		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+	}
+
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
 	if err != nil {
 		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
-	}
-
-	resolvedAgent := s.resolveAgent(repo, agent)
-
-	switch resolvedAgent {
-	case "claude":
-		if !gitutil.IsClaudeInstalled() {
-			return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
-		}
-	case "codex":
-		if !gitutil.IsCodexInstalled() {
-			return fmt.Errorf("the Codex CLI is not installed — install it via: npm i -g @openai/codex")
-		}
-	default:
-		return fmt.Errorf("unknown AI agent: %s (expected 'claude' or 'codex')", resolvedAgent)
 	}
 
 	prompt := s.getDescriptionPrompt()
@@ -548,20 +445,11 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 			return
 		}
 
-		// 2. Run the selected AI agent with the description prompt.
-		var descriptionText string
-		var cost float64
-		var durationMs int
-
-		switch resolvedAgent {
-		case "claude":
-			descriptionText, cost, durationMs, err = s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
-		case "codex":
-			descriptionText, cost, durationMs, err = s.runCodex(ctx, repo.LocalPath, diff, prompt)
-		}
+		// 2. Run Claude with the description prompt.
+		descriptionText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": fmt.Sprintf("%s description generation timed out (3 minute limit)", resolvedAgent)})
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": "Claude description generation timed out (3 minute limit)"})
 			return
 		}
 		if err != nil {

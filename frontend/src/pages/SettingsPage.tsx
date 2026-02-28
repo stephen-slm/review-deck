@@ -24,8 +24,8 @@ const settingsTabs: { key: SettingsTab; label: string; icon: typeof Settings2 }[
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiDefaultAgent, loadAiDefaultAgent, setAiDefaultAgent, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
-  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, setRepoAIAgent, isLoading: repoLoading } = useRepoStore();
+  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt } = useSettingsStore();
+  const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
   const derivedOrgs = useMemo(() => {
@@ -67,11 +67,10 @@ export function SettingsPage() {
     loadHideDraftPRs();
     loadPRRefreshInterval();
     loadFlagRules();
-    loadAiDefaultAgent();
     loadAiReviewPrompt();
     loadAiMaxCost();
     loadAiDescriptionPrompt();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiDefaultAgent, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
+  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-6 switch tabs.
   useEffect(() => {
@@ -337,16 +336,6 @@ export function SettingsPage() {
                           {r.localPath}
                         </p>
                       </div>
-                      <select
-                        value={r.aiAgent || ""}
-                        onChange={(e) => setRepoAIAgent(r.id, e.target.value)}
-                        title="Default AI agent for this repository"
-                        className="shrink-0 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="">Default</option>
-                        <option value="claude">Claude</option>
-                        <option value="codex">Codex</option>
-                      </select>
                       <button
                         onClick={() => removeRepo(r.id)}
                         className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
@@ -1060,29 +1049,6 @@ export function SettingsPage() {
               </p>
 
               <div className="rounded-lg border border-border bg-card p-3 space-y-4">
-                {/* Default AI agent */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      Default AI agent
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      Global default used when a repo has no per-repo agent configured.
-                    </p>
-                  </div>
-                  <select
-                    value={aiDefaultAgent}
-                    onChange={(e) => setAiDefaultAgent(e.target.value)}
-                    className="rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Auto (first available)</option>
-                    <option value="claude">Claude</option>
-                    <option value="codex">Codex</option>
-                  </select>
-                </div>
-
-                <div className="border-t border-border" />
-
                 {/* Prompt textarea */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -1142,41 +1108,6 @@ export function SettingsPage() {
                 </div>
               </div>
             </section>
-
-            {/* Per-repo AI agent overrides */}
-            {repos.length > 0 && (
-              <section className="space-y-4">
-                <div className="flex items-center gap-2">
-                  <FolderGit2 className="h-5 w-5 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold">Per-Repository Agent</h3>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Override the default AI agent for individual repositories. &ldquo;Default&rdquo; uses the global agent above.
-                </p>
-
-                <ul className="space-y-1.5">
-                  {repos.map((r) => (
-                    <li
-                      key={r.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
-                    >
-                      <span className="min-w-0 truncate text-sm text-foreground">
-                        {r.repoOwner}/{r.repoName}
-                      </span>
-                      <select
-                        value={r.aiAgent || ""}
-                        onChange={(e) => setRepoAIAgent(r.id, e.target.value)}
-                        className="shrink-0 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="">Default</option>
-                        <option value="claude">Claude</option>
-                        <option value="codex">Codex</option>
-                      </select>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
 
             {/* AI Description Prompt */}
             <section className="space-y-4">

@@ -119,8 +119,3 @@ func (s *RepoService) GetTrackedRepos() ([]storage.TrackedRepo, error) {
 func (s *RepoService) GetTrackedRepoByID(id int) (*storage.TrackedRepo, error) {
 	return s.db.GetTrackedRepoByID(id)
 }
-
-// SetRepoAIAgent updates the default AI agent for a tracked repo.
-func (s *RepoService) SetRepoAIAgent(id int, agent string) error {
-	return s.db.SetRepoAIAgent(id, agent)
-}

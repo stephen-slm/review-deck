@@ -14,7 +14,6 @@ type TrackedRepo struct {
 	RemoteURL string    `json:"remoteURL"`
 	Enabled   bool      `json:"enabled"`
 	CreatedAt time.Time `json:"createdAt"`
-	AIAgent   string    `json:"aiAgent"` // "claude", "codex", or "" (use global default)
 }
 
 // InsertTrackedRepo adds a new tracked repository. If a repo with the same
@@ -54,7 +53,7 @@ func (db *DB) InsertTrackedRepo(localPath, repoOwner, repoName, remoteURL string
 // GetTrackedRepos returns all enabled tracked repositories.
 func (db *DB) GetTrackedRepos() ([]TrackedRepo, error) {
 	rows, err := db.conn.Query(`
-		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at, ai_agent
+		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at
 		FROM tracked_repos
 		WHERE enabled = 1
 		ORDER BY repo_owner, repo_name
@@ -67,7 +66,7 @@ func (db *DB) GetTrackedRepos() ([]TrackedRepo, error) {
 	var repos []TrackedRepo
 	for rows.Next() {
 		var r TrackedRepo
-		if err := rows.Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt, &r.AIAgent); err != nil {
+		if err := rows.Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		repos = append(repos, r)
@@ -79,9 +78,9 @@ func (db *DB) GetTrackedRepos() ([]TrackedRepo, error) {
 func (db *DB) GetTrackedRepoByID(id int) (*TrackedRepo, error) {
 	var r TrackedRepo
 	err := db.conn.QueryRow(`
-		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at, ai_agent
+		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at
 		FROM tracked_repos WHERE id = ?
-	`, id).Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt, &r.AIAgent)
+	`, id).Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get tracked repo %d: %w", id, err)
 	}
@@ -92,9 +91,9 @@ func (db *DB) GetTrackedRepoByID(id int) (*TrackedRepo, error) {
 func (db *DB) GetTrackedRepoByOwnerName(owner, name string) (*TrackedRepo, error) {
 	var r TrackedRepo
 	err := db.conn.QueryRow(`
-		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at, ai_agent
+		SELECT id, local_path, repo_owner, repo_name, remote_url, enabled, created_at
 		FROM tracked_repos WHERE repo_owner = ? AND repo_name = ?
-	`, owner, name).Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt, &r.AIAgent)
+	`, owner, name).Scan(&r.ID, &r.LocalPath, &r.RepoOwner, &r.RepoName, &r.RemoteURL, &r.Enabled, &r.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get tracked repo %s/%s: %w", owner, name, err)
 	}
@@ -106,16 +105,6 @@ func (db *DB) DisableTrackedRepo(id int) error {
 	_, err := db.conn.Exec("UPDATE tracked_repos SET enabled = 0 WHERE id = ?", id)
 	if err != nil {
 		return fmt.Errorf("disable tracked repo %d: %w", id, err)
-	}
-	return nil
-}
-
-// SetRepoAIAgent updates the default AI agent for a tracked repo.
-// Valid values: "claude", "codex", or "" (use global default).
-func (db *DB) SetRepoAIAgent(id int, agent string) error {
-	_, err := db.conn.Exec("UPDATE tracked_repos SET ai_agent = ? WHERE id = ?", agent, id)
-	if err != nil {
-		return fmt.Errorf("set repo ai agent %d: %w", id, err)
 	}
 	return nil
 }

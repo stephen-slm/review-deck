@@ -50,10 +50,10 @@ export function SetContext(arg1) {
   return window['go']['services']['WorkspaceService']['SetContext'](arg1);
 }
 
-export function StartAIReview(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['services']['WorkspaceService']['StartAIReview'](arg1, arg2, arg3, arg4, arg5);
+export function StartAIReview(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['WorkspaceService']['StartAIReview'](arg1, arg2, arg3, arg4);
 }
 
-export function StartGenerateDescription(arg1, arg2, arg3, arg4) {
-  return window['go']['services']['WorkspaceService']['StartGenerateDescription'](arg1, arg2, arg3, arg4);
+export function StartGenerateDescription(arg1, arg2, arg3) {
+  return window['go']['services']['WorkspaceService']['StartGenerateDescription'](arg1, arg2, arg3);
 }

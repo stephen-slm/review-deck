@@ -27,6 +27,6 @@ export function OpenTerminal(arg1:string,arg2:string):Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
 
-export function StartAIReview(arg1:string,arg2:string,arg3:number,arg4:string,arg5:string):Promise<void>;
+export function StartAIReview(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
-export function StartGenerateDescription(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+export function StartGenerateDescription(arg1:string,arg2:string,arg3:number):Promise<void>;

@@ -543,7 +543,6 @@ export namespace services {
 	export class ToolAvailability {
 	    gh: boolean;
 	    claude: boolean;
-	    codex: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new ToolAvailability(source);
@@ -553,7 +552,6 @@ export namespace services {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.gh = source["gh"];
 	        this.claude = source["claude"];
-	        this.codex = source["codex"];
 	    }
 	}
 
@@ -668,7 +666,6 @@ export namespace storage {
 	    enabled: boolean;
 	    // Go type: time
 	    createdAt: any;
-	    aiAgent: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TrackedRepo(source);
@@ -683,7 +680,6 @@ export namespace storage {
 	        this.remoteURL = source["remoteURL"];
 	        this.enabled = source["enabled"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
-	        this.aiAgent = source["aiAgent"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

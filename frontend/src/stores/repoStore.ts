@@ -4,7 +4,6 @@ import {
   AddRepo,
   GetTrackedRepos,
   RemoveRepo,
-  SetRepoAIAgent,
 } from "../../wailsjs/go/services/RepoService";
 import {
   GetSetting,
@@ -31,8 +30,6 @@ interface RepoState {
   selectRepo: (id: number) => void;
   /** Load persisted selected repo ID from settings. */
   loadSelectedRepo: () => Promise<void>;
-  /** Update the default AI agent for a repo. */
-  setRepoAIAgent: (id: number, agent: string) => Promise<void>;
   /** Clear error. */
   clearError: () => void;
 }
@@ -122,11 +119,6 @@ export const useRepoStore = create<RepoState>((set, get) => ({
     } catch {
       // no persisted selection, that's fine
     }
-  },
-
-  setRepoAIAgent: async (id: number, agent: string) => {
-    await SetRepoAIAgent(id, agent);
-    await get().loadRepos();
   },
 
   clearError: () => set({ error: null }),

@@ -34,10 +34,6 @@ export function SetContext(arg1) {
   return window['go']['services']['RepoService']['SetContext'](arg1);
 }
 
-export function SetRepoAIAgent(arg1, arg2) {
-  return window['go']['services']['RepoService']['SetRepoAIAgent'](arg1, arg2);
-}
-
 export function ValidateGitRepo(arg1) {
   return window['go']['services']['RepoService']['ValidateGitRepo'](arg1);
 }
