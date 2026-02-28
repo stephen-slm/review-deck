@@ -13,7 +13,7 @@ interface HintGroup {
 }
 
 const GLOBAL_HINTS: Hint[] = [
-  { keys: "\u2318+1-5", label: "switch sidebar tabs" },
+  { keys: "\u2318+1-4", label: "switch sidebar tabs" },
   { keys: "Shift+J/K", label: "smooth scroll" },
   { keys: "?", label: "toggle this popup" },
 ];
@@ -43,8 +43,9 @@ const DETAIL_HINTS: Hint[] = [
   { keys: "h/l", label: "prev/next tab" },
   { keys: "j/k", label: "scroll / navigate items" },
   { keys: "Space", label: "toggle expand file" },
-  { keys: "Enter", label: "open item" },
-  { keys: "gg/G", label: "jump to top/bottom" },
+  { keys: "Enter", label: "open / generate" },
+  { keys: "G", label: "generate AI review / description" },
+  { keys: "gg", label: "jump to top" },
   { keys: "Backspace", label: "go back" },
   { keys: "R", label: "refresh" },
   { keys: "r", label: "resolve thread" },
@@ -56,8 +57,10 @@ const DETAIL_HINTS: Hint[] = [
   { keys: "d", label: "request changes" },
 ];
 
-const SCROLL_HINTS: Hint[] = [
+const SETTINGS_HINTS: Hint[] = [
   { keys: "j/k", label: "scroll page" },
+  { keys: "h/l", label: "prev/next tab" },
+  { keys: "1-7", label: "switch settings tab" },
 ];
 
 function getHintGroupsForPath(pathname: string): HintGroup[] {
@@ -82,7 +85,7 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
   }
   if (pathname === "/settings") {
     return [
-      { title: "Page", hints: SCROLL_HINTS },
+      { title: "Settings", hints: SETTINGS_HINTS },
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }

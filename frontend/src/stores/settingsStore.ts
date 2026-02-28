@@ -32,6 +32,8 @@ const DEFAULT_FILTERED_REVIEW_USERS = ["copilot-pull-request-reviewer[bot]", "gi
 
 interface SettingsState {
   orgs: string[];
+  /** The repo owner that repo-scoped settings are currently loaded for. */
+  repoOwner: string;
   filterBots: boolean;
   hideStackedPRs: boolean;
   hideDraftPRs: boolean;
@@ -53,6 +55,8 @@ interface SettingsState {
   loadOrgs: () => Promise<void>;
   addOrg: (org: string) => Promise<void>;
   removeOrg: (org: string) => Promise<void>;
+  /** Load all repo-scoped settings for the given owner. Falls back to global values for migration. */
+  loadRepoSettings: (owner: string) => Promise<void>;
   loadFilterBots: () => Promise<void>;
   setFilterBots: (enabled: boolean) => Promise<void>;
   loadHideStackedPRs: () => Promise<void>;
@@ -115,8 +119,29 @@ interface SettingsState {
   setAiDescriptionMaxCost: (cost: string) => Promise<void>;
 }
 
+/** Return the repo-scoped setting key, e.g. `repo:acme:filter_bots`. */
+function repoKey(owner: string, key: string): string {
+  return `repo:${owner}:${key}`;
+}
+
+/**
+ * Try reading a repo-scoped setting; if missing, fall back to the global key.
+ * This provides a migration path — existing global values are used until the
+ * user saves a per-repo value.
+ */
+async function getRepoSetting(owner: string, key: string): Promise<string> {
+  if (owner) {
+    try {
+      const val = await GetSetting(repoKey(owner, key));
+      if (val !== undefined && val !== null && val !== "") return val;
+    } catch { /* fall through to global */ }
+  }
+  return GetSetting(key).catch(() => "");
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
+  repoOwner: "",
   filterBots: false,
   hideStackedPRs: false,
   hideDraftPRs: false,
@@ -152,9 +177,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await get().loadOrgs();
   },
 
+  loadRepoSettings: async (owner: string) => {
+    set({ repoOwner: owner });
+    // Reload all repo-scoped settings for the new owner.
+    await Promise.all([
+      get().loadFilterBots(),
+      get().loadHideStackedPRs(),
+      get().loadHideDraftPRs(),
+      get().loadFilteredCommentUsers(),
+      get().loadFilteredReviewUsers(),
+    ]);
+  },
+
   loadFilterBots: async () => {
     try {
-      const val = await GetSetting("filter_bots");
+      const val = await getRepoSetting(get().repoOwner, "filter_bots");
       set({ filterBots: val === "true" });
     } catch {
       set({ filterBots: false });
@@ -162,13 +199,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilterBots: async (enabled: boolean) => {
-    await SetSetting("filter_bots", enabled ? "true" : "false");
+    const owner = get().repoOwner;
+    const v = enabled ? "true" : "false";
+    if (owner) await SetSetting(repoKey(owner, "filter_bots"), v);
+    await SetSetting("filter_bots", v); // keep global in sync for backend poller
     set({ filterBots: enabled });
   },
 
   loadHideStackedPRs: async () => {
     try {
-      const val = await GetSetting("hide_stacked_prs");
+      const val = await getRepoSetting(get().repoOwner, "hide_stacked_prs");
       set({ hideStackedPRs: val === "true" });
     } catch {
       set({ hideStackedPRs: false });
@@ -176,13 +216,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setHideStackedPRs: async (enabled: boolean) => {
-    await SetSetting("hide_stacked_prs", enabled ? "true" : "false");
+    const owner = get().repoOwner;
+    const v = enabled ? "true" : "false";
+    if (owner) await SetSetting(repoKey(owner, "hide_stacked_prs"), v);
+    await SetSetting("hide_stacked_prs", v);
     set({ hideStackedPRs: enabled });
   },
 
   loadHideDraftPRs: async () => {
     try {
-      const val = await GetSetting("hide_draft_prs");
+      const val = await getRepoSetting(get().repoOwner, "hide_draft_prs");
       set({ hideDraftPRs: val === "true" });
     } catch {
       set({ hideDraftPRs: false });
@@ -190,13 +233,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setHideDraftPRs: async (enabled: boolean) => {
-    await SetSetting("hide_draft_prs", enabled ? "true" : "false");
+    const owner = get().repoOwner;
+    const v = enabled ? "true" : "false";
+    if (owner) await SetSetting(repoKey(owner, "hide_draft_prs"), v);
+    await SetSetting("hide_draft_prs", v);
     set({ hideDraftPRs: enabled });
   },
 
   loadFilteredCommentUsers: async () => {
     try {
-      const val = await GetSetting("filtered_comment_users");
+      const val = await getRepoSetting(get().repoOwner, "filtered_comment_users");
       if (val) {
         const parsed = JSON.parse(val) as string[];
         if (Array.isArray(parsed)) {
@@ -212,7 +258,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const legacy = await GetSetting("hide_copilot_reviews");
       if (legacy === "true") {
         set({ filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS });
-        await SetSetting("filtered_comment_users", JSON.stringify(DEFAULT_FILTERED_COMMENT_USERS));
+        const owner = get().repoOwner;
+        const key = owner ? repoKey(owner, "filtered_comment_users") : "filtered_comment_users";
+        await SetSetting(key, JSON.stringify(DEFAULT_FILTERED_COMMENT_USERS));
         return;
       }
     } catch { /* ignore */ }
@@ -220,13 +268,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilteredCommentUsers: async (users: string[]) => {
-    await SetSetting("filtered_comment_users", JSON.stringify(users));
+    const owner = get().repoOwner;
+    const v = JSON.stringify(users);
+    if (owner) await SetSetting(repoKey(owner, "filtered_comment_users"), v);
+    await SetSetting("filtered_comment_users", v);
     set({ filteredCommentUsers: users });
   },
 
   loadFilteredReviewUsers: async () => {
     try {
-      const val = await GetSetting("filtered_review_users");
+      const val = await getRepoSetting(get().repoOwner, "filtered_review_users");
       if (val) {
         const parsed = JSON.parse(val) as string[];
         if (Array.isArray(parsed)) {
@@ -242,7 +293,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const legacy = await GetSetting("hide_copilot_reviews");
       if (legacy === "true") {
         set({ filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS });
-        await SetSetting("filtered_review_users", JSON.stringify(DEFAULT_FILTERED_REVIEW_USERS));
+        const owner = get().repoOwner;
+        const key = owner ? repoKey(owner, "filtered_review_users") : "filtered_review_users";
+        await SetSetting(key, JSON.stringify(DEFAULT_FILTERED_REVIEW_USERS));
         return;
       }
     } catch { /* ignore */ }
@@ -250,7 +303,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilteredReviewUsers: async (users: string[]) => {
-    await SetSetting("filtered_review_users", JSON.stringify(users));
+    const owner = get().repoOwner;
+    const v = JSON.stringify(users);
+    if (owner) await SetSetting(repoKey(owner, "filtered_review_users"), v);
+    await SetSetting("filtered_review_users", v);
     set({ filteredReviewUsers: users });
   },
 

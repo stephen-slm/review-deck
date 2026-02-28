@@ -41,7 +41,7 @@ const allTabs: TabDef[] = settingsTabGroups.flatMap((g) => g.tabs);
 
 export function SettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { loadOrgs, filterBots, loadFilterBots, setFilterBots, hideStackedPRs, loadHideStackedPRs, setHideStackedPRs, hideDraftPRs, loadHideDraftPRs, setHideDraftPRs, filteredCommentUsers, loadFilteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, loadFilteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost } = useSettingsStore();
+  const { loadOrgs, loadRepoSettings, filterBots, setFilterBots, hideStackedPRs, setHideStackedPRs, hideDraftPRs, setHideDraftPRs, filteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, setFilteredReviewUsers, theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -71,24 +71,28 @@ export function SettingsPage() {
   const [newRuleSizeOp, setNewRuleSizeOp] = useState<"gt" | "lt" | "eq">("gt");
   const [newRuleSizeValue, setNewRuleSizeValue] = useState("");
 
+  const selectedRepo = useRepoStore((s) => s.selectedRepo);
+
+  // Load global settings on mount.
   useEffect(() => {
     loadRepos();
     loadOrgs();
-    loadFilterBots();
-    loadHideStackedPRs();
-    loadFilteredCommentUsers();
-    loadFilteredReviewUsers();
     loadTheme();
     loadCacheTTL();
     loadPollInterval();
-    loadHideDraftPRs();
     loadPRRefreshInterval();
-    loadFlagRules();
     loadAiReviewPrompt();
     loadAiMaxCost();
     loadAiDescriptionPrompt();
     loadAiDescriptionMaxCost();
-  }, [loadRepos, loadOrgs, loadFilterBots, loadHideStackedPRs, loadHideDraftPRs, loadFilteredCommentUsers, loadFilteredReviewUsers, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadFlagRules, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost]);
+  }, [loadRepos, loadOrgs, loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost]);
+
+  // Reload repo-scoped settings (filters, flag rules) when selected repo changes.
+  useEffect(() => {
+    const owner = selectedRepo?.repoOwner || "";
+    loadRepoSettings(owner);
+    loadFlagRules(owner);
+  }, [selectedRepo?.repoOwner, loadRepoSettings, loadFlagRules]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-7 switch tabs.
   useEffect(() => {

@@ -16,15 +16,21 @@ export interface FlagRule {
   sizeValue?: number;
 }
 
-const SETTING_KEY = "flag_rules";
+const GLOBAL_KEY = "flag_rules";
+
+function repoKey(owner: string): string {
+  return `repo:${owner}:flag_rules`;
+}
 
 // ---- Store ----
 
 interface FlagState {
   rules: FlagRule[];
+  /** The repo owner that rules are currently loaded for. */
+  repoOwner: string;
 
-  /** Load persisted rules from the backend settings DB. */
-  loadRules: () => Promise<void>;
+  /** Load persisted rules for the given owner (falls back to global). */
+  loadRules: (owner?: string) => Promise<void>;
   /** Add a new rule and persist. */
   addRule: (rule: Omit<FlagRule, "id">) => Promise<void>;
   /** Remove a rule by id and persist. */
@@ -72,34 +78,56 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Persist rules to the repo-scoped key (and global key for compat). */
+async function persistRules(owner: string, rules: FlagRule[]): Promise<void> {
+  const json = JSON.stringify(rules);
+  if (owner) await SetSetting(repoKey(owner), json).catch(() => {});
+  await SetSetting(GLOBAL_KEY, json).catch(() => {});
+}
+
 export const useFlagStore = create<FlagState>((set, get) => ({
   rules: [],
+  repoOwner: "",
 
-  loadRules: async () => {
-    try {
-      const raw = await GetSetting(SETTING_KEY);
-      if (raw) {
+  loadRules: async (owner?: string) => {
+    if (owner !== undefined) set({ repoOwner: owner });
+    const o = owner !== undefined ? owner : get().repoOwner;
+
+    // Try repo-scoped key first, fall back to global.
+    let raw = "";
+    if (o) {
+      try {
+        raw = await GetSetting(repoKey(o));
+      } catch { /* fall through */ }
+    }
+    if (!raw) {
+      try {
+        raw = await GetSetting(GLOBAL_KEY);
+      } catch { /* ignore */ }
+    }
+    if (raw) {
+      try {
         const parsed = JSON.parse(raw) as FlagRule[];
         if (Array.isArray(parsed)) {
           set({ rules: parsed });
+          return;
         }
-      }
-    } catch {
-      // Setting doesn't exist yet or invalid JSON — use empty default.
+      } catch { /* invalid JSON */ }
     }
+    set({ rules: [] });
   },
 
   addRule: async (rule) => {
     const newRule: FlagRule = { ...rule, id: generateId() };
     const next = [...get().rules, newRule];
     set({ rules: next });
-    await SetSetting(SETTING_KEY, JSON.stringify(next)).catch(() => {});
+    await persistRules(get().repoOwner, next);
   },
 
   removeRule: async (id) => {
     const next = get().rules.filter((r) => r.id !== id);
     set({ rules: next });
-    await SetSetting(SETTING_KEY, JSON.stringify(next)).catch(() => {});
+    await persistRules(get().repoOwner, next);
   },
 
   toggleRule: async (id) => {
@@ -107,7 +135,7 @@ export const useFlagStore = create<FlagState>((set, get) => ({
       r.id === id ? { ...r, enabled: !r.enabled } : r,
     );
     set({ rules: next });
-    await SetSetting(SETTING_KEY, JSON.stringify(next)).catch(() => {});
+    await persistRules(get().repoOwner, next);
   },
 
   updateRule: async (id, partial) => {
@@ -115,7 +143,7 @@ export const useFlagStore = create<FlagState>((set, get) => ({
       r.id === id ? { ...r, ...partial } : r,
     );
     set({ rules: next });
-    await SetSetting(SETTING_KEY, JSON.stringify(next)).catch(() => {});
+    await persistRules(get().repoOwner, next);
   },
 
   isFlagged: (pr) => {

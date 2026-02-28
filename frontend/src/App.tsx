@@ -33,17 +33,20 @@ function AppContent() {
   useEffect(() => {
     usePRStore.getState().loadCacheTimestamps();
     usePRStore.getState().loadHiddenPRs();
-    useSettingsStore.getState().loadHideStackedPRs();
-    useSettingsStore.getState().loadHideDraftPRs();
     useSettingsStore.getState().loadPRRefreshInterval();
-    useSettingsStore.getState().loadFilteredCommentUsers();
-    useSettingsStore.getState().loadFilteredReviewUsers();
-    useFlagStore.getState().loadRules();
-    // Load repos and persisted selection.
+    // Load repos and persisted selection — repo-scoped settings are loaded
+    // by the selectedRepo effect below once the selection is known.
     useRepoStore.getState().loadRepos().then(() => {
       useRepoStore.getState().loadSelectedRepo();
     });
   }, []);
+
+  // Reload repo-scoped settings whenever the selected repo changes.
+  useEffect(() => {
+    const owner = selectedRepo?.repoOwner || "";
+    useSettingsStore.getState().loadRepoSettings(owner);
+    useFlagStore.getState().loadRules(owner);
+  }, [selectedRepo?.repoOwner]);
 
   // Show onboarding if no repos are tracked yet.
   const showOnboarding = repos.length === 0 || !selectedRepo;
