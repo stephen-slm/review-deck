@@ -44,10 +44,12 @@ function AppContent() {
 
   // Reload repo-scoped settings whenever the selected repo changes.
   useEffect(() => {
-    const owner = selectedRepo?.repoOwner || "";
-    useSettingsStore.getState().loadRepoSettings(owner);
-    useFlagStore.getState().loadRules(owner);
-  }, [selectedRepo?.repoOwner]);
+    const repoId = selectedRepo
+      ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
+      : "";
+    useSettingsStore.getState().loadRepoSettings(repoId);
+    useFlagStore.getState().loadRules(repoId);
+  }, [selectedRepo?.repoOwner, selectedRepo?.repoName]);
 
   // Show onboarding if no repos are tracked yet.
   const showOnboarding = repos.length === 0 || !selectedRepo;

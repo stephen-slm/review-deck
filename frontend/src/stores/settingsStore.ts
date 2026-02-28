@@ -15,9 +15,9 @@ import {
   AddExcludedRepo,
   RemoveExcludedRepo,
 } from "../../wailsjs/go/services/SettingsService";
-import { SyncTeamsForOrg } from "../../wailsjs/go/services/PullRequestService";
+import { SyncTeamsForOrg, GetRepoLabels } from "../../wailsjs/go/services/PullRequestService";
 import { SetPollInterval } from "../../wailsjs/go/main/App";
-import { storage } from "../../wailsjs/go/models";
+import { github, storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
 import { ThemeChoice, themeChoices } from "../theme";
 
@@ -32,8 +32,8 @@ const DEFAULT_FILTERED_REVIEW_USERS = ["copilot-pull-request-reviewer[bot]", "gi
 
 interface SettingsState {
   orgs: string[];
-  /** The repo owner that repo-scoped settings are currently loaded for. */
-  repoOwner: string;
+  /** The repo identifier (owner/name) that repo-scoped settings are currently loaded for. */
+  repoId: string;
   filterBots: boolean;
   hideStackedPRs: boolean;
   hideDraftPRs: boolean;
@@ -55,8 +55,8 @@ interface SettingsState {
   loadOrgs: () => Promise<void>;
   addOrg: (org: string) => Promise<void>;
   removeOrg: (org: string) => Promise<void>;
-  /** Load all repo-scoped settings for the given owner. Falls back to global values for migration. */
-  loadRepoSettings: (owner: string) => Promise<void>;
+  /** Load all repo-scoped settings for the given repo (owner/name). Falls back to global values for migration. */
+  loadRepoSettings: (repoId: string) => Promise<void>;
   loadFilterBots: () => Promise<void>;
   setFilterBots: (enabled: boolean) => Promise<void>;
   loadHideStackedPRs: () => Promise<void>;
@@ -93,6 +93,11 @@ interface SettingsState {
   addExcludedRepo: (org: string, repo: string) => Promise<void>;
   removeExcludedRepo: (org: string, repo: string) => Promise<void>;
 
+  /** Cached repo labels keyed by "owner/repo" */
+  labelsByRepo: Record<string, github.Label[]>;
+  /** Sync (fetch) labels from GitHub for a specific repo. */
+  syncLabels: (owner: string, repo: string) => Promise<void>;
+
   /** Base path for local source code (used for Open in GoLand) */
   sourceBasePath: string;
   loadSourceBasePath: () => Promise<void>;
@@ -124,29 +129,36 @@ interface SettingsState {
   setAiTitlePrompt: (prompt: string) => Promise<void>;
 }
 
-/** Return the repo-scoped setting key, e.g. `repo:acme:filter_bots`. */
-function repoKey(owner: string, key: string): string {
-  return `repo:${owner}:${key}`;
+/** Return the repo-scoped setting key, e.g. `repo:acme/my-app:filter_bots`. */
+function repoKey(repoId: string, key: string): string {
+  return `repo:${repoId}:${key}`;
 }
 
 /**
  * Try reading a repo-scoped setting; if missing, fall back to the global key.
- * This provides a migration path — existing global values are used until the
- * user saves a per-repo value.
+ * When falling back, the global value is materialised into the repo-scoped key
+ * so that each repository gets its own independent copy from that point on.
  */
-async function getRepoSetting(owner: string, key: string): Promise<string> {
-  if (owner) {
+async function getRepoSetting(repoId: string, key: string): Promise<string> {
+  if (repoId) {
     try {
-      const val = await GetSetting(repoKey(owner, key));
+      const val = await GetSetting(repoKey(repoId, key));
       if (val !== undefined && val !== null && val !== "") return val;
     } catch { /* fall through to global */ }
   }
-  return GetSetting(key).catch(() => "");
+  // Fall back to the global value.
+  const globalVal = await GetSetting(key).catch(() => "");
+  // Materialise the fallback into the repo-scoped key so each repo is
+  // independent going forward.
+  if (repoId && globalVal) {
+    SetSetting(repoKey(repoId, key), globalVal).catch(() => {});
+  }
+  return globalVal;
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   orgs: [],
-  repoOwner: "",
+  repoId: "",
   filterBots: false,
   hideStackedPRs: false,
   hideDraftPRs: false,
@@ -182,9 +194,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     await get().loadOrgs();
   },
 
-  loadRepoSettings: async (owner: string) => {
-    set({ repoOwner: owner });
-    // Reload all repo-scoped settings for the new owner.
+  loadRepoSettings: async (repoId: string) => {
+    set({ repoId });
+    // Reload all repo-scoped settings for the new repo.
     await Promise.all([
       get().loadFilterBots(),
       get().loadHideStackedPRs(),
@@ -196,7 +208,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadFilterBots: async () => {
     try {
-      const val = await getRepoSetting(get().repoOwner, "filter_bots");
+      const val = await getRepoSetting(get().repoId, "filter_bots");
       set({ filterBots: val === "true" });
     } catch {
       set({ filterBots: false });
@@ -204,7 +216,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilterBots: async (enabled: boolean) => {
-    const owner = get().repoOwner;
+    const owner = get().repoId;
     const v = enabled ? "true" : "false";
     if (owner) await SetSetting(repoKey(owner, "filter_bots"), v);
     await SetSetting("filter_bots", v); // keep global in sync for backend poller
@@ -213,7 +225,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadHideStackedPRs: async () => {
     try {
-      const val = await getRepoSetting(get().repoOwner, "hide_stacked_prs");
+      const val = await getRepoSetting(get().repoId, "hide_stacked_prs");
       set({ hideStackedPRs: val === "true" });
     } catch {
       set({ hideStackedPRs: false });
@@ -221,7 +233,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setHideStackedPRs: async (enabled: boolean) => {
-    const owner = get().repoOwner;
+    const owner = get().repoId;
     const v = enabled ? "true" : "false";
     if (owner) await SetSetting(repoKey(owner, "hide_stacked_prs"), v);
     await SetSetting("hide_stacked_prs", v);
@@ -230,7 +242,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadHideDraftPRs: async () => {
     try {
-      const val = await getRepoSetting(get().repoOwner, "hide_draft_prs");
+      const val = await getRepoSetting(get().repoId, "hide_draft_prs");
       set({ hideDraftPRs: val === "true" });
     } catch {
       set({ hideDraftPRs: false });
@@ -238,7 +250,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setHideDraftPRs: async (enabled: boolean) => {
-    const owner = get().repoOwner;
+    const owner = get().repoId;
     const v = enabled ? "true" : "false";
     if (owner) await SetSetting(repoKey(owner, "hide_draft_prs"), v);
     await SetSetting("hide_draft_prs", v);
@@ -247,7 +259,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadFilteredCommentUsers: async () => {
     try {
-      const val = await getRepoSetting(get().repoOwner, "filtered_comment_users");
+      const val = await getRepoSetting(get().repoId, "filtered_comment_users");
       if (val) {
         const parsed = JSON.parse(val) as string[];
         if (Array.isArray(parsed)) {
@@ -263,7 +275,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const legacy = await GetSetting("hide_copilot_reviews");
       if (legacy === "true") {
         set({ filteredCommentUsers: DEFAULT_FILTERED_COMMENT_USERS });
-        const owner = get().repoOwner;
+        const owner = get().repoId;
         const key = owner ? repoKey(owner, "filtered_comment_users") : "filtered_comment_users";
         await SetSetting(key, JSON.stringify(DEFAULT_FILTERED_COMMENT_USERS));
         return;
@@ -273,7 +285,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilteredCommentUsers: async (users: string[]) => {
-    const owner = get().repoOwner;
+    const owner = get().repoId;
     const v = JSON.stringify(users);
     if (owner) await SetSetting(repoKey(owner, "filtered_comment_users"), v);
     await SetSetting("filtered_comment_users", v);
@@ -282,7 +294,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   loadFilteredReviewUsers: async () => {
     try {
-      const val = await getRepoSetting(get().repoOwner, "filtered_review_users");
+      const val = await getRepoSetting(get().repoId, "filtered_review_users");
       if (val) {
         const parsed = JSON.parse(val) as string[];
         if (Array.isArray(parsed)) {
@@ -298,7 +310,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       const legacy = await GetSetting("hide_copilot_reviews");
       if (legacy === "true") {
         set({ filteredReviewUsers: DEFAULT_FILTERED_REVIEW_USERS });
-        const owner = get().repoOwner;
+        const owner = get().repoId;
         const key = owner ? repoKey(owner, "filtered_review_users") : "filtered_review_users";
         await SetSetting(key, JSON.stringify(DEFAULT_FILTERED_REVIEW_USERS));
         return;
@@ -308,7 +320,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setFilteredReviewUsers: async (users: string[]) => {
-    const owner = get().repoOwner;
+    const owner = get().repoId;
     const v = JSON.stringify(users);
     if (owner) await SetSetting(repoKey(owner, "filtered_review_users"), v);
     await SetSetting("filtered_review_users", v);
@@ -501,6 +513,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   removeExcludedRepo: async (org: string, repo: string) => {
     await RemoveExcludedRepo(org, repo);
     await get().loadExcludedRepos(org);
+  },
+
+  labelsByRepo: {},
+
+  syncLabels: async (owner: string, repo: string) => {
+    const labels = await GetRepoLabels(owner, repo);
+    const key = `${owner}/${repo}`;
+    set((s) => ({
+      labelsByRepo: { ...s.labelsByRepo, [key]: labels || [] },
+    }));
   },
 
   loadSourceBasePath: async () => {

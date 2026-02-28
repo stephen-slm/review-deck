@@ -4,7 +4,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { useVimStore } from "@/stores/vimStore";
 
-import { Plus, Trash2, Bot, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, AlertTriangle, Shield, Crown } from "lucide-react";
+import { Plus, Trash2, Bot, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, AlertTriangle, Shield, Crown, Tag } from "lucide-react";
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
@@ -21,7 +21,7 @@ const repoTabs: TabDef[] = [
 
 export function SettingsPage() {
   const { isAuthenticated } = useAuthStore();
-  const { loadOrgs, loadRepoSettings, filterBots, setFilterBots, hideStackedPRs, setHideStackedPRs, hideDraftPRs, setHideDraftPRs, filteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, setFilteredReviewUsers, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority } = useSettingsStore();
+  const { loadOrgs, loadRepoSettings, filterBots, setFilterBots, hideStackedPRs, setHideStackedPRs, hideDraftPRs, setHideDraftPRs, filteredCommentUsers, setFilteredCommentUsers, filteredReviewUsers, setFilteredReviewUsers, teamsByOrg, loadAllTeams, syncTeams, setTeamEnabled, prioritiesByOrg, loadAllPriorities, addPriority, removePriority, movePriority, labelsByRepo, syncLabels } = useSettingsStore();
   const { repos, loadRepos } = useRepoStore();
 
   // Derive unique org names from tracked repos for team/priority features.
@@ -32,6 +32,7 @@ export function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<RepoSettingsTab>("filters");
   const [syncingOrg, setSyncingOrg] = useState<string | null>(null);
+  const [syncingLabels, setSyncingLabels] = useState(false);
   const [newPriorityName, setNewPriorityName] = useState("");
   const [newPriorityType, setNewPriorityType] = useState<"user" | "team">("user");
 
@@ -59,10 +60,12 @@ export function SettingsPage() {
 
   // Reload repo-scoped settings (filters, flag rules) when selected repo changes.
   useEffect(() => {
-    const owner = selectedRepo?.repoOwner || "";
-    loadRepoSettings(owner);
-    loadFlagRules(owner);
-  }, [selectedRepo?.repoOwner, loadRepoSettings, loadFlagRules]);
+    const repoId = selectedRepo
+      ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
+      : "";
+    loadRepoSettings(repoId);
+    loadFlagRules(repoId);
+  }, [selectedRepo?.repoOwner, selectedRepo?.repoName, loadRepoSettings, loadFlagRules]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-4 switch tabs.
   useEffect(() => {
@@ -378,6 +381,76 @@ export function SettingsPage() {
                 </p>
               )}
             </section>
+
+            {/* Labels */}
+            {selectedRepo && (
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold">Labels</h3>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!selectedRepo) return;
+                      setSyncingLabels(true);
+                      try {
+                        await syncLabels(selectedRepo.repoOwner, selectedRepo.repoName);
+                      } finally {
+                        setSyncingLabels(false);
+                      }
+                    }}
+                    disabled={syncingLabels}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${syncingLabels ? "animate-spin" : ""}`} />
+                    Sync
+                  </button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Fetch the available labels for this repository from GitHub.
+                </p>
+
+                {(() => {
+                  const repoKey = `${selectedRepo.repoOwner}/${selectedRepo.repoName}`;
+                  const labels = labelsByRepo[repoKey];
+                  if (!labels) {
+                    return (
+                      <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                        No labels synced yet. Click Sync to fetch from GitHub.
+                      </p>
+                    );
+                  }
+                  if (labels.length === 0) {
+                    return (
+                      <p className="rounded-md border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">
+                        No labels found in this repository.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-1.5">
+                      {labels.map((label) => {
+                        const bg = label.color ? `#${label.color}` : undefined;
+                        return (
+                          <span
+                            key={label.id}
+                            className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+                            style={{
+                              backgroundColor: bg ? `${bg}33` : undefined,
+                              color: bg || undefined,
+                              border: bg ? `1px solid ${bg}66` : undefined,
+                            }}
+                          >
+                            {label.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </section>
+            )}
           </>
         )}
 
