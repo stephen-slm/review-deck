@@ -614,6 +614,7 @@ export function PRDetailPage() {
       if (hasLocalPath && toolAvailability?.gh && toolAvailability?.claude) {
         actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
         actions.onGenerate = () => { if (!descGenerating) handleGenerateDescription(); };
+        actions.onGenerateTitle = () => { if (!titleGenerating) handleGenerateTitle(); };
       }
     } else if (activeTab === "checks") {
       actions.onOpen = (idx: number) => {
@@ -1167,6 +1168,17 @@ export function PRDetailPage() {
                           <p className="text-sm font-medium text-foreground leading-snug">
                             {commit.messageHeadline}
                           </p>
+                          {/* Show the full commit body (everything after the headline) if present */}
+                          {commit.message && commit.message.trim() !== commit.messageHeadline.trim() && (() => {
+                            // The body is the message with the headline stripped off.
+                            const body = commit.message.slice(commit.messageHeadline.length).trim();
+                            if (!body) return null;
+                            return (
+                              <pre className="mt-1 whitespace-pre-wrap break-words rounded-md bg-muted/50 px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                                {body}
+                              </pre>
+                            );
+                          })()}
                           <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                             <span>{commit.authorLogin || commit.authorName}</span>
                             <span>&middot;</span>

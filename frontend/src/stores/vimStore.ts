@@ -55,6 +55,8 @@ export interface VimState {
   onRequestChanges: (() => void) | null;
   /** Generate AI content (description or review) — called by 'G' (Shift+g) keybinding. */
   onGenerate: (() => void) | null;
+  /** Generate AI title — called by 'H' (Shift+h) keybinding. */
+  onGenerateTitle: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -83,7 +85,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -115,6 +117,7 @@ const emptyActions = {
   onUnresolve: null,
   onRequestChanges: null,
   onGenerate: null,
+  onGenerateTitle: null,
   onEscape: null,
 };
 

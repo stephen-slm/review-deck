@@ -124,6 +124,10 @@ export function useVimNavigation() {
         if (onGenerate) { onGenerate(); return; }
         if (listLength > 0) store().setSelectedIndex(listLength - 1);
       }),
+      "Shift+h": vim(() => {
+        const { onGenerateTitle } = store();
+        if (onGenerateTitle) onGenerateTitle();
+      }),
 
       // ---- Open selected item ----
       "Enter": vim(() => {
