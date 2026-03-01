@@ -7,6 +7,7 @@ import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { GlobalSettingsPage } from "./pages/GlobalSettingsPage";
 import { FlaggedPRsPage } from "./pages/FlaggedPRsPage";
+import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { PRDetailPage } from "./pages/PRDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
@@ -74,6 +75,7 @@ function AppContent() {
               path="/review-requests"
               element={<ReviewRequestsPage />}
             />
+            <Route path="/reviewed" element={<ReviewedByMePage />} />
             <Route path="/flagged" element={<FlaggedPRsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/global-settings" element={<GlobalSettingsPage />} />

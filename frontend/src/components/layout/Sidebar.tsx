@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import {
   GitPullRequest,
   Eye,
+  CheckCheck,
   AlertTriangle,
   Settings,
   ChevronDown,
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
     icon: Eye,
     badgeKey: "reviewRequests",
   },
+  { to: "/reviewed", label: "Reviewed by Me", icon: CheckCheck },
   { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
   { to: "/settings", label: "Repo Settings", icon: Settings },
 ];
