@@ -1237,6 +1237,7 @@ export function PRDetailPage() {
                 <DetailMergeButton
                   prNodeId={pr.nodeId}
                   mergeable={pr.mergeable}
+                  reviewDecision={pr.reviewDecision}
                   isDraft={pr.isDraft}
                   isInMergeQueue={pr.isInMergeQueue}
                   author={pr.author}
@@ -1425,6 +1426,7 @@ export function PRDetailPage() {
 function DetailMergeButton({
   prNodeId,
   mergeable,
+  reviewDecision,
   isDraft,
   isInMergeQueue,
   author,
@@ -1433,6 +1435,7 @@ function DetailMergeButton({
 }: {
   prNodeId: string;
   mergeable: string;
+  reviewDecision: string;
   isDraft: boolean;
   isInMergeQueue?: boolean;
   author: string;
@@ -1447,7 +1450,8 @@ function DetailMergeButton({
 
   // You cannot merge your own PR.
   const isOwnPR = !!viewerLogin && viewerLogin === author;
-  const canMerge = !isDraft && !isOwnPR && mergeable === "MERGEABLE";
+  const reviewBlocked = reviewDecision === "REVIEW_REQUIRED" || reviewDecision === "CHANGES_REQUESTED";
+  const canMerge = !isDraft && !isOwnPR && !reviewBlocked && mergeable === "MERGEABLE";
 
   // Expose trigger to parent via triggerRef (used by vim "m" key).
   useEffect(() => {
@@ -1484,9 +1488,13 @@ function DetailMergeButton({
       ? "Cannot merge draft PRs"
       : isOwnPR
         ? "Cannot merge your own PR"
-        : mergeable === "CONFLICTING"
-          ? "This branch has conflicts"
-          : "Cannot merge this PR"
+        : reviewDecision === "CHANGES_REQUESTED"
+          ? "Changes have been requested"
+          : reviewDecision === "REVIEW_REQUIRED"
+            ? "Review approval is required"
+            : mergeable === "CONFLICTING"
+              ? "This branch has conflicts"
+              : "Cannot merge this PR"
     : "Squash and merge";
 
   return (
