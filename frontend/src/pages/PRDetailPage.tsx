@@ -494,7 +494,7 @@ export function PRDetailPage() {
     if (activeTab !== "commits" || commits !== null || commitsLoading || !nodeId) return;
     setCommitsLoading(true);
     GetPRCommits(nodeId)
-      .then(setCommits)
+      .then((c) => setCommits(c ? [...c].reverse() : c))
       .catch((err) => setCommitsError(String(err)))
       .finally(() => setCommitsLoading(false));
   }, [activeTab, commits, commitsLoading, nodeId]);
