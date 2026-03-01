@@ -845,6 +845,7 @@ export function PRDetailPage() {
                         >
                           <Sparkles className="h-3 w-3" />
                           Title
+                          <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">H</kbd>
                         </button>
                       )}
                       {descGenerating ? (
@@ -864,6 +865,7 @@ export function PRDetailPage() {
                         >
                           <Sparkles className="h-3 w-3" />
                           Description
+                          <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">G</kbd>
                         </button>
                       )}
                     </div>
@@ -1147,8 +1149,8 @@ export function PRDetailPage() {
                         data-idx={idx}
                         className={`group flex items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
                           selected
-                            ? "border-primary bg-accent"
-                            : "border-border bg-card hover:bg-accent/50"
+                            ? "border-primary"
+                            : "border-border hover:bg-accent/50"
                         }`}
                       >
                         <div className="mt-0.5 shrink-0">
