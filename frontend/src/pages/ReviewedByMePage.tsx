@@ -69,11 +69,18 @@ export function ReviewedByMePage() {
     loadOrgs();
   }, [loadOrgs]);
 
+  // Filter out the viewer's own PRs — this page is for PRs authored by others.
+  const viewerLogin = user?.login;
+  const filteredItems = useMemo(
+    () => viewerLogin ? pg.items.filter((pr) => pr.author !== viewerLogin) : pg.items,
+    [pg.items, viewerLogin],
+  );
+
   // Build set of flagged PR nodeIds for red border styling.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const flaggedNodeIds = useMemo(
-    () => new Set(pg.items.filter((pr) => isFlagged(pr)).map((pr) => pr.nodeId)),
-    [pg.items, flagRules],
+    () => new Set(filteredItems.filter((pr) => isFlagged(pr)).map((pr) => pr.nodeId)),
+    [filteredItems, flagRules],
   );
 
   useEffect(() => {
@@ -140,7 +147,7 @@ export function ReviewedByMePage() {
       )}
 
       <PRTable
-        data={pg.items}
+        data={filteredItems}
         isLoading={loading}
         showAuthor
         emptyMessage="No reviewed pull requests found."
@@ -149,7 +156,7 @@ export function ReviewedByMePage() {
         onPageSizeChange={handlePageSizeChange}
         onRefresh={forceRefresh}
         onFetchMore={handleFetchMore}
-        viewerLogin={user?.login}
+        viewerLogin={viewerLogin}
         flaggedNodeIds={flaggedNodeIds}
       />
     </div>
