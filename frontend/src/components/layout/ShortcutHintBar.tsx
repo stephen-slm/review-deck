@@ -13,7 +13,7 @@ interface HintGroup {
 }
 
 const GLOBAL_HINTS: Hint[] = [
-  { keys: "\u2318+1-4", label: "switch sidebar tabs" },
+  { keys: "\u2318+1-5", label: "switch sidebar tabs" },
   { keys: "Shift+J/K", label: "smooth scroll" },
   { keys: "?", label: "toggle this popup" },
 ];
@@ -78,7 +78,14 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }
-  if (pathname === "/my-prs" || pathname === "/reviewed") {
+  if (pathname === "/my-prs") {
+    return [
+      { title: "List Navigation", hints: LIST_HINTS },
+      { title: "My PRs", hints: [{ keys: "1/2", label: "Open / Recently Merged tab" }] },
+      { title: "Global", hints: GLOBAL_HINTS },
+    ];
+  }
+  if (pathname === "/reviewed") {
     return [
       { title: "List Navigation", hints: LIST_HINTS },
       { title: "Global", hints: GLOBAL_HINTS },

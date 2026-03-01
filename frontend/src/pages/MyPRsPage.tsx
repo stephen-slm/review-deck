@@ -321,6 +321,9 @@ export function MyPRsPage() {
               {pgOpen.totalCount}
             </span>
           )}
+          <kbd className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+            1
+          </kbd>
           {activeTab === "open" && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
           )}
@@ -339,6 +342,9 @@ export function MyPRsPage() {
               {pgMerged.totalCount}
             </span>
           )}
+          <kbd className="ml-1 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">
+            2
+          </kbd>
           {activeTab === "merged" && (
             <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-foreground" />
           )}
