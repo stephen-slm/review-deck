@@ -1149,8 +1149,8 @@ export function PRDetailPage() {
                         data-idx={idx}
                         className={`group flex items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
                           selected
-                            ? "border-primary"
-                            : "border-border hover:bg-accent/50"
+                            ? "ring-1 ring-primary border-primary/50"
+                            : "border-border"
                         }`}
                       >
                         <div className="mt-0.5 shrink-0">
@@ -1298,6 +1298,7 @@ export function PRDetailPage() {
                   >
                     <Sparkles className={`h-4 w-4 ${aiReviewing ? "animate-pulse" : ""}`} />
                     {aiReviewing ? "Reviewing..." : "AI Review"}
+                    {!aiReviewing && <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">G</kbd>}
                   </button>
                 </>
               )}
