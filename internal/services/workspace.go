@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -141,6 +142,19 @@ func (s *WorkspaceService) SetContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
+// ghEnv returns a copy of the current environment with GH_TOKEN set from
+// the stored GitHub PAT. This ensures `gh` CLI commands authenticate
+// correctly even when the app is launched from Finder/Spotlight where
+// `gh auth` may not be configured.
+func (s *WorkspaceService) ghEnv() []string {
+	env := os.Environ()
+	token, err := s.db.GetSetting("github_token")
+	if err == nil && token != "" {
+		env = append(env, "GH_TOKEN="+token)
+	}
+	return env
+}
+
 // CheckToolAvailability reports which CLI tools (gh, claude) are installed.
 func (s *WorkspaceService) CheckToolAvailability() ToolAvailability {
 	return ToolAvailability{
@@ -175,7 +189,7 @@ func (s *WorkspaceService) CheckoutPR(repoOwner, repoName string, prNumber int) 
 		return fmt.Errorf("you have uncommitted changes in %s — stash or commit before checking out", repo.LocalPath)
 	}
 
-	_, err = gitutil.CheckoutPR(repo.LocalPath, prNumber)
+	_, err = gitutil.CheckoutPR(repo.LocalPath, prNumber, s.ghEnv())
 	return err
 }
 
@@ -298,8 +312,11 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		wailsRuntime.EventsEmit(appCtx, "ai:started", prNumber)
 
 		// 1. Get the PR diff via `gh pr diff`.
-		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
+		ghRepo := repoOwner + "/" + repoName
+		ghTokenEnv := s.ghEnv()
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber), "--repo", ghRepo)
 		diffCmd.Dir = repo.LocalPath
+		diffCmd.Env = ghTokenEnv
 		diff, err := diffCmd.Output()
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
@@ -456,8 +473,11 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 		wailsRuntime.EventsEmit(appCtx, "description:started", prNumber)
 
 		// 1. Get the PR diff via `gh pr diff`.
-		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
+		ghRepo := repoOwner + "/" + repoName
+		ghTokenEnv := s.ghEnv()
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber), "--repo", ghRepo)
 		diffCmd.Dir = repo.LocalPath
+		diffCmd.Env = ghTokenEnv
 		diff, err := diffCmd.Output()
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
@@ -516,8 +536,10 @@ func (s *WorkspaceService) ApplyPRDescription(repoOwner, repoName string, prNumb
 		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
 	}
 
-	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--body", body)
+	ghRepo := repoOwner + "/" + repoName
+	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--body", body, "--repo", ghRepo)
 	cmd.Dir = repo.LocalPath
+	cmd.Env = s.ghEnv()
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf
@@ -592,8 +614,11 @@ func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumb
 		wailsRuntime.EventsEmit(appCtx, "title:started", prNumber)
 
 		// 1. Get the PR diff via `gh pr diff`.
-		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber))
+		ghRepo := repoOwner + "/" + repoName
+		ghTokenEnv := s.ghEnv()
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber), "--repo", ghRepo)
 		diffCmd.Dir = repo.LocalPath
+		diffCmd.Env = ghTokenEnv
 		diff, err := diffCmd.Output()
 		if err != nil {
 			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
@@ -660,8 +685,10 @@ func (s *WorkspaceService) ApplyPRTitle(repoOwner, repoName string, prNumber int
 		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
 	}
 
-	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--title", title)
+	ghRepo := repoOwner + "/" + repoName
+	cmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--title", title, "--repo", ghRepo)
 	cmd.Dir = repo.LocalPath
+	cmd.Env = s.ghEnv()
 
 	var stderrBuf bytes.Buffer
 	cmd.Stderr = &stderrBuf

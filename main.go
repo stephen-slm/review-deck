@@ -27,30 +27,48 @@ func ensurePATH() {
 		return
 	}
 
-	// Try to get the user's login shell PATH via `$SHELL -l -c 'echo $PATH'`.
+	// Start with the current (possibly minimal) PATH.
+	current := os.Getenv("PATH")
+
+	// Try to get the user's full login shell PATH via `$SHELL -l -i -c 'echo $PATH'`.
+	// The -i flag sources .zshrc/.bashrc in addition to .zprofile/.bash_profile,
+	// which is where many users add PATH modifications.
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/zsh"
 	}
-	out, err := exec.Command(shell, "-l", "-c", "echo $PATH").Output()
+	out, err := exec.Command(shell, "-l", "-i", "-c", "echo $PATH").Output()
 	if err == nil {
 		shellPath := strings.TrimSpace(string(out))
 		if shellPath != "" {
-			os.Setenv("PATH", shellPath)
-			return
+			current = shellPath
 		}
 	}
 
-	// Fallback: manually append common directories.
+	// Always append common directories — these may not be in the shell PATH
+	// if the app is launched from Finder/Spotlight with a minimal environment.
+	home := os.Getenv("HOME")
 	extra := []string{
 		"/opt/homebrew/bin",
 		"/usr/local/bin",
-		os.Getenv("HOME") + "/.local/bin",
-		os.Getenv("HOME") + "/.npm-global/bin",
+		home + "/.local/bin",
+		home + "/.npm-global/bin",
 		"/usr/local/go/bin",
 	}
-	current := os.Getenv("PATH")
-	os.Setenv("PATH", current+":"+strings.Join(extra, ":"))
+
+	// Deduplicate: only add directories not already present.
+	existing := make(map[string]bool)
+	for _, dir := range strings.Split(current, ":") {
+		existing[dir] = true
+	}
+	for _, dir := range extra {
+		if !existing[dir] {
+			current += ":" + dir
+			existing[dir] = true
+		}
+	}
+
+	os.Setenv("PATH", current)
 }
 
 func main() {

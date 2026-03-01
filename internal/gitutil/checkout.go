@@ -9,8 +9,9 @@ import (
 
 // CheckoutPR runs `gh pr checkout <number>` in the given repo directory.
 // Returns the combined stdout/stderr output. Requires `gh` CLI to be installed
-// and authenticated.
-func CheckoutPR(repoPath string, prNumber int) (string, error) {
+// and authenticated. If env is non-nil it is used as the command's environment
+// (allows the caller to inject GH_TOKEN).
+func CheckoutPR(repoPath string, prNumber int, env []string) (string, error) {
 	absPath, err := filepath.Abs(repoPath)
 	if err != nil {
 		return "", fmt.Errorf("resolve path: %w", err)
@@ -18,6 +19,9 @@ func CheckoutPR(repoPath string, prNumber int) (string, error) {
 
 	cmd := exec.Command("gh", "pr", "checkout", fmt.Sprintf("%d", prNumber))
 	cmd.Dir = absPath
+	if env != nil {
+		cmd.Env = env
+	}
 
 	out, err := cmd.CombinedOutput()
 	output := strings.TrimSpace(string(out))
