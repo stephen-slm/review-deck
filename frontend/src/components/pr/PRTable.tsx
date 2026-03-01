@@ -274,17 +274,6 @@ export function PRTable({
     });
 
     return [
-      columnHelper.accessor(
-        (row) => `${row.repoOwner}/${row.repoName}`,
-        {
-          id: "repo",
-          header: "Repo",
-          cell: (info) => (
-            <span className="text-xs text-muted-foreground">{info.getValue()}</span>
-          ),
-          size: 160,
-        }
-      ),
       columnHelper.accessor("number", {
         header: "#",
         cell: (info) => (
