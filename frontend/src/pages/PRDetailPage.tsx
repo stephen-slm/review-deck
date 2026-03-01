@@ -1239,6 +1239,7 @@ export function PRDetailPage() {
                   mergeable={pr.mergeable}
                   isDraft={pr.isDraft}
                   isInMergeQueue={pr.isInMergeQueue}
+                  author={pr.author}
                   onMerged={async () => { await handleRefresh(); navigate(-1); }}
                   triggerRef={mergeToggleRef}
                 />
@@ -1426,6 +1427,7 @@ function DetailMergeButton({
   mergeable,
   isDraft,
   isInMergeQueue,
+  author,
   onMerged,
   triggerRef,
 }: {
@@ -1433,6 +1435,7 @@ function DetailMergeButton({
   mergeable: string;
   isDraft: boolean;
   isInMergeQueue?: boolean;
+  author: string;
   onMerged?: () => void;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
@@ -1440,8 +1443,11 @@ function DetailMergeButton({
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const { mergePR } = usePRStore();
+  const viewerLogin = useAuthStore((s) => s.user?.login);
 
-  const canMerge = !isDraft && mergeable === "MERGEABLE";
+  // You cannot merge your own PR.
+  const isOwnPR = !!viewerLogin && viewerLogin === author;
+  const canMerge = !isDraft && !isOwnPR && mergeable === "MERGEABLE";
 
   // Expose trigger to parent via triggerRef (used by vim "m" key).
   useEffect(() => {
@@ -1476,9 +1482,11 @@ function DetailMergeButton({
   const title = !canMerge
     ? isDraft
       ? "Cannot merge draft PRs"
-      : mergeable === "CONFLICTING"
-        ? "This branch has conflicts"
-        : "Cannot merge this PR"
+      : isOwnPR
+        ? "Cannot merge your own PR"
+        : mergeable === "CONFLICTING"
+          ? "This branch has conflicts"
+          : "Cannot merge this PR"
     : "Squash and merge";
 
   return (
