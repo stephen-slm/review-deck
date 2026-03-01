@@ -583,7 +583,7 @@ export function PRDetailPage() {
     } else {
       useVimStore.getState().setListLength(0);
     }
-  }, [activeTab, checkRuns, comments]);
+  }, [activeTab, checkRuns, comments, commits, prFiles]);
 
   // Register VIM actions for the detail page.
   // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
@@ -1605,6 +1605,7 @@ function DetailApproveButton({
       >
         <ThumbsUp className={`h-4 w-4 ${isApproving ? "animate-pulse" : ""}`} />
         {isApproving ? "Approving..." : "Approve"}
+        {!isApproving && <kbd className="ml-0.5 rounded bg-green-500/10 px-1 py-0.5 font-mono text-[10px] text-green-400/60">A</kbd>}
       </button>
       {error && (
         <p className="mt-1 text-xs text-destructive">{error}</p>
