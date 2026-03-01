@@ -22,7 +22,7 @@ interface NavItem {
   to: string;
   label: string;
   icon: typeof GitPullRequest;
-  badgeKey?: "myPRs" | "reviewRequests" | "flagged";
+  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged";
 }
 
 const navItems: NavItem[] = [
@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
     icon: Eye,
     badgeKey: "reviewRequests",
   },
-  { to: "/reviewed", label: "Reviewed by Me", icon: CheckCheck },
+  { to: "/reviewed", label: "Reviewed by Me", icon: CheckCheck, badgeKey: "reviewedByMe" },
   { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
   { to: "/settings", label: "Repo Settings", icon: Settings },
 ];
@@ -62,9 +62,16 @@ export function Sidebar() {
     return count;
   }, [pages.reviewRequests.items, pages.reviewedByMe?.items, isFlagged, flagRules]);
 
+  const reviewedByMeCount = useMemo(() => {
+    const items = pages.reviewedByMe?.items || [];
+    if (!user?.login) return items.length;
+    return items.filter((pr) => pr.author !== user.login).length;
+  }, [pages.reviewedByMe?.items, user?.login]);
+
   const badgeCounts: Record<string, number> = {
     myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
     reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
+    reviewedByMe: reviewedByMeCount,
     flagged: flaggedCount,
   };
 
