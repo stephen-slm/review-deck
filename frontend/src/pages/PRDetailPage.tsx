@@ -105,7 +105,7 @@ import { useFlagStore } from "@/stores/flagStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { useToast } from "@/components/ui/Toast";
 import { github, services } from "../../wailsjs/go/models";
-import { timeAgo } from "@/lib/utils";
+import { timeAgo, hexLuminance } from "@/lib/utils";
 
 type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review";
 import { StateBadge } from "@/components/pr/StateBadge";
@@ -2532,14 +2532,18 @@ function ReviewStateBadge({ state }: { state: string }) {
 function LabelBadge({ label }: { label: github.Label }) {
   // GitHub label colors are hex without the #
   const bg = label.color ? `#${label.color}` : undefined;
+  // Pick a readable text color based on background luminance.
+  const textColor = bg
+    ? hexLuminance(bg) > 0.5 ? "#24292f" : "#ffffff"
+    : undefined;
 
   return (
     <span
       className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
       style={{
-        backgroundColor: bg ? `${bg}33` : undefined, // 20% opacity
-        color: bg || undefined,
-        border: bg ? `1px solid ${bg}66` : undefined,
+        backgroundColor: bg,
+        color: textColor,
+        border: bg ? `1px solid ${bg}` : undefined,
       }}
     >
       {label.name}

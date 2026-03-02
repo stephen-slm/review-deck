@@ -8,6 +8,7 @@ import { Plus, Trash2, Bot, Users, RefreshCw, Star, ChevronUp, ChevronDown, Fold
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
 import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
+import { hexLuminance } from "@/lib/utils";
 
 type RepoSettingsTab = "filters" | "teams" | "rules";
 
@@ -432,14 +433,17 @@ export function SettingsPage() {
                     <div className="flex flex-wrap gap-1.5">
                       {labels.map((label) => {
                         const bg = label.color ? `#${label.color}` : undefined;
+                        const textColor = bg
+                          ? hexLuminance(bg) > 0.5 ? "#24292f" : "#ffffff"
+                          : undefined;
                         return (
                           <span
                             key={label.id}
                             className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
                             style={{
-                              backgroundColor: bg ? `${bg}33` : undefined,
-                              color: bg || undefined,
-                              border: bg ? `1px solid ${bg}66` : undefined,
+                              backgroundColor: bg,
+                              color: textColor,
+                              border: bg ? `1px solid ${bg}` : undefined,
                             }}
                           >
                             {label.name}

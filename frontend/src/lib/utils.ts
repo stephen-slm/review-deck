@@ -21,6 +21,18 @@ export function timeAgo(date: string | Date | number): string {
   return `${months}mo ago`;
 }
 
+/**
+ * Compute perceived luminance (0-1) from a hex color string.
+ * Uses the sRGB luminance formula: 0.299R + 0.587G + 0.114B.
+ */
+export function hexLuminance(hex: string): number {
+  const c = hex.replace("#", "");
+  const r = parseInt(c.substring(0, 2), 16) / 255;
+  const g = parseInt(c.substring(2, 4), 16) / 255;
+  const b = parseInt(c.substring(4, 6), 16) / 255;
+  return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
 export function prSize(
   additions: number,
   deletions: number
