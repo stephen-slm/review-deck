@@ -1160,7 +1160,7 @@ export function PRDetailPage() {
                         data-idx={idx}
                         className={`group flex items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
                           selected
-                            ? "ring-1 ring-primary bg-accent/40 border-primary/50"
+                            ? "ring-1 ring-primary border-primary/50"
                             : "border-border hover:bg-muted/30"
                         }`}
                       >
