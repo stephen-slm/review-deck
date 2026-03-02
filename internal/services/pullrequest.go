@@ -377,13 +377,22 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 	return s.client.RequestReviews(context.Background(), prNodeID, userIDs, teamIDs)
 }
 
-// GetRepoLabels fetches all labels for a repository.
-// owner/repo are the GitHub owner and repository name (e.g. "paxosglobal", "pax").
+// GetRepoLabels fetches all labels for a repository from GitHub and persists
+// them to the local DB cache for offline/startup access.
 func (s *PullRequestService) GetRepoLabels(owner string, repo string) ([]gh.Label, error) {
 	if s.client == nil {
 		return nil, fmt.Errorf("not authenticated")
 	}
-	return s.client.GetRepoLabels(context.Background(), owner, repo)
+	labels, err := s.client.GetRepoLabels(context.Background(), owner, repo)
+	if err != nil {
+		return nil, err
+	}
+	// Persist to DB so they survive restarts.
+	if dbErr := s.db.UpsertRepoLabels(owner, repo, labels); dbErr != nil {
+		// Non-fatal — log but still return the labels.
+		fmt.Printf("warning: failed to cache labels for %s/%s: %v\n", owner, repo, dbErr)
+	}
+	return labels, nil
 }
 
 // AddLabels adds labels to a pull request by its node ID.

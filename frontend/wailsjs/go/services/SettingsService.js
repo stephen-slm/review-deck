@@ -14,6 +14,10 @@ export function AddTrackedOrg(arg1) {
   return window['go']['services']['SettingsService']['AddTrackedOrg'](arg1);
 }
 
+export function GetCachedRepoLabels(arg1, arg2) {
+  return window['go']['services']['SettingsService']['GetCachedRepoLabels'](arg1, arg2);
+}
+
 export function GetExcludedRepos(arg1) {
   return window['go']['services']['SettingsService']['GetExcludedRepos'](arg1);
 }

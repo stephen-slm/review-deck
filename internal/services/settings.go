@@ -1,6 +1,7 @@
 package services
 
 import (
+	gh "review-deck/internal/github"
 	"review-deck/internal/storage"
 )
 
@@ -82,4 +83,9 @@ func (s *SettingsService) AddExcludedRepo(org, repo string) error {
 // RemoveExcludedRepo removes a repository from the exclusion list.
 func (s *SettingsService) RemoveExcludedRepo(org, repo string) error {
 	return s.db.RemoveExcludedRepo(org, repo)
+}
+
+// GetCachedRepoLabels returns cached labels for a repo from the local DB.
+func (s *SettingsService) GetCachedRepoLabels(owner, repo string) ([]gh.Label, error) {
+	return s.db.GetRepoLabels(owner, repo)
 }

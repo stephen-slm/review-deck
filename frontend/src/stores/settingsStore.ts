@@ -14,6 +14,7 @@ import {
   GetExcludedRepos,
   AddExcludedRepo,
   RemoveExcludedRepo,
+  GetCachedRepoLabels,
 } from "../../wailsjs/go/services/SettingsService";
 import { SyncTeamsForOrg, GetRepoLabels } from "../../wailsjs/go/services/PullRequestService";
 import { SetPollInterval } from "../../wailsjs/go/main/App";
@@ -95,7 +96,9 @@ interface SettingsState {
 
   /** Cached repo labels keyed by "owner/repo" */
   labelsByRepo: Record<string, github.Label[]>;
-  /** Sync (fetch) labels from GitHub for a specific repo. */
+  /** Load labels from local DB cache for a specific repo. */
+  loadLabels: (owner: string, repo: string) => Promise<void>;
+  /** Sync (fetch) labels from GitHub for a specific repo, persisting to DB. */
   syncLabels: (owner: string, repo: string) => Promise<void>;
 
   /** Base path for local source code (used for Open in GoLand) */
@@ -197,12 +200,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   loadRepoSettings: async (repoId: string) => {
     set({ repoId });
     // Reload all repo-scoped settings for the new repo.
+    const [owner, repo] = repoId.split("/");
     await Promise.all([
       get().loadFilterBots(),
       get().loadHideStackedPRs(),
       get().loadHideDraftPRs(),
       get().loadFilteredCommentUsers(),
       get().loadFilteredReviewUsers(),
+      owner && repo ? get().loadLabels(owner, repo) : Promise.resolve(),
     ]);
   },
 
@@ -517,12 +522,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   labelsByRepo: {},
 
+  loadLabels: async (owner: string, repo: string) => {
+    try {
+      const labels = await GetCachedRepoLabels(owner, repo);
+      const key = `${owner}/${repo}`;
+      set((s) => ({
+        labelsByRepo: { ...s.labelsByRepo, [key]: labels || [] },
+      }));
+    } catch {
+      // ignore — labels stay as-is
+    }
+  },
+
   syncLabels: async (owner: string, repo: string) => {
-    const labels = await GetRepoLabels(owner, repo);
-    const key = `${owner}/${repo}`;
-    set((s) => ({
-      labelsByRepo: { ...s.labelsByRepo, [key]: labels || [] },
-    }));
+    // Fetch from GitHub (backend persists to DB), then reload from DB.
+    await GetRepoLabels(owner, repo);
+    await get().loadLabels(owner, repo);
   },
 
   loadSourceBasePath: async () => {

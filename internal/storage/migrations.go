@@ -199,6 +199,19 @@ var migrations = []string{
 
 	// Migration 10: Per-repo default AI agent (claude, codex). Empty = global default.
 	`ALTER TABLE tracked_repos ADD COLUMN ai_agent TEXT NOT NULL DEFAULT '';`,
+
+	// Migration 11: Cached repo labels (persisted across restarts).
+	`CREATE TABLE IF NOT EXISTS repo_labels (
+		id         INTEGER PRIMARY KEY AUTOINCREMENT,
+		repo_owner TEXT NOT NULL,
+		repo_name  TEXT NOT NULL,
+		label_id   TEXT NOT NULL,
+		label_name TEXT NOT NULL,
+		label_color TEXT NOT NULL DEFAULT '',
+		UNIQUE(repo_owner, repo_name, label_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_repo_labels_repo ON repo_labels(repo_owner, repo_name);`,
 }
 
 // Migrate runs all pending migrations.
