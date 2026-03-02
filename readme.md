@@ -1,45 +1,62 @@
 # Review Deck
 
-A native macOS desktop app for tracking GitHub pull requests across your organizations. Built with [Wails v2](https://wails.io/) (Go backend + React/TypeScript frontend).
+A native macOS desktop app for managing GitHub pull requests across your repositories. Built with [Wails v2](https://wails.io/) (Go backend + React/TypeScript frontend).
 
 ## Features
 
-**Pull Request Views**
+### Pull Request Views
 
-- **Dashboard** — overview of PR activity across all tracked organizations
 - **My PRs** — your open pull requests and recently merged PRs, with tab switching (`1`/`2`)
 - **Review Requests** — PRs awaiting your review (personal and team), with priority sorting and flagged PR highlighting
 - **Reviewed By Me** — PRs you have already reviewed, with "hide approved by me" filter (`f`)
 - **Flagged PRs** — aggregated view of PRs matching your configurable flag rules
-- **PR Detail** — full view with description (unlimited length), file diffs (unified), CI checks, comments, reviewers sidebar, and flag reason display
+- **PR Detail** — full view with description, unified file diffs, CI checks, comments/review threads, commits, AI review, and a reviewers sidebar
 
-**Keyboard-First Navigation**
+### Keyboard-First Navigation
 
 Vim-style keybindings throughout the app. Press `?` to see all available shortcuts for the current page.
 
 | Key | Action |
 |-----|--------|
-| `j/k` | Navigate rows / scroll |
+| `j`/`k` | Navigate rows / scroll |
 | `Enter` / `l` | Open selected PR |
 | `o` | Open in GitHub |
-| `Shift+J/K` | Smooth scroll page |
-| `Cmd+1-6` | Switch sidebar tabs |
-| `1-4` | Switch in-page tabs (My PRs, PR detail) |
+| `Shift+J`/`K` | Smooth scroll page |
+| `Cmd+1-5` | Switch sidebar tabs |
+| `1-6` | Switch in-page tabs (PR detail) |
 | `Space` | Toggle pick / expand file |
 | `v` | Visual select mode |
 | `c` | Copy selected PRs |
 | `/` | Focus search |
-| `Shift+R` | Refresh |
+| `R` | Refresh |
+| `gg` / `G` | Jump to top / bottom of list |
+| `D` | Generate AI description |
+| `H` | Generate AI title |
+| `E` | Generate AI review |
+| `A` | Approve PR |
+| `m` | Squash and merge PR |
+| `d` | Request changes |
+| `a` | Assign reviewer |
+| `r`/`u` | Resolve / unresolve review thread |
 | `t` | Toggle draft PR visibility |
 | `s` | Toggle stacked PR visibility |
 | `f` | Toggle "approved by me" filter |
 | `x` | Hide review request |
-| `A` | Approve PR |
-| `m` | Squash and merge PR |
-| `r/u` | Resolve / unresolve review thread |
+| `n`/`N` | Next / previous page |
 | `?` | Show keyboard shortcuts |
 
-**Flagged PR Rules**
+### AI Integration
+
+Powered by the [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) and [GitHub CLI](https://cli.github.com/):
+
+- **AI Code Review** (`E`) — generates a detailed code review of the PR diff using Claude
+- **AI Description** (`G`) — generates a PR description from the diff and commits, with one-click apply to GitHub
+- **AI Title** (`H`) — generates a concise PR title, with one-click apply to GitHub
+- Generated title/description action buttons (Regenerate, Discard, Apply) are navigable via `j`/`k` and `Enter`
+- Configurable prompts and cost limits in Global Settings
+- Review results are cached locally with a 7-day TTL
+
+### Flagged PR Rules
 
 Configure rules in Settings to flag PRs that need extra attention:
 
@@ -48,9 +65,9 @@ Configure rules in Settings to flag PRs that need extra attention:
 - Flagged PRs are highlighted with a red border in Review Requests and Reviewed By Me tables
 - Dedicated Flagged tab aggregates all matching PRs with a "Reason" column
 - Flag reasons are also shown in the PR detail page sidebar
-- Rules are persisted and can be individually enabled/disabled
+- Rules are persisted per-repo and can be individually enabled/disabled
 
-**Filtering**
+### Filtering
 
 - Hide draft PRs (global setting or per-table toggle with `t`)
 - Hide stacked/chained PRs targeting non-main branches (`s`)
@@ -62,26 +79,19 @@ Configure rules in Settings to flag PRs that need extra attention:
 - Review max age setting — limit review queries to PRs updated within N days (default 7, range 1-90)
 - Auto-fills table by fetching additional pages when filters reduce visible rows
 
-**Background Polling & Notifications**
+### Background Polling & Notifications
 
 - Configurable poll interval (1-60 minutes)
 - Desktop notifications for new review requests, approvals, CI status changes, and merged PRs
 - Local SQLite cache for fast startup
 
-**IDE Integration**
+### Per-Repository Settings
 
-- Open files and repos directly in GoLand via JetBrains URL scheme
-- Per-file buttons in the diff viewer
+- All settings (filters, flag rules, teams, priorities) are scoped per repository
+- Switching repos applies independent configuration
+- Global defaults are materialized into per-repo keys on first access
 
-**Customization**
-
-- Themes: System, Dark, Nord, Light
-- Priority reviewers with visual indicators and autocomplete
-- Team management with per-team enable/disable
-- Configurable cache TTL, poll intervals, and PR detail refresh interval
-- Tabbed settings page: General, Filters, Teams & Priority, Flag Rules, Advanced
-
-**Table Features**
+### Table Features
 
 - Server-side pagination with configurable page size (10, 15, 20, 25 — default 25)
 - Sortable columns with search filtering
@@ -89,12 +99,20 @@ Configure rules in Settings to flag PRs that need extra attention:
 - Visual/multi-select mode for bulk copy operations
 - Copy PRs to clipboard (no grouping, by repo, or by size)
 
+### Themes
+
+- System, Dark, Nord, Light
+
 ## Requirements
 
 - macOS (Wails v2 desktop app)
 - Go 1.25+
 - Node.js 18+
 - A GitHub Personal Access Token with scopes: `repo`, `read:org`, `read:user`
+
+For AI features:
+- [GitHub CLI](https://cli.github.com/) (`gh`) — installed and available on PATH
+- [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) (`claude`) — installed and available on PATH
 
 ## Development
 
@@ -108,7 +126,10 @@ cd frontend && npm install && cd ..
 # Run in development mode
 wails dev
 
-# Build for production
+# Regenerate TypeScript bindings after Go changes
+wails generate module
+
+# Build for production (.app bundle)
 wails build
 ```
 
@@ -116,34 +137,71 @@ wails build
 
 ```
 review-deck/
-├── main.go                    # Wails entrypoint, binds services
-├── app.go                     # App lifecycle, image proxy, poller control
+├── main.go                          # Wails entrypoint, PATH fix, service binding
+├── app.go                           # App lifecycle, image proxy, poller control
+├── wails.json                       # Wails build/dev configuration
 ├── internal/
 │   ├── github/
-│   │   ├── client.go          # GraphQL + REST client
-│   │   ├── models.go          # Data types (PR, CheckRun, Review, etc.)
-│   │   ├── queries.go         # GraphQL search queries (with review max age)
-│   │   ├── mutations.go       # GraphQL mutations (squash merge, approve, etc.)
-│   │   ├── auth.go            # Viewer info, org members, teams
-│   │   ├── files.go           # REST API for file diffs
-│   │   └── ratelimit.go       # Rate limit queries
+│   │   ├── client.go                # GraphQL + REST client
+│   │   ├── models.go                # Data types (PR, CheckRun, Review, etc.)
+│   │   ├── queries.go               # GraphQL search queries
+│   │   ├── mutations.go             # GraphQL mutations (merge, approve)
+│   │   ├── auth.go                  # Viewer info, org members, teams
+│   │   ├── files.go                 # REST API for file diffs
+│   │   └── ratelimit.go             # Rate limit queries
 │   ├── services/
-│   │   ├── auth.go            # PAT authentication
-│   │   ├── pullrequest.go     # PR fetching, actions, pagination
-│   │   ├── settings.go        # Settings CRUD (wraps storage)
-│   │   └── poller.go          # Background polling + notifications
-│   ├── storage/               # SQLite persistence layer
-│   └── config/                # App data directory helpers
-└── frontend/
-    ├── src/
-    │   ├── pages/             # Route pages (Dashboard, My PRs, Flagged, etc.)
-    │   ├── components/
-    │   │   ├── layout/        # Sidebar, ShortcutHintBar
-    │   │   ├── pr/            # PRTable, DiffView, badges
-    │   │   └── ui/            # Toast, LastRefreshed
-    │   ├── stores/            # Zustand stores (auth, PR, settings, vim, flag)
-    │   └── hooks/             # useVimNavigation, usePollerEvents
-    └── wailsjs/               # Auto-generated Wails bindings
+│   │   ├── auth.go                  # PAT authentication + token storage
+│   │   ├── pullrequest.go           # PR fetching, actions, pagination
+│   │   ├── settings.go              # Settings CRUD
+│   │   ├── repo.go                  # Tracked repository management
+│   │   ├── workspace.go             # AI review/description/title, PR checkout, terminal
+│   │   └── poller.go                # Background polling + desktop notifications
+│   ├── storage/                     # SQLite persistence (11 migrations)
+│   ├── gitutil/                     # Git helpers (remotes, checkout, branch, terminal)
+│   └── config/                      # App data directory helpers
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx                  # Routes, startup hydration
+│   │   ├── pages/                   # Route pages
+│   │   │   ├── OnboardingPage.tsx   # PAT login + repo setup
+│   │   │   ├── MyPRsPage.tsx        # Open / recently merged tabs
+│   │   │   ├── ReviewRequestsPage.tsx
+│   │   │   ├── ReviewedByMePage.tsx
+│   │   │   ├── FlaggedPRsPage.tsx
+│   │   │   ├── PRDetailPage.tsx     # Full PR detail with 6 tabs
+│   │   │   ├── SettingsPage.tsx     # Per-repo settings
+│   │   │   └── GlobalSettingsPage.tsx
+│   │   ├── components/
+│   │   │   ├── layout/              # Sidebar, ShortcutHintBar
+│   │   │   ├── pr/                  # PRTable, DiffView, badges, ReviewerAssign
+│   │   │   └── ui/                  # Toast, LastRefreshed
+│   │   ├── stores/                  # Zustand stores
+│   │   │   ├── authStore.ts         # Authentication state
+│   │   │   ├── prStore.ts           # PR data + pagination
+│   │   │   ├── settingsStore.ts     # Filters, teams, priorities, excluded repos
+│   │   │   ├── repoStore.ts         # Tracked repos + selection
+│   │   │   ├── flagStore.ts         # Flag rules (keyword, size)
+│   │   │   └── vimStore.ts          # Vim navigation state
+│   │   ├── hooks/                   # useVimNavigation, usePollerEvents, useWindowFocus
+│   │   ├── theme/                   # Theme provider + token definitions
+│   │   └── lib/                     # Clipboard formatting, utilities
+│   └── wailsjs/                     # Auto-generated Wails TypeScript bindings
+└── build/
+    └── darwin/                      # macOS app bundle config (Info.plist)
 ```
 
-**Key technologies:** Wails v2, React 18, TypeScript, Zustand, TanStack Table, Tailwind CSS, tinykeys, GitHub GraphQL v4 + REST API, SQLite (pure Go).
+### Key Technologies
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop framework | [Wails v2](https://wails.io/) |
+| Backend | Go 1.25, SQLite ([modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite) — pure Go, no CGO) |
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS, class-variance-authority |
+| State management | [Zustand](https://github.com/pmndrs/zustand) |
+| Tables | [TanStack Table](https://tanstack.com/table) |
+| Keyboard shortcuts | [tinykeys](https://github.com/jamiebuilds/tinykeys) |
+| Icons | [Lucide](https://lucide.dev/) |
+| Markdown | react-markdown, remark-gfm, rehype-raw |
+| GitHub API | GraphQL v4 ([shurcooL/githubv4](https://github.com/shurcooL/githubv4)) + REST ([go-github](https://github.com/google/go-github)) |
+| AI | [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli), [GitHub CLI](https://cli.github.com/) |
