@@ -205,6 +205,10 @@ export function useVimNavigation() {
         const { onAssignReviewer } = store();
         if (onAssignReviewer) onAssignReviewer();
       }),
+      "b": vim(() => {
+        const { onAssignLabel } = store();
+        if (onAssignLabel) onAssignLabel();
+      }),
       "m": vim(() => {
         const { onMerge } = store();
         if (onMerge) onMerge();

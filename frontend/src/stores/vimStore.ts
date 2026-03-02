@@ -31,6 +31,7 @@ export interface VimState {
   onTabPrev: (() => void) | null;
   /** PR detail actions triggered by keyboard shortcuts. */
   onAssignReviewer: (() => void) | null;
+  onAssignLabel: (() => void) | null;
   onMerge: (() => void) | null;
   onApprove: (() => void) | null;
   /** Copy selected PRs — called by 'c' keybinding. */
@@ -87,7 +88,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle" | "onGenerateReview"
+    "onAssignReviewer" | "onAssignLabel" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle" | "onGenerateReview"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -106,6 +107,7 @@ const emptyActions = {
   onTabNext: null,
   onTabPrev: null,
   onAssignReviewer: null,
+  onAssignLabel: null,
   onMerge: null,
   onApprove: null,
   onCopy: null,

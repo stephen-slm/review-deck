@@ -54,6 +54,7 @@ const DETAIL_HINTS: Hint[] = [
   { keys: "u", label: "unresolve thread" },
   { keys: "o", label: "open in GitHub" },
   { keys: "a", label: "assign reviewer" },
+  { keys: "b", label: "assign label" },
   { keys: "m", label: "merge" },
   { keys: "A", label: "approve" },
   { keys: "d", label: "request changes" },

@@ -113,6 +113,7 @@ import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
 import { ChecksStatusIcon } from "@/components/pr/ChecksStatusIcon";
 import { ReviewerAssign } from "@/components/pr/ReviewerAssign";
+import { LabelAssign } from "@/components/pr/LabelAssign";
 import { DiffView } from "@/components/pr/DiffView";
 
 /** Search all PR store arrays for a PR by nodeId. */
@@ -464,6 +465,7 @@ export function PRDetailPage() {
   const reviewerToggleRef = useRef<(() => void) | null>(null);
   const mergeToggleRef = useRef<(() => void) | null>(null);
   const approveRef = useRef<(() => void) | null>(null);
+  const labelToggleRef = useRef<(() => void) | null>(null);
   const fileToggleRef = useRef<(() => void) | null>(null);
   const commentToggleRef = useRef<(() => void) | null>(null);
   const commentResolveRef = useRef<(() => void) | null>(null);
@@ -617,6 +619,7 @@ export function PRDetailPage() {
       onTabPrev: () => setActiveTab(tabKeys[(currentIdx - 1 + tabKeys.length) % tabKeys.length]),
       onTabDirect: (idx: number) => { if (idx >= 0 && idx < tabKeys.length) setActiveTab(tabKeys[idx]); },
       onAssignReviewer: () => reviewerToggleRef.current?.(),
+      onAssignLabel: () => labelToggleRef.current?.(),
       onMerge: () => mergeToggleRef.current?.(),
       onApprove: () => approveRef.current?.(),
       onRequestChanges: () => requestChangesRef.current?.(),
@@ -1410,15 +1413,28 @@ export function PRDetailPage() {
           <ReviewersSidebar reviews={filteredReviews} reviewRequests={pr.reviewRequests} prNodeId={pr.nodeId} isOpen={pr.state === "OPEN"} triggerRef={reviewerToggleRef} onAssigned={handleRefresh} />
 
           {/* Labels */}
-          {pr.labels && pr.labels.length > 0 && (
-            <SidebarSection title="Labels">
+          <div className="rounded-lg border border-border bg-card p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Labels</h4>
+              <LabelAssign
+                prNodeId={pr.nodeId}
+                currentLabels={pr.labels || []}
+                repoOwner={pr.repoOwner}
+                repoName={pr.repoName}
+                onChanged={handleRefresh}
+                triggerRef={labelToggleRef}
+              />
+            </div>
+            {pr.labels && pr.labels.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {pr.labels.map((label) => (
                   <LabelBadge key={label.name} label={label} />
                 ))}
               </div>
-            </SidebarSection>
-          )}
+            ) : (
+              <p className="text-xs text-muted-foreground">No labels</p>
+            )}
+          </div>
 
           {/* Flag Reasons */}
           {flagReasons.length > 0 && (
