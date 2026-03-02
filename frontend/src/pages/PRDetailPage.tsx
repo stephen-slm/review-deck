@@ -216,6 +216,13 @@ export function PRDetailPage() {
   const [titleError, setTitleError] = useState<string | null>(null);
   const [applyingTitle, setApplyingTitle] = useState(false);
 
+  // Vim-navigable action index for AI-generated title/description buttons.
+  // -1 = no action focused; 0+ indexes into the flat list of visible action buttons.
+  const [focusedAction, setFocusedAction] = useState(-1);
+
+  // Reset focused action when tab changes or generated content disappears.
+  useEffect(() => { setFocusedAction(-1); }, [activeTab, generatedTitle, generatedDesc]);
+
   // Check if this PR's repo is tracked locally
   const trackedRepo = useMemo(() => {
     if (!pr) return undefined;
@@ -617,15 +624,43 @@ export function PRDetailPage() {
     };
 
     if (activeTab === "description") {
-      const scrollEl = document.getElementById("scroll-region");
-      actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
-      actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
-      // Enter generates a PR description (when tools are available and not already generating).
       if (hasLocalPath && toolAvailability?.gh && toolAvailability?.claude) {
-        actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
         actions.onGenerate = () => { if (!descGenerating) handleGenerateDescription(); };
         actions.onGenerateTitle = () => { if (!titleGenerating) handleGenerateTitle(); };
+      }
+
+      // Build a flat list of actionable buttons for generated title/description.
+      const aiActions: { label: string; handler: () => void }[] = [];
+      if (generatedTitle && !titleGenerating) {
+        aiActions.push({ label: "Regenerate title", handler: handleGenerateTitle });
+        aiActions.push({ label: "Discard title", handler: () => setGeneratedTitle(null) });
+        aiActions.push({ label: "Apply title", handler: handleApplyTitle });
+      }
+      if (generatedDesc && !descGenerating) {
+        aiActions.push({ label: "Regenerate description", handler: handleGenerateDescription });
+        aiActions.push({ label: "Discard description", handler: () => setGeneratedDesc(null) });
+        aiActions.push({ label: "Apply description", handler: handleApplyDescription });
+      }
+
+      if (aiActions.length > 0) {
+        // j/k cycle through action buttons; Enter activates the focused one.
+        actions.onMoveDown = () => setFocusedAction((prev) => Math.min(prev + 1, aiActions.length - 1));
+        actions.onMoveUp = () => setFocusedAction((prev) => Math.max(prev - 1, -1));
+        actions.onOpen = () => {
+          if (focusedAction >= 0 && focusedAction < aiActions.length) {
+            aiActions[focusedAction].handler();
+            setFocusedAction(-1);
+          }
+        };
+      } else {
+        // No generated content — default scroll + generate behavior.
+        const scrollEl = document.getElementById("scroll-region");
+        actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
+        actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
+        if (hasLocalPath && toolAvailability?.gh && toolAvailability?.claude) {
+          actions.onOpen = () => { if (!descGenerating) handleGenerateDescription(); };
+        }
       }
     } else if (activeTab === "checks") {
       actions.onOpen = (idx: number) => {
@@ -918,14 +953,22 @@ export function PRDetailPage() {
                         <button
                           onClick={handleGenerateTitle}
                           title="Regenerate title"
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                            focusedAction === 0
+                              ? "ring-2 ring-primary border-primary text-foreground"
+                              : "border-border text-muted-foreground"
+                          }`}
                         >
                           <RefreshCw className="h-3 w-3" />
                           Regenerate
                         </button>
                         <button
-                          onClick={() => setGeneratedTitle(null)}
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => { setGeneratedTitle(null); setFocusedAction(-1); }}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                            focusedAction === 1
+                              ? "ring-2 ring-primary border-primary text-foreground"
+                              : "border-border text-muted-foreground"
+                          }`}
                         >
                           <XCircle className="h-3 w-3" />
                           Discard
@@ -933,7 +976,9 @@ export function PRDetailPage() {
                         <button
                           onClick={handleApplyTitle}
                           disabled={applyingTitle}
-                          className="inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          className={`inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 ${
+                            focusedAction === 2 ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""
+                          }`}
                         >
                           {applyingTitle ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -975,7 +1020,10 @@ export function PRDetailPage() {
                 )}
 
                 {/* AI-generated description preview */}
-                {generatedDesc && !descGenerating && (
+                {generatedDesc && !descGenerating && (() => {
+                  // Offset for desc action indices: 3 if title is also visible, else 0.
+                  const dOff = (generatedTitle && !titleGenerating) ? 3 : 0;
+                  return (
                   <div className="space-y-2 rounded-lg border-2 border-purple-500/40 bg-purple-500/5 p-3">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
@@ -985,14 +1033,22 @@ export function PRDetailPage() {
                         <button
                           onClick={handleGenerateDescription}
                           title="Regenerate description"
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                            focusedAction === dOff
+                              ? "ring-2 ring-primary border-primary text-foreground"
+                              : "border-border text-muted-foreground"
+                          }`}
                         >
                           <RefreshCw className="h-3 w-3" />
                           Regenerate
                         </button>
                         <button
-                          onClick={() => setGeneratedDesc(null)}
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                          onClick={() => { setGeneratedDesc(null); setFocusedAction(-1); }}
+                          className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                            focusedAction === dOff + 1
+                              ? "ring-2 ring-primary border-primary text-foreground"
+                              : "border-border text-muted-foreground"
+                          }`}
                         >
                           <XCircle className="h-3 w-3" />
                           Discard
@@ -1000,7 +1056,9 @@ export function PRDetailPage() {
                         <button
                           onClick={handleApplyDescription}
                           disabled={applyingDesc}
-                          className="inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          className={`inline-flex items-center gap-1 rounded-md border border-green-600 bg-green-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50 ${
+                            focusedAction === dOff + 2 ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""
+                          }`}
                         >
                           {applyingDesc ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -1017,7 +1075,8 @@ export function PRDetailPage() {
                       </ReactMarkdown>
                     </div>
                   </div>
-                )}
+                  );
+                })()}
 
                 {/* Existing PR body */}
                 {!generatedDesc && !descGenerating && !descError && (
