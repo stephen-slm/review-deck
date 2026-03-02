@@ -127,6 +127,7 @@ func (s *PullRequestService) GetReviewRequestsPage(org string, pageSize int, cur
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
+	s.filterDisabledTeamPRs(page, login)
 	_ = s.db.UpsertPullRequests(page.PullRequests)
 	return page, nil
 }
@@ -199,6 +200,7 @@ func (s *PullRequestService) GetReviewRequestsForRepoPage(owner, repo string, pa
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests for %s/%s: %w", owner, repo, err)
 	}
+	s.filterDisabledTeamPRs(page, login)
 	_ = s.db.UpsertPullRequests(page.PullRequests)
 	return page, nil
 }
@@ -548,6 +550,27 @@ func (s *PullRequestService) GetPRCommits(nodeID string) ([]gh.PRCommit, error) 
 		return nil, fmt.Errorf("fetch pr commits: %w", err)
 	}
 	return commits, nil
+}
+
+// filterDisabledTeamPRs removes PRs from the page where the viewer's only
+// review request comes from a disabled team. This mirrors the notification
+// suppression logic in the poller so the Review Requests page respects the
+// team toggles in Settings.
+func (s *PullRequestService) filterDisabledTeamPRs(page *gh.PRPage, login string) {
+	disabledTeams, err := s.db.GetDisabledTeamSlugs()
+	if err != nil || len(disabledTeams) == 0 {
+		return
+	}
+
+	filtered := page.PullRequests[:0]
+	for i := range page.PullRequests {
+		pr := &page.PullRequests[i]
+		if isOnlyDisabledTeamRequest(pr, disabledTeams, login) {
+			continue
+		}
+		filtered = append(filtered, *pr)
+	}
+	page.PullRequests = filtered
 }
 
 // ---- Metrics ----
