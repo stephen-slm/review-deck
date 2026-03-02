@@ -35,7 +35,7 @@ import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread, MarkReadyForReview } from "../../wailsjs/go/services/PullRequestService";
 import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle } from "../../wailsjs/go/services/WorkspaceService";
-import { copyToClipboard } from "../lib/clipboard";
+import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 
 /** Rewrite GitHub image URLs to go through the authenticated backend proxy. */
 function proxyImageSrc(src: string | undefined): string | undefined {
@@ -623,7 +623,11 @@ export function PRDetailPage() {
       onMerge: () => mergeToggleRef.current?.(),
       onApprove: () => approveRef.current?.(),
       onRequestChanges: () => requestChangesRef.current?.(),
-      onCopy: () => { if (pr) copyToClipboard(pr.url); },
+      onCopy: async () => {
+        if (!pr) return;
+        const ok = await copyToClipboard(formatSinglePR(pr));
+        if (ok) addToast("Copied PR to clipboard", "success");
+      },
     };
 
     if (activeTab === "description") {
