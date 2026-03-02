@@ -1217,10 +1217,13 @@ export function PRDetailPage() {
                       <li
                         key={commit.oid}
                         data-idx={idx}
-                        className={`group flex items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
+                        onClick={() => {
+                          if (pr) BrowserOpenURL(`${pr.url}/commits/${commit.oid}`);
+                        }}
+                        className={`group flex cursor-pointer items-start gap-3 rounded-md border px-3 py-2 transition-colors ${
                           selected
                             ? "ring-1 ring-primary border-primary/50"
-                            : "border-border hover:bg-muted/30"
+                            : "border-border hover:border-primary/50"
                         }`}
                       >
                         <div className="mt-0.5 shrink-0">
@@ -1745,6 +1748,7 @@ function DetailRequestChangesButton({
       >
         <XCircle className={`h-4 w-4 ${isSubmitting ? "animate-pulse" : ""}`} />
         Request Changes
+        {!isOpen && <kbd className="ml-0.5 rounded bg-red-500/10 px-1 py-0.5 font-mono text-[10px] text-red-400/60">d</kbd>}
         <ChevronDown className="ml-auto h-3.5 w-3.5" />
       </button>
 
