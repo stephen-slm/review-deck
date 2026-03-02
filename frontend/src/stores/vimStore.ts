@@ -53,10 +53,12 @@ export interface VimState {
   onUnresolve: (() => void) | null;
   /** Request changes on a PR — called by 'd' keybinding. */
   onRequestChanges: (() => void) | null;
-  /** Generate AI content (description or review) — called by 'G' (Shift+g) keybinding. */
+  /** Generate AI description — called by 'G' (Shift+g) keybinding. */
   onGenerate: (() => void) | null;
   /** Generate AI title — called by 'H' (Shift+h) keybinding. */
   onGenerateTitle: (() => void) | null;
+  /** Start AI review — called by 'E' (Shift+e) keybinding. */
+  onGenerateReview: (() => void) | null;
   /**
    * Escape override — set by open dropdowns/modals to close themselves
    * instead of navigating back. Components set this directly via setState.
@@ -85,7 +87,7 @@ export interface VimState {
     "onOpen" | "onOpenExternal" | "onRefresh" |
     "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
     "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle"
+    "onAssignReviewer" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle" | "onGenerateReview"
   >>) => void;
   /** Clear all registered actions (called on unmount / route change). */
   clearActions: () => void;
@@ -118,6 +120,7 @@ const emptyActions = {
   onRequestChanges: null,
   onGenerate: null,
   onGenerateTitle: null,
+  onGenerateReview: null,
   onEscape: null,
 };
 

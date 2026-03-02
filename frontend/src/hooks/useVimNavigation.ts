@@ -130,6 +130,10 @@ export function useVimNavigation() {
         const { onGenerateTitle } = store();
         if (onGenerateTitle) onGenerateTitle();
       }),
+      "Shift+e": vim(() => {
+        const { onGenerateReview } = store();
+        if (onGenerateReview) onGenerateReview();
+      }),
 
       // ---- Open selected item ----
       "Enter": vim(() => {
