@@ -188,6 +188,10 @@ export function PRDetailPage() {
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsError, setCommitsError] = useState<string | null>(null);
 
+  // Reactive vim selectedIndex — used by inline commit list rendering.
+  const vimSelectedIndex = useVimStore((s) => s.selectedIndex);
+  const commitListRef = useRef<HTMLUListElement>(null);
+
   // Workspace: tool availability, checkout state, current branch, Claude review
   const { addToast } = useToast();
   const repos = useRepoStore((s) => s.repos);
@@ -585,6 +589,13 @@ export function PRDetailPage() {
     }
   }, [activeTab, checkRuns, comments, commits, prFiles]);
 
+  // Auto-scroll the selected commit into view.
+  useEffect(() => {
+    if (activeTab !== "commits" || vimSelectedIndex < 0 || !commitListRef.current) return;
+    const item = commitListRef.current.querySelector(`[data-idx="${vimSelectedIndex}"]`);
+    item?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [activeTab, vimSelectedIndex]);
+
   // Register VIM actions for the detail page.
   // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
   useEffect(() => {
@@ -662,7 +673,7 @@ export function PRDetailPage() {
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       // Enter starts a review (idle), re-runs (result shown), or retries (error).
       actions.onOpen = () => { if (!aiReviewing) handleStartAIReview(); };
-      actions.onGenerate = () => { if (!aiReviewing) handleStartAIReview(); };
+      actions.onGenerateReview = () => { if (!aiReviewing) handleStartAIReview(); };
     }
 
     useVimStore.getState().registerActions(actions);
@@ -1140,9 +1151,9 @@ export function PRDetailPage() {
                   {commitsError}
                 </div>
               ) : commits && commits.length > 0 ? (
-                <ul className="space-y-1">
+                <ul ref={commitListRef} className="space-y-1">
                   {commits.map((commit, idx) => {
-                    const selected = useVimStore.getState().selectedIndex === idx;
+                    const selected = vimSelectedIndex === idx;
                     return (
                       <li
                         key={commit.oid}
@@ -1242,7 +1253,6 @@ export function PRDetailPage() {
                   reviewDecision={pr.reviewDecision}
                   isDraft={pr.isDraft}
                   isInMergeQueue={pr.isInMergeQueue}
-                  author={pr.author}
                   onMerged={async () => { await handleRefresh(); navigate(-1); }}
                   triggerRef={mergeToggleRef}
                 />
@@ -1298,7 +1308,7 @@ export function PRDetailPage() {
                   >
                     <Sparkles className={`h-4 w-4 ${aiReviewing ? "animate-pulse" : ""}`} />
                     {aiReviewing ? "Reviewing..." : "AI Review"}
-                    {!aiReviewing && <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">G</kbd>}
+                    {!aiReviewing && <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">E</kbd>}
                   </button>
                 </>
               )}
@@ -1432,7 +1442,6 @@ function DetailMergeButton({
   reviewDecision,
   isDraft,
   isInMergeQueue,
-  author,
   onMerged,
   triggerRef,
 }: {
@@ -1441,7 +1450,6 @@ function DetailMergeButton({
   reviewDecision: string;
   isDraft: boolean;
   isInMergeQueue?: boolean;
-  author: string;
   onMerged?: () => void;
   triggerRef?: React.MutableRefObject<(() => void) | null>;
 }) {
@@ -1449,12 +1457,9 @@ function DetailMergeButton({
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const { mergePR } = usePRStore();
-  const viewerLogin = useAuthStore((s) => s.user?.login);
 
-  // You cannot merge your own PR.
-  const isOwnPR = !!viewerLogin && viewerLogin === author;
   const reviewBlocked = reviewDecision === "REVIEW_REQUIRED" || reviewDecision === "CHANGES_REQUESTED";
-  const canMerge = !isDraft && !isOwnPR && !reviewBlocked && mergeable === "MERGEABLE";
+  const canMerge = !isDraft && !reviewBlocked && mergeable === "MERGEABLE";
 
   // Expose trigger to parent via triggerRef (used by vim "m" key).
   useEffect(() => {
@@ -1489,15 +1494,13 @@ function DetailMergeButton({
   const title = !canMerge
     ? isDraft
       ? "Cannot merge draft PRs"
-      : isOwnPR
-        ? "Cannot merge your own PR"
-        : reviewDecision === "CHANGES_REQUESTED"
-          ? "Changes have been requested"
-          : reviewDecision === "REVIEW_REQUIRED"
-            ? "Review approval is required"
-            : mergeable === "CONFLICTING"
-              ? "This branch has conflicts"
-              : "Cannot merge this PR"
+      : reviewDecision === "CHANGES_REQUESTED"
+        ? "Changes have been requested"
+        : reviewDecision === "REVIEW_REQUIRED"
+          ? "Review approval is required"
+          : mergeable === "CONFLICTING"
+            ? "This branch has conflicts"
+            : "Cannot merge this PR"
     : "Squash and merge";
 
   return (
