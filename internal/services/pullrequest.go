@@ -395,6 +395,14 @@ func (s *PullRequestService) GetRepoLabels(owner string, repo string) ([]gh.Labe
 	return labels, nil
 }
 
+// MarkReadyForReview marks a draft pull request as ready for review.
+func (s *PullRequestService) MarkReadyForReview(prNodeID string) error {
+	if s.client == nil {
+		return fmt.Errorf("not authenticated")
+	}
+	return s.client.MarkReadyForReview(context.Background(), prNodeID)
+}
+
 // AddLabels adds labels to a pull request by its node ID.
 func (s *PullRequestService) AddLabels(prNodeID string, labelIDs []string) error {
 	if s.client == nil {

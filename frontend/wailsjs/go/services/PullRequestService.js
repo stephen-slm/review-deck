@@ -102,6 +102,10 @@ export function GetTeamReviewRequestsPage(arg1, arg2, arg3, arg4) {
   return window['go']['services']['PullRequestService']['GetTeamReviewRequestsPage'](arg1, arg2, arg3, arg4);
 }
 
+export function MarkReadyForReview(arg1) {
+  return window['go']['services']['PullRequestService']['MarkReadyForReview'](arg1);
+}
+
 export function MergePR(arg1, arg2) {
   return window['go']['services']['PullRequestService']['MergePR'](arg1, arg2);
 }

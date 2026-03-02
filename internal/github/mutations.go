@@ -231,3 +231,24 @@ func (c *Client) RequestReviews(ctx context.Context, prNodeID string, userIDs []
 	}
 	return nil
 }
+
+// MarkReadyForReview marks a draft pull request as ready for review.
+func (c *Client) MarkReadyForReview(ctx context.Context, prNodeID string) error {
+	var mutation struct {
+		MarkPullRequestReadyForReview struct {
+			PullRequest struct {
+				ID string `graphql:"id"`
+			}
+		} `graphql:"markPullRequestReadyForReview(input: $input)"`
+	}
+
+	input := githubv4.MarkPullRequestReadyForReviewInput{
+		PullRequestID: githubv4.ID(prNodeID),
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return fmt.Errorf("mark ready for review: %w", err)
+	}
+	return nil
+}

@@ -54,6 +54,8 @@ export function GetTeamReviewRequests(arg1:string,arg2:string):Promise<Array<git
 
 export function GetTeamReviewRequestsPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;
 
+export function MarkReadyForReview(arg1:string):Promise<void>;
+
 export function MergePR(arg1:string,arg2:string):Promise<string>;
 
 export function RemoveLabels(arg1:string,arg2:Array<string>):Promise<void>;
