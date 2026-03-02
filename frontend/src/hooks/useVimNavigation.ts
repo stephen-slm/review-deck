@@ -122,9 +122,14 @@ export function useVimNavigation() {
         if (listLength > 0) store().setSelectedIndex(0);
       }),
       "Shift+g": vim(() => {
-        const { listLength, onGenerate } = store();
-        if (onGenerate) { onGenerate(); return; }
+        const { listLength } = store();
         if (listLength > 0) store().setSelectedIndex(listLength - 1);
+      }),
+
+      // ---- AI generation shortcuts ----
+      "Shift+d": vim(() => {
+        const { onGenerate } = store();
+        if (onGenerate) onGenerate();
       }),
       "Shift+h": vim(() => {
         const { onGenerateTitle } = store();

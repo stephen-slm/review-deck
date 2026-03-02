@@ -911,7 +911,7 @@ export function PRDetailPage() {
                         >
                           <Sparkles className="h-3 w-3" />
                           Description
-                          <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">G</kbd>
+                          <kbd className="ml-0.5 rounded bg-purple-500/10 px-1 py-0.5 font-mono text-[10px] text-purple-400/60">D</kbd>
                         </button>
                       )}
                     </div>

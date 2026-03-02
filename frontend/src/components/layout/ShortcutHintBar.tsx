@@ -44,7 +44,7 @@ const DETAIL_HINTS: Hint[] = [
   { keys: "j/k", label: "scroll / navigate items" },
   { keys: "Space", label: "toggle expand file" },
   { keys: "Enter", label: "open / generate" },
-  { keys: "G", label: "generate AI description" },
+  { keys: "D", label: "generate AI description" },
   { keys: "E", label: "generate AI review" },
   { keys: "H", label: "generate AI title" },
   { keys: "gg", label: "jump to top" },
