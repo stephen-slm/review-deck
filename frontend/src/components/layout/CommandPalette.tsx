@@ -737,10 +737,10 @@ export function CommandPalette() {
                         !isHighlighted && "text-foreground",
                       )}
                     >
-                      <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <Icon className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
                       <span className="flex-1 truncate">{cmd.label}</span>
                       {cmd.shortcut && (
-                        <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        <kbd className={cn("shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]", isHighlighted ? "border-accent-foreground/20 bg-accent-foreground/10 text-accent-foreground/70" : "border-border bg-muted text-muted-foreground")}>
                           {cmd.shortcut}
                         </kbd>
                       )}
@@ -771,14 +771,14 @@ export function CommandPalette() {
                         !isHighlighted && "text-foreground",
                       )}
                     >
-                      <GitPullRequest className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <GitPullRequest className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-medium">
                             {pr.title}
                           </span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className={cn("flex items-center gap-1.5 text-xs", isHighlighted ? "text-accent-foreground/60" : "text-muted-foreground")}>
                           <span>{pr.repoOwner}/{pr.repoName}</span>
                           <span className="font-mono">#{pr.number}</span>
                           {pr.authorAvatar && (
@@ -826,12 +826,12 @@ export function CommandPalette() {
                         !isHighlighted && "text-foreground",
                       )}
                     >
-                      <FolderGit2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <FolderGit2 className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
                       <span className="flex-1 truncate">
                         {repo.repoOwner}/{repo.repoName}
                       </span>
                       {isSelected && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
+                        <Check className={cn("h-3.5 w-3.5 shrink-0", isHighlighted ? "text-accent-foreground" : "text-primary")} />
                       )}
                     </div>
                   );
