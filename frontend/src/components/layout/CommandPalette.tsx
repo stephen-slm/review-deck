@@ -18,13 +18,33 @@ import {
   Moon,
   Monitor,
   MessageSquareWarning,
+  RefreshCw,
+  Terminal,
+  GitBranch,
+  Keyboard,
+  ArrowLeft,
+  LogOut,
+  Copy,
+  X,
+  GitPullRequest,
+  EyeOff,
+  PenLine,
+  Layers,
+  CheckCircle2,
+  CircleDot,
   type LucideIcon,
 } from "lucide-react";
-import { useVimStore } from "@/stores/vimStore";
-import { getActions } from "@/stores/vimStore";
+import { useVimStore, getActions } from "@/stores/vimStore";
+import { usePRStore, getAllItems, type CacheKey } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
+import { useAuthStore } from "@/stores/authStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { useTheme } from "@/theme/ThemeProvider";
 import { cn } from "@/lib/utils";
+import { CheckoutPR, OpenTerminal as OpenTerminalInRepo } from "../../../wailsjs/go/services/WorkspaceService";
+import { MarkReadyForReview } from "../../../wailsjs/go/services/PullRequestService";
+import { github } from "../../../wailsjs/go/models";
+import { StateBadge } from "@/components/pr/StateBadge";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +71,38 @@ interface CategoryGroup {
 const isMac = typeof navigator !== "undefined" && navigator.platform.includes("Mac");
 const modKey = isMac ? "\u2318" : "Ctrl+";
 
+/** List page routes where PRTable filter toggles make sense. */
+const LIST_ROUTES = ["/my-prs", "/review-requests", "/reviewed", "/flagged"];
+
+/** Collect and deduplicate PRs across all store categories. */
+function collectAllPRs(): github.PullRequest[] {
+  const keys: CacheKey[] = ["myPRs", "myRecentMerged", "reviewRequests", "teamReviewRequests", "reviewedByMe"];
+  const seen = new Set<string>();
+  const result: github.PullRequest[] = [];
+  for (const key of keys) {
+    for (const pr of getAllItems(key)) {
+      if (!seen.has(pr.nodeId)) {
+        seen.add(pr.nodeId);
+        result.push(pr);
+      }
+    }
+  }
+  return result;
+}
+
+/** Find a PR by nodeId across all store categories (current page items). */
+function findPRByNodeId(nodeId: string): github.PullRequest | undefined {
+  const p = usePRStore.getState().pages;
+  const all = [
+    ...p.myPRs.items,
+    ...p.myRecentMerged.items,
+    ...p.reviewRequests.items,
+    ...p.teamReviewRequests.items,
+    ...p.reviewedByMe.items,
+  ];
+  return all.find((pr) => pr.nodeId === nodeId);
+}
+
 /** Build a flat list of all commands, filtering by availability. */
 function buildCommands(
   navigate: ReturnType<typeof useNavigate>,
@@ -58,8 +110,13 @@ function buildCommands(
   setTheme: (t: string) => void,
   themeChoice: string,
   close: () => void,
+  repos: ReturnType<typeof useRepoStore.getState>["repos"],
 ): Command[] {
   const cmds: Command[] = [];
+  const actions = getActions();
+  const onPRDetail = location.pathname.startsWith("/pr/");
+  const onListPage = LIST_ROUTES.some((r) => location.pathname.startsWith(r));
+  const isAuthenticated = useAuthStore.getState().isAuthenticated;
 
   // ---- Navigation ----
   const navItems: { label: string; path: string; shortcut: string }[] = [
@@ -78,18 +135,164 @@ function buildCommands(
       shortcut: nav.shortcut,
       category: "Navigation",
       icon: Compass,
+      action: () => { close(); navigate(nav.path); },
+    });
+  }
+
+  cmds.push({
+    id: "nav:back",
+    label: "Go Back",
+    shortcut: "Backspace",
+    category: "Navigation",
+    icon: ArrowLeft,
+    action: () => { close(); navigate(-1); },
+  });
+
+  // ---- Global Actions ----
+  if (actions.onRefresh) {
+    const handler = actions.onRefresh;
+    cmds.push({
+      id: "action:refresh",
+      label: "Refresh",
+      shortcut: "R",
+      category: "Actions",
+      icon: RefreshCw,
+      action: () => { close(); handler(); },
+    });
+  }
+
+  if (actions.onFocusSearch) {
+    const handler = actions.onFocusSearch;
+    cmds.push({
+      id: "action:focus-search",
+      label: "Focus Search / Filter",
+      shortcut: "/",
+      category: "Actions",
+      icon: Search,
+      action: () => { close(); handler(); },
+    });
+  }
+
+  cmds.push({
+    id: "action:show-shortcuts",
+    label: "Show Keyboard Shortcuts",
+    shortcut: "?",
+    category: "Actions",
+    icon: Keyboard,
+    action: () => { close(); useVimStore.getState().toggleHints(); },
+  });
+
+  if (isAuthenticated) {
+    cmds.push({
+      id: "action:force-refresh",
+      label: "Force Refresh All Data",
+      shortcut: "",
+      category: "Actions",
+      icon: RefreshCw,
       action: () => {
         close();
-        navigate(nav.path);
+        const orgs = useSettingsStore.getState().orgs;
+        usePRStore.getState().fetchAll(orgs, true);
       },
     });
   }
 
-  // ---- PR Detail actions (only on /pr/* routes) ----
-  const onPRDetail = location.pathname.startsWith("/pr/");
-  if (onPRDetail) {
-    const actions = getActions();
+  if (actions.onCopy) {
+    const handler = actions.onCopy;
+    cmds.push({
+      id: "action:copy",
+      label: "Copy PR to Clipboard",
+      shortcut: "c",
+      category: "Actions",
+      icon: Copy,
+      action: () => { close(); handler(); },
+    });
+  }
 
+  if (isAuthenticated) {
+    cmds.push({
+      id: "action:sign-out",
+      label: "Sign Out",
+      shortcut: "",
+      category: "Actions",
+      icon: LogOut,
+      action: () => {
+        close();
+        useAuthStore.getState().logout();
+        navigate("/global-settings");
+      },
+    });
+  }
+
+  // ---- Filter Toggles (list pages only) ----
+  if (onListPage) {
+    if (actions.onToggleDrafts) {
+      const handler = actions.onToggleDrafts;
+      cmds.push({
+        id: "filter:drafts",
+        label: "Toggle Draft PRs",
+        shortcut: "t",
+        category: "Filters",
+        icon: PenLine,
+        action: () => { close(); handler(); },
+      });
+    }
+
+    if (actions.onToggleStacked) {
+      const handler = actions.onToggleStacked;
+      cmds.push({
+        id: "filter:stacked",
+        label: "Toggle Stacked PRs",
+        shortcut: "s",
+        category: "Filters",
+        icon: Layers,
+        action: () => { close(); handler(); },
+      });
+    }
+
+    if (actions.onToggleApproved) {
+      const handler = actions.onToggleApproved;
+      cmds.push({
+        id: "filter:approved",
+        label: "Toggle Approved by Me",
+        shortcut: "f",
+        category: "Filters",
+        icon: CheckCircle2,
+        action: () => { close(); handler(); },
+      });
+    }
+
+    if (actions.onHide) {
+      const handler = actions.onHide;
+      cmds.push({
+        id: "filter:hide",
+        label: "Hide Selected PR",
+        shortcut: "x",
+        category: "Filters",
+        icon: X,
+        action: () => {
+          close();
+          const idx = useVimStore.getState().selectedIndex;
+          if (idx >= 0) handler(idx);
+        },
+      });
+    }
+
+    const hiddenCount = usePRStore.getState().hiddenPRs.size;
+    if (hiddenCount > 0) {
+      cmds.push({
+        id: "filter:unhide-all",
+        label: `Unhide All PRs (${hiddenCount} hidden)`,
+        shortcut: "",
+        category: "Filters",
+        icon: EyeOff,
+        action: () => { close(); usePRStore.getState().clearAllHiddenPRs(); },
+      });
+    }
+  }
+
+  // ---- PR Detail actions (only on /pr/* routes) ----
+  if (onPRDetail) {
     const prItems: { label: string; shortcut: string; icon: LucideIcon; handler: (() => void) | null }[] = [
       { label: "Open in GitHub", shortcut: "o", icon: ExternalLink, handler: actions.onOpenExternal ? () => actions.onOpenExternal!(0) : null },
       { label: "Approve PR", shortcut: "A", icon: CheckCircle, handler: actions.onApprove },
@@ -110,6 +313,58 @@ function buildCommands(
           icon: item.icon,
           action: () => { close(); handler(); },
         });
+      }
+    }
+
+    // ---- Workspace actions (checkout, terminal) ----
+    const nodeId = location.pathname.replace("/pr/", "");
+    const pr = findPRByNodeId(nodeId);
+    if (pr) {
+      const trackedRepo = repos.find(
+        (r) => r.repoOwner === pr.repoOwner && r.repoName === pr.repoName,
+      );
+      if (trackedRepo?.localPath) {
+        cmds.push({
+          id: "workspace:checkout",
+          label: `Checkout Branch: ${pr.headRef}`,
+          shortcut: "",
+          category: "Workspace",
+          icon: GitBranch,
+          action: () => {
+            close();
+            CheckoutPR(pr.repoOwner, pr.repoName, pr.number).catch(() => {});
+          },
+        });
+
+        cmds.push({
+          id: "workspace:terminal",
+          label: "Open Terminal in Repo",
+          shortcut: "",
+          category: "Workspace",
+          icon: Terminal,
+          action: () => {
+            close();
+            OpenTerminalInRepo(pr.repoOwner, pr.repoName).catch(() => {});
+          },
+        });
+      }
+
+      // Mark ready for review (only for draft PRs authored by the current user)
+      if (pr.isDraft) {
+        const viewerLogin = useAuthStore.getState().user?.login;
+        if (viewerLogin && pr.author === viewerLogin) {
+          cmds.push({
+            id: "pr:mark-ready",
+            label: "Mark Ready for Review",
+            shortcut: "",
+            category: "PR Actions",
+            icon: CircleDot,
+            action: () => {
+              close();
+              MarkReadyForReview(pr.nodeId).catch(() => {});
+            },
+          });
+        }
       }
     }
 
@@ -173,6 +428,9 @@ function groupByCategory(commands: Command[]): CategoryGroup[] {
   return groups;
 }
 
+/** Max number of PR search results to display. */
+const MAX_PR_RESULTS = 10;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -202,9 +460,9 @@ export function CommandPalette() {
 
   // Build the full list of commands + repo items, then filter by query.
   const commands = useMemo(
-    () => (isOpen ? buildCommands(navigate, location, setTheme, themeChoice, close) : []),
+    () => (isOpen ? buildCommands(navigate, location, setTheme, themeChoice, close, repos) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isOpen, navigate, location.pathname, setTheme, themeChoice, close],
+    [isOpen, navigate, location.pathname, setTheme, themeChoice, close, repos],
   );
 
   // Filter repos by search query.
@@ -241,16 +499,69 @@ export function CommandPalette() {
     );
   }, [commands, query]);
 
-  // Build grouped display: command groups first, then repos, then add-repo.
+  // PR search: only when query is non-empty, search across all loaded PRs.
+  const filteredPRs = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q || !isOpen) return [];
+
+    const allPRs = collectAllPRs();
+    const numQuery = q.replace(/^#/, "");
+    const isNumeric = /^\d+$/.test(numQuery);
+
+    const matches = allPRs.filter((pr) => {
+      // Match against PR number
+      if (isNumeric && String(pr.number).includes(numQuery)) return true;
+      // Match against title
+      if (pr.title.toLowerCase().includes(q)) return true;
+      // Match against author
+      if (pr.author.toLowerCase().includes(q)) return true;
+      // Match against branch name
+      if (pr.headRef.toLowerCase().includes(q)) return true;
+      // Match against repo name
+      if (`${pr.repoOwner}/${pr.repoName}`.toLowerCase().includes(q)) return true;
+      if (pr.repoName.toLowerCase().includes(q)) return true;
+      // Match against labels
+      if (pr.labels?.some((l) => l.name.toLowerCase().includes(q))) return true;
+      return false;
+    });
+
+    // Rank: exact number match first, then title starts-with, then title contains, then other matches.
+    matches.sort((a, b) => {
+      if (isNumeric) {
+        const aExact = String(a.number) === numQuery;
+        const bExact = String(b.number) === numQuery;
+        if (aExact !== bExact) return aExact ? -1 : 1;
+        const aStarts = String(a.number).startsWith(numQuery);
+        const bStarts = String(b.number).startsWith(numQuery);
+        if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      }
+      const aTitle = a.title.toLowerCase();
+      const bTitle = b.title.toLowerCase();
+      const aTitleStarts = aTitle.startsWith(q);
+      const bTitleStarts = bTitle.startsWith(q);
+      if (aTitleStarts !== bTitleStarts) return aTitleStarts ? -1 : 1;
+      const aTitleMatch = aTitle.includes(q);
+      const bTitleMatch = bTitle.includes(q);
+      if (aTitleMatch !== bTitleMatch) return aTitleMatch ? -1 : 1;
+      // Prefer more recently updated
+      const aTime = new Date(a.updatedAt).getTime() || 0;
+      const bTime = new Date(b.updatedAt).getTime() || 0;
+      return bTime - aTime;
+    });
+
+    return matches.slice(0, MAX_PR_RESULTS);
+  }, [query, isOpen]);
+
+  // Build grouped display: command groups first, then PRs, then repos, then add-repo.
   const commandGroups = useMemo(
     () => groupByCategory(filteredCommands),
     [filteredCommands],
   );
 
   // Build the flat selectable items list for keyboard navigation.
-  // This excludes category headers — they're purely visual.
   type SelectableItem =
     | { type: "command"; command: Command }
+    | { type: "pr"; pr: github.PullRequest }
     | { type: "repo"; index: number }
     | { type: "add-repo" };
 
@@ -261,12 +572,15 @@ export function CommandPalette() {
         items.push({ type: "command", command: cmd });
       }
     }
+    for (const pr of filteredPRs) {
+      items.push({ type: "pr", pr });
+    }
     for (let i = 0; i < filteredRepos.length; i++) {
       items.push({ type: "repo", index: i });
     }
     items.push({ type: "add-repo" });
     return items;
-  }, [commandGroups, filteredRepos]);
+  }, [commandGroups, filteredPRs, filteredRepos]);
 
   const totalItems = selectableItems.length;
 
@@ -296,6 +610,9 @@ export function CommandPalette() {
       if (!item) return;
       if (item.type === "command") {
         item.command.action();
+      } else if (item.type === "pr") {
+        close();
+        navigate(`/pr/${item.pr.nodeId}`);
       } else if (item.type === "repo") {
         selectRepo(filteredRepos[item.index].id);
         close();
@@ -304,7 +621,7 @@ export function CommandPalette() {
         addRepo();
       }
     },
-    [selectableItems, filteredRepos, selectRepo, addRepo, close],
+    [selectableItems, filteredRepos, selectRepo, addRepo, close, navigate],
   );
 
   // Keyboard navigation within the palette.
@@ -382,7 +699,7 @@ export function CommandPalette() {
                 setQuery(e.target.value);
                 setHighlightedIdx(0);
               }}
-              placeholder="Type a command or search..."
+              placeholder="Type a command or search PRs..."
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-block">
@@ -394,7 +711,7 @@ export function CommandPalette() {
           <div ref={listRef} className="max-h-[40vh] overflow-auto py-1">
             {totalItems === 0 && (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No matching commands or repositories
+                No matching commands, PRs, or repositories
               </div>
             )}
 
@@ -432,6 +749,58 @@ export function CommandPalette() {
                 })}
               </div>
             ))}
+
+            {/* PR search results */}
+            {filteredPRs.length > 0 && (
+              <div>
+                <div className="px-4 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Pull Requests
+                </div>
+                {filteredPRs.map((pr) => {
+                  const idx = flatIdx++;
+                  const isHighlighted = idx === highlightedIdx;
+                  return (
+                    <div
+                      key={pr.nodeId}
+                      ref={(el) => { itemRefs.current[idx] = el; }}
+                      onClick={() => handleSelect(idx)}
+                      onMouseEnter={() => setHighlightedIdx(idx)}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 px-4 py-2 text-sm transition-colors",
+                        isHighlighted && "bg-accent text-accent-foreground",
+                        !isHighlighted && "text-foreground",
+                      )}
+                    >
+                      <GitPullRequest className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">
+                            {pr.title}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <span>{pr.repoOwner}/{pr.repoName}</span>
+                          <span className="font-mono">#{pr.number}</span>
+                          {pr.authorAvatar && (
+                            <img
+                              src={pr.authorAvatar}
+                              className="h-3 w-3 rounded-full"
+                              alt=""
+                            />
+                          )}
+                          <span>{pr.author}</span>
+                        </div>
+                      </div>
+                      <StateBadge
+                        state={pr.state}
+                        isDraft={pr.isDraft}
+                        isInMergeQueue={pr.isInMergeQueue}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Repositories section */}
             {(filteredRepos.length > 0 || query.trim() === "") && (

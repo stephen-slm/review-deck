@@ -145,6 +145,7 @@ interface PRState {
   // ---- Hidden PRs ----
   hidePR: (nodeId: string) => void;
   unhidePR: (nodeId: string) => void;
+  clearAllHiddenPRs: () => void;
   loadHiddenPRs: () => Promise<void>;
 }
 
@@ -640,6 +641,11 @@ export const usePRStore = create<PRState>((set, get) => ({
     next.delete(nodeId);
     set({ hiddenPRs: next });
     SetSetting("hidden_prs", JSON.stringify(Array.from(next))).catch(() => {});
+  },
+
+  clearAllHiddenPRs: () => {
+    set({ hiddenPRs: new Set() });
+    SetSetting("hidden_prs", "[]").catch(() => {});
   },
 
   loadHiddenPRs: async () => {
