@@ -56,6 +56,8 @@ interface PRTableProps {
   onTabDirect?: ((index: number) => void) | null;
   /** Map of PR nodeId → list of flag reason strings. When provided, a "Reason" column is shown. */
   flagReasons?: Map<string, string[]>;
+  /** Which timestamp field to display in the time column. Defaults to "updatedAt". */
+  timestampField?: "updatedAt" | "mergedAt";
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -92,6 +94,7 @@ export function PRTable({
   flaggedNodeIds,
   onTabDirect,
   flagReasons,
+  timestampField = "updatedAt",
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -339,8 +342,8 @@ export function PRTable({
         cell: (info) => <ChecksStatusIcon status={info.getValue()} isMerged={info.row.original.state === "MERGED"} />,
         size: 40,
       }),
-      columnHelper.accessor("updatedAt", {
-        header: "Updated",
+      columnHelper.accessor(timestampField === "mergedAt" ? "mergedAt" : "updatedAt", {
+        header: timestampField === "mergedAt" ? "Merged" : "Updated",
         cell: (info) => (
           <span className="text-xs text-muted-foreground">
             {timeAgo(info.getValue())}
@@ -401,7 +404,7 @@ export function PRTable({
         size: (onHide ? 30 : 0) + 40,
       }),
     ];
-  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons]);
+  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons, timestampField]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({

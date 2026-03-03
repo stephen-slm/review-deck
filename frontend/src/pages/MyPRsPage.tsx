@@ -374,6 +374,7 @@ export function MyPRsPage() {
           onPageSizeChange={handlePageSizeChangeMerged}
           onFetchMore={handleFetchMoreMerged}
           onTabDirect={handleTabDirect}
+          timestampField="mergedAt"
         />
       )}
     </div>
