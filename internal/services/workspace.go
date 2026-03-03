@@ -333,7 +333,7 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		}
 
 		// 2. Run Claude.
-		reviewText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
+		reviewText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Review this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
 			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": "Claude review timed out (3 minute limit)"})
@@ -362,7 +362,7 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 }
 
 // runClaude executes claude -p with the diff piped to stdin.
-func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff []byte, prompt string, maxCost float64) (review string, cost float64, durationMs int, err error) {
+func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff []byte, prompt string, maxCost float64, userMessage string) (review string, cost float64, durationMs int, err error) {
 	args := []string{"-p",
 		"--output-format", "json",
 		"--max-turns", "1",
@@ -371,7 +371,7 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 	if maxCost > 0 {
 		args = append(args, "--max-budget-usd", fmt.Sprintf("%.4f", maxCost))
 	}
-	args = append(args, "Review this pull request diff:")
+	args = append(args, userMessage)
 
 	cmd := exec.CommandContext(ctx, "claude", args...)
 	cmd.Stdin = bytes.NewReader(diff)
@@ -494,7 +494,7 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 		}
 
 		// 2. Run Claude with the description prompt.
-		descriptionText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
+		descriptionText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Generate a description for this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
 			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": "Claude description generation timed out (3 minute limit)"})
@@ -635,7 +635,7 @@ func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumb
 		}
 
 		// 2. Run Claude with the title prompt.
-		titleText, _, _, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost)
+		titleText, _, _, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Generate a short concise title for this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
 			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": "Claude title generation timed out (3 minute limit)"})
