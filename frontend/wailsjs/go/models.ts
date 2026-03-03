@@ -94,6 +94,7 @@ export namespace github {
 	    body: string;
 	    path: string;
 	    line: number;
+	    diffHunk: string;
 	    // Go type: time
 	    createdAt: any;
 	
@@ -109,6 +110,7 @@ export namespace github {
 	        this.body = source["body"];
 	        this.path = source["path"];
 	        this.line = source["line"];
+	        this.diffHunk = source["diffHunk"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	    }
 	

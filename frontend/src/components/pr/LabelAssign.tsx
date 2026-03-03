@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { Tag, Search, X, Loader2, Check } from "lucide-react";
 import { AddLabels, RemoveLabels } from "../../../wailsjs/go/services/PullRequestService";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
+import { setEscapeAction } from "@/stores/vimStore";
 import { github } from "../../../wailsjs/go/models";
 import { hexLuminance } from "@/lib/utils";
 
@@ -63,8 +63,8 @@ export function LabelAssign({
   // Register vim escape override to close dropdown.
   useEffect(() => {
     if (isOpen) {
-      useVimStore.setState({ onEscape: () => setIsOpen(false) });
-      return () => useVimStore.setState({ onEscape: null });
+      setEscapeAction(() => setIsOpen(false));
+      return () => setEscapeAction(null);
     }
   }, [isOpen]);
 

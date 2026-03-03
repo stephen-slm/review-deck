@@ -99,7 +99,7 @@ const mdComponents: Components = {
 
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
-import { useVimStore } from "@/stores/vimStore";
+import { useVimStore, registerActions, clearActions, setEscapeAction } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useFlagStore } from "@/stores/flagStore";
 import { useRepoStore } from "@/stores/repoStore";
@@ -116,21 +116,35 @@ import { ReviewerAssign } from "@/components/pr/ReviewerAssign";
 import { LabelAssign } from "@/components/pr/LabelAssign";
 import { DiffView } from "@/components/pr/DiffView";
 
-/** Search all PR store arrays for a PR by nodeId. */
+/** Search all PR store arrays for a PR by nodeId.
+ *  Derives a stable cache key so the expensive lookup only re-runs when page
+ *  data actually changes in a meaningful way.
+ */
 function useFindPR(nodeId: string | undefined): github.PullRequest | undefined {
-  const pages = usePRStore((s) => s.pages);
+  // Subscribe to a lightweight fingerprint instead of the full `pages` object.
+  // This prevents re-renders when unrelated store fields change.
+  const fingerprint = usePRStore((s) => {
+    const p = s.pages;
+    return `${p.myPRs.currentPage}-${p.myPRs.items.length}|` +
+      `${p.myRecentMerged.currentPage}-${p.myRecentMerged.items.length}|` +
+      `${p.reviewRequests.currentPage}-${p.reviewRequests.items.length}|` +
+      `${p.teamReviewRequests.currentPage}-${p.teamReviewRequests.items.length}|` +
+      `${p.reviewedByMe.currentPage}-${p.reviewedByMe.items.length}`;
+  });
 
   return useMemo(() => {
     if (!nodeId) return undefined;
+    const p = usePRStore.getState().pages;
     const all = [
-      ...pages.myPRs.items,
-      ...pages.myRecentMerged.items,
-      ...pages.reviewRequests.items,
-      ...pages.teamReviewRequests.items,
-      ...pages.reviewedByMe.items,
+      ...p.myPRs.items,
+      ...p.myRecentMerged.items,
+      ...p.reviewRequests.items,
+      ...p.teamReviewRequests.items,
+      ...p.reviewedByMe.items,
     ];
     return all.find((pr) => pr.nodeId === nodeId);
-  }, [nodeId, pages]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeId, fingerprint]);
 }
 
 export function PRDetailPage() {
@@ -718,8 +732,8 @@ export function PRDetailPage() {
       actions.onGenerateReview = () => { if (!aiReviewing) handleStartAIReview(); };
     }
 
-    useVimStore.getState().registerActions(actions);
-    return () => useVimStore.getState().clearActions();
+    registerActions(actions);
+    return () => clearActions();
   }); // no deps — re-registers each render with fresh closures
 
   if (!pr) {
@@ -1541,7 +1555,7 @@ function DetailMergeButton({
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
-  const { mergePR } = usePRStore();
+  const mergePR = usePRStore((s) => s.mergePR);
 
   const reviewBlocked = reviewDecision === "REVIEW_REQUIRED" || reviewDecision === "CHANGES_REQUESTED";
   const canMerge = !isDraft && !reviewBlocked && mergeable === "MERGEABLE";
@@ -1668,7 +1682,7 @@ function DetailApproveButton({
   const [isApproving, setIsApproving] = useState(false);
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { approvePR } = usePRStore();
+  const approvePR = usePRStore((s) => s.approvePR);
   const viewerLogin = useAuthStore((s) => s.user?.login);
 
   // You cannot approve your own PR
@@ -1760,7 +1774,7 @@ function DetailRequestChangesButton({
   const [body, setBody] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { requestChangesPR } = usePRStore();
+  const requestChangesPR = usePRStore((s) => s.requestChangesPR);
   const viewerLogin = useAuthStore((s) => s.user?.login);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1775,10 +1789,10 @@ function DetailRequestChangesButton({
   // Register vim escape override to close dropdown.
   useEffect(() => {
     if (isOpen) {
-      useVimStore.setState({ onEscape: () => setIsOpen(false) });
+      setEscapeAction(() => setIsOpen(false));
       // Focus the textarea when opened.
       setTimeout(() => textareaRef.current?.focus(), 50);
-      return () => useVimStore.setState({ onEscape: null });
+      return () => setEscapeAction(null);
     }
   }, [isOpen]);
 
@@ -2286,19 +2300,25 @@ function CommentsTab({
                     <ExternalLink className="h-3 w-3" />
                   </button>
                 </div>
-                {/* Thread comments — hidden when collapsed */}
+                {/* Thread code snippet + comments — hidden when collapsed */}
                 {!isCollapsed && (
-                  <div className="divide-y divide-border">
-                    {(thread.comments || []).map((comment) => (
-                      <CommentCard
-                        key={comment.id}
-                        author={comment.author}
-                        authorAvatar={comment.authorAvatar}
-                        body={comment.body}
-                        createdAt={comment.createdAt}
-                        compact
-                      />
-                    ))}
+                  <div>
+                    {/* Show the diff hunk from the first comment as code context */}
+                    {thread.comments?.[0]?.diffHunk && (
+                      <DiffHunkSnippet diffHunk={thread.comments[0].diffHunk} />
+                    )}
+                    <div className="divide-y divide-border">
+                      {(thread.comments || []).map((comment) => (
+                        <CommentCard
+                          key={comment.id}
+                          author={comment.author}
+                          authorAvatar={comment.authorAvatar}
+                          body={comment.body}
+                          createdAt={comment.createdAt}
+                          compact
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2308,6 +2328,34 @@ function CommentsTab({
         </div>
       )}
     </section>
+  );
+}
+
+/** Renders a diff hunk as a syntax-highlighted code snippet for review threads. */
+function DiffHunkSnippet({ diffHunk }: { diffHunk: string }) {
+  const lines = diffHunk.split("\n");
+  return (
+    <div className="overflow-x-auto border-b border-border bg-muted/30 font-mono text-xs leading-relaxed">
+      {lines.map((line, i) => {
+        let bgClass = "";
+        let textClass = "text-muted-foreground";
+        if (line.startsWith("+")) {
+          bgClass = "bg-green-500/10";
+          textClass = "text-green-700 dark:text-green-300";
+        } else if (line.startsWith("-")) {
+          bgClass = "bg-red-500/10";
+          textClass = "text-red-700 dark:text-red-300";
+        } else if (line.startsWith("@@")) {
+          bgClass = "bg-blue-500/10";
+          textClass = "text-blue-600 dark:text-blue-400";
+        }
+        return (
+          <div key={i} className={`whitespace-pre px-4 py-0.5 ${bgClass} ${textClass}`}>
+            {line || "\u00A0"}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

@@ -3,7 +3,7 @@ import { UserPlus, Search, X, Loader2 } from "lucide-react";
 import { GetOrgMembers, RequestReviews } from "../../../wailsjs/go/services/PullRequestService";
 import { SyncOrgMembers } from "../../../wailsjs/go/main/App";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
+import { setEscapeAction } from "@/stores/vimStore";
 import { github } from "../../../wailsjs/go/models";
 
 interface ReviewerAssignProps {
@@ -57,8 +57,8 @@ export function ReviewerAssign({
   // Register vim escape override to close dropdown instead of navigating back.
   useEffect(() => {
     if (isOpen) {
-      useVimStore.setState({ onEscape: () => setIsOpen(false) });
-      return () => useVimStore.setState({ onEscape: null });
+      setEscapeAction(() => setIsOpen(false));
+      return () => setEscapeAction(null);
     }
   }, [isOpen]);
 

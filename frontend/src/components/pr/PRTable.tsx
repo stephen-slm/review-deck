@@ -20,7 +20,7 @@ import { ChecksStatusIcon } from "./ChecksStatusIcon";
 
 import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
+import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
 import type { PageDirection, PaginationState } from "@/stores/prStore";
 
 /** Common default branch names — PRs targeting these are NOT considered stacked. */
@@ -172,10 +172,9 @@ export function PRTable({
 
   // Register vim actions — runs on every render so callbacks close over fresh data.
   useEffect(() => {
-    const vim = useVimStore.getState();
     const getRows = () => tableRowsRef.current;
 
-    vim.registerActions({
+    registerActions({
       onOpen: (index: number) => {
         const pr = getRows()[index];
         if (pr) navigate(`/pr/${pr.nodeId}`);
@@ -199,7 +198,7 @@ export function PRTable({
       onTabDirect: onTabDirect || null,
     });
 
-    return () => useVimStore.getState().clearActions();
+    return () => clearActions();
   }); // intentionally no deps — re-registers each render with fresh closures
 
   // Auto-scroll the selected row into view.

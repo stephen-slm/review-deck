@@ -33,6 +33,7 @@ type ReviewComment struct {
 	Body         string    `json:"body"`
 	Path         string    `json:"path"`
 	Line         int       `json:"line"`
+	DiffHunk     string    `json:"diffHunk"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
 

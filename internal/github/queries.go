@@ -522,7 +522,8 @@ type prCommentsQuery struct {
 							}
 							Body      string
 							Path      string
-							Line      int `graphql:"originalLine"`
+							Line      int    `graphql:"originalLine"`
+							DiffHunk  string `graphql:"diffHunk"`
 							CreatedAt time.Time
 						}
 					} `graphql:"comments(first: 50)"`
@@ -596,6 +597,7 @@ func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments,
 				Body:         c.Body,
 				Path:         c.Path,
 				Line:         c.Line,
+				DiffHunk:     c.DiffHunk,
 				CreatedAt:    c.CreatedAt,
 			})
 		}

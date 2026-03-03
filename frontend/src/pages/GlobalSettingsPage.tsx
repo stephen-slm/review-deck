@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
+import { registerActions, clearActions } from "@/stores/vimStore";
 
 import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2 } from "lucide-react";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
@@ -47,7 +47,7 @@ export function GlobalSettingsPage() {
     const tabKeys: GlobalTab[] = globalTabs.map((t) => t.key);
     const currentIdx = tabKeys.indexOf(activeTab);
 
-    useVimStore.getState().registerActions({
+    registerActions({
       onMoveDown: () => scrollEl?.scrollBy(0, 150),
       onMoveUp: () => scrollEl?.scrollBy(0, -150),
       onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
@@ -56,7 +56,7 @@ export function GlobalSettingsPage() {
         if (idx >= 0 && idx < tabKeys.length) setActiveTab(tabKeys[idx]);
       },
     });
-    return () => useVimStore.getState().clearActions();
+    return () => clearActions();
   }); // no deps — re-registers each render with fresh closures for activeTab
 
   const handleLogin = async () => {

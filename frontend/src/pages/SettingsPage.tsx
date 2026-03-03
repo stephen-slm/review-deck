@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useRepoStore } from "@/stores/repoStore";
-import { useVimStore } from "@/stores/vimStore";
+import { registerActions, clearActions } from "@/stores/vimStore";
 
 import { Plus, Trash2, Bot, Users, RefreshCw, Star, ChevronUp, ChevronDown, FolderGit2, AlertTriangle, Shield, Crown, Tag } from "lucide-react";
 import { GetOrgMembers } from "../../wailsjs/go/services/PullRequestService";
@@ -74,7 +74,7 @@ export function SettingsPage() {
     const tabKeys: RepoSettingsTab[] = repoTabs.map((t) => t.key);
     const currentIdx = tabKeys.indexOf(activeTab);
 
-    useVimStore.getState().registerActions({
+    registerActions({
       onMoveDown: () => scrollEl?.scrollBy(0, 150),
       onMoveUp: () => scrollEl?.scrollBy(0, -150),
       onTabNext: () => setActiveTab(tabKeys[(currentIdx + 1) % tabKeys.length]),
@@ -83,7 +83,7 @@ export function SettingsPage() {
         if (idx >= 0 && idx < tabKeys.length) setActiveTab(tabKeys[idx]);
       },
     });
-    return () => useVimStore.getState().clearActions();
+    return () => clearActions();
   }); // no deps — re-registers each render with fresh closures for activeTab
 
   // Load teams and priorities for all derived orgs once repos are loaded; sync teams from GitHub if none cached yet.

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
-import { useVimStore } from "@/stores/vimStore";
+import { setEscapeAction } from "@/stores/vimStore";
 import { useFlagStore } from "@/stores/flagStore";
 
 interface NavItem {
@@ -113,8 +113,8 @@ export function Sidebar() {
   // Register vim Escape override when dropdown is open.
   useEffect(() => {
     if (dropdownOpen) {
-      useVimStore.setState({ onEscape: () => setDropdownOpen(false) });
-      return () => useVimStore.setState({ onEscape: null });
+      setEscapeAction(() => setDropdownOpen(false));
+      return () => setEscapeAction(null);
     }
   }, [dropdownOpen]);
 

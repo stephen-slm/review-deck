@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { tinykeys } from "tinykeys";
-import { useVimStore } from "@/stores/vimStore";
+import { useVimStore, getActions } from "@/stores/vimStore";
 
 /** Routes corresponding to sidebar tabs 1-5. */
 const TAB_ROUTES = [
@@ -68,12 +68,12 @@ export function useVimNavigation() {
       "$mod+5": vim(() => navigate(TAB_ROUTES[4])),
 
       // ---- Page tab navigation (1-5) — only active when a page registers onTabDirect ----
-      "1": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(0); }),
-      "2": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(1); }),
-      "3": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(2); }),
-      "4": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(3); }),
-      "5": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(4); }),
-      "6": vim(() => { const { onTabDirect } = store(); if (onTabDirect) onTabDirect(5); }),
+      "1": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(0); }),
+      "2": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(1); }),
+      "3": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(2); }),
+      "4": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(3); }),
+      "5": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(4); }),
+      "6": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(5); }),
 
       // ---- Global: Escape — exit visual/pick mode > close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {
@@ -85,7 +85,7 @@ export function useVimNavigation() {
           return;
         }
         // 1. If a dropdown/modal registered an escape handler, let it close first.
-        const { onEscape } = store();
+        const { onEscape } = getActions();
         if (onEscape) {
           event.preventDefault();
           onEscape();
@@ -99,7 +99,7 @@ export function useVimNavigation() {
         }
         // 3. Otherwise, go back.
         event.preventDefault();
-        const { onGoBack } = store();
+        const { onGoBack } = getActions();
         if (onGoBack) {
           onGoBack();
         }
@@ -112,12 +112,12 @@ export function useVimNavigation() {
 
       // ---- List navigation / scroll: j/k ----
       "j": vim(() => {
-        const { onMoveDown } = store();
+        const { onMoveDown } = getActions();
         if (onMoveDown) { onMoveDown(); return; }
         store().moveSelection(1);
       }),
       "k": vim(() => {
-        const { onMoveUp } = store();
+        const { onMoveUp } = getActions();
         if (onMoveUp) { onMoveUp(); return; }
         store().moveSelection(-1);
       }),
@@ -134,99 +134,102 @@ export function useVimNavigation() {
 
       // ---- AI generation shortcuts ----
       "Shift+d": vim(() => {
-        const { onGenerate } = store();
+        const { onGenerate } = getActions();
         if (onGenerate) onGenerate();
       }),
       "Shift+h": vim(() => {
-        const { onGenerateTitle } = store();
+        const { onGenerateTitle } = getActions();
         if (onGenerateTitle) onGenerateTitle();
       }),
       "Shift+e": vim(() => {
-        const { onGenerateReview } = store();
+        const { onGenerateReview } = getActions();
         if (onGenerateReview) onGenerateReview();
       }),
 
       // ---- Open selected item ----
       "Enter": vim(() => {
-        const { selectedIndex, onOpen } = store();
+        const { selectedIndex } = store();
+        const { onOpen } = getActions();
         if (selectedIndex >= 0 && onOpen) onOpen(selectedIndex);
       }),
       "l": vim(() => {
-        const { onTabNext, selectedIndex, onOpen } = store();
+        const { onTabNext, onOpen } = getActions();
+        const { selectedIndex } = store();
         if (onTabNext) { onTabNext(); return; }
         if (selectedIndex >= 0 && onOpen) onOpen(selectedIndex);
       }),
 
       // ---- Open in GitHub ----
       "o": vim(() => {
-        const { selectedIndex, onOpenExternal } = store();
+        const { selectedIndex } = store();
+        const { onOpenExternal } = getActions();
         if (onOpenExternal) onOpenExternal(selectedIndex);
       }),
 
       // ---- Page navigation ----
       "n": vim(() => {
-        const { onNextPage } = store();
+        const { onNextPage } = getActions();
         if (onNextPage) onNextPage();
       }),
       "Shift+n": vim(() => {
-        const { onPrevPage } = store();
+        const { onPrevPage } = getActions();
         if (onPrevPage) onPrevPage();
       }),
 
       // ---- Focus search ----
       "/": vim(() => {
-        const { onFocusSearch } = store();
+        const { onFocusSearch } = getActions();
         if (onFocusSearch) onFocusSearch();
       }),
 
       // ---- Refresh (Shift+R) ----
       "Shift+r": vim(() => {
-        const { onRefresh } = store();
+        const { onRefresh } = getActions();
         if (onRefresh) onRefresh();
       }),
 
       // ---- Resolve / unresolve comment thread (r / u) ----
       "r": vim(() => {
-        const { onResolve } = store();
+        const { onResolve } = getActions();
         if (onResolve) onResolve();
       }),
       "u": vim(() => {
-        const { onUnresolve } = store();
+        const { onUnresolve } = getActions();
         if (onUnresolve) onUnresolve();
       }),
 
       // ---- Go back / prev tab (h / Backspace) ----
       "h": vim(() => {
-        const { onTabPrev, onGoBack } = store();
+        const { onTabPrev, onGoBack } = getActions();
         if (onTabPrev) { onTabPrev(); return; }
         if (onGoBack) onGoBack();
       }),
       "Backspace": vim(() => {
-        const { onGoBack } = store();
+        const { onGoBack } = getActions();
         if (onGoBack) onGoBack();
       }),
 
       // ---- PR detail actions ----
       "a": vim(() => {
-        const { onAssignReviewer } = store();
+        const { onAssignReviewer } = getActions();
         if (onAssignReviewer) onAssignReviewer();
       }),
       "b": vim(() => {
-        const { onAssignLabel } = store();
+        const { onAssignLabel } = getActions();
         if (onAssignLabel) onAssignLabel();
       }),
       "m": vim(() => {
-        const { onMerge } = store();
+        const { onMerge } = getActions();
         if (onMerge) onMerge();
       }),
       "Shift+A": vim(() => {
-        const { onApprove } = store();
+        const { onApprove } = getActions();
         if (onApprove) onApprove();
       }),
 
       // ---- Request changes on PR (d) ----
       "d": vim(() => {
-        const { onRequestChanges } = store();
+        const { onRequestChanges } = getActions();
         if (onRequestChanges) onRequestChanges();
       }),
 
@@ -237,38 +240,39 @@ export function useVimNavigation() {
 
       // ---- Toggle pick / space override (Space) ----
       "Space": vim(() => {
-        const { onSpace } = store();
+        const { onSpace } = getActions();
         if (onSpace) { onSpace(); return; }
         store().togglePick();
       }),
 
       // ---- Copy selected PRs (c) ----
       "c": vim(() => {
-        const { onCopy } = store();
+        const { onCopy } = getActions();
         if (onCopy) onCopy();
       }),
 
       // ---- Hide/dismiss PR (x) ----
       "x": vim(() => {
-        const { selectedIndex, onHide } = store();
+        const { selectedIndex } = store();
+        const { onHide } = getActions();
         if (onHide && selectedIndex >= 0) onHide(selectedIndex);
       }),
 
       // ---- Toggle draft visibility (t) ----
       "t": vim(() => {
-        const { onToggleDrafts } = store();
+        const { onToggleDrafts } = getActions();
         if (onToggleDrafts) onToggleDrafts();
       }),
 
       // ---- Toggle stacked PR visibility (s) ----
       "s": vim(() => {
-        const { onToggleStacked } = store();
+        const { onToggleStacked } = getActions();
         if (onToggleStacked) onToggleStacked();
       }),
 
       // ---- Toggle "approved by me" visibility (f) ----
       "f": vim(() => {
-        const { onToggleApproved } = store();
+        const { onToggleApproved } = getActions();
         if (onToggleApproved) onToggleApproved();
       }),
 

@@ -22,7 +22,7 @@ export function MergeButton({
   const [isMerging, setIsMerging] = useState(false);
   const [mergeResult, setMergeResult] = useState<string | null>(null);
   const [mergeError, setMergeError] = useState<string | null>(null);
-  const { mergePR } = usePRStore();
+  const mergePR = usePRStore((s) => s.mergePR);
 
   const canMerge =
     state === "OPEN" && !isDraft && mergeable === "MERGEABLE";

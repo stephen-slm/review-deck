@@ -1,23 +1,12 @@
 import { create } from "zustand";
 
-export interface VimState {
-  /** Index of the highlighted row in the current list (-1 = nothing selected). */
-  selectedIndex: number;
-  /** Number of rows in the current list/table. */
-  listLength: number;
-  /** Whether the shortcut hint bar is visible. */
-  showHints: boolean;
-  /** Whether the command palette is visible. */
-  commandPaletteOpen: boolean;
+// ---- Action callbacks (non-reactive) ----
+// These are stored outside Zustand's reactive state so that updating them
+// (which happens on every render via the no-deps useEffect in page components)
+// does NOT trigger store notifications or subscriber re-renders.
+// The tinykeys handlers in useVimNavigation read them via getActions().
 
-  /** Whether visual (multi-select) mode is active. */
-  visualMode: boolean;
-  /** The anchor index where visual mode was entered. */
-  visualAnchor: number;
-  /** Individually picked row indices (toggled via Space). */
-  pickedIndices: Set<number>;
-
-  /** Callbacks registered by the active page for context-specific actions. */
+type ActionCallbacks = {
   onOpen: ((index: number) => void) | null;
   onOpenExternal: ((index: number) => void) | null;
   onRefresh: (() => void) | null;
@@ -25,79 +14,31 @@ export interface VimState {
   onPrevPage: (() => void) | null;
   onFocusSearch: (() => void) | null;
   onGoBack: (() => void) | null;
-  /** Override j/k default moveSelection (e.g. page scroll on description tab). */
   onMoveDown: (() => void) | null;
   onMoveUp: (() => void) | null;
-  /** Override h/l to cycle tabs instead of back/open (used on detail page). */
   onTabNext: (() => void) | null;
   onTabPrev: (() => void) | null;
-  /** PR detail actions triggered by keyboard shortcuts. */
   onAssignReviewer: (() => void) | null;
   onAssignLabel: (() => void) | null;
   onMerge: (() => void) | null;
   onApprove: (() => void) | null;
-  /** Copy selected PRs — called by 'c' keybinding. */
   onCopy: (() => void) | null;
-  /** Hide/dismiss PR at index — called by 'x' keybinding. */
   onHide: ((index: number) => void) | null;
-  /** Space override — used by files tab to toggle expand/collapse. Falls back to togglePick. */
   onSpace: (() => void) | null;
-  /** Direct tab selection by number (1-based). Used on detail page for 1-4. */
   onTabDirect: ((index: number) => void) | null;
-  /** Toggle draft PR visibility — called by 't' keybinding. */
   onToggleDrafts: (() => void) | null;
-  /** Toggle stacked PR visibility — called by 's' keybinding. */
   onToggleStacked: (() => void) | null;
-  /** Toggle "approved by me" PR visibility — called by 'f' keybinding. */
   onToggleApproved: (() => void) | null;
-  /** Resolve selected comment thread — called by 'r' keybinding. */
   onResolve: (() => void) | null;
-  /** Unresolve selected comment thread — called by 'u' keybinding. */
   onUnresolve: (() => void) | null;
-  /** Request changes on a PR — called by 'd' keybinding. */
   onRequestChanges: (() => void) | null;
-  /** Generate AI description — called by 'G' (Shift+g) keybinding. */
   onGenerate: (() => void) | null;
-  /** Generate AI title — called by 'H' (Shift+h) keybinding. */
   onGenerateTitle: (() => void) | null;
-  /** Start AI review — called by 'E' (Shift+e) keybinding. */
   onGenerateReview: (() => void) | null;
-  /**
-   * Escape override — set by open dropdowns/modals to close themselves
-   * instead of navigating back. Components set this directly via setState.
-   */
   onEscape: (() => void) | null;
+};
 
-  // ---- Actions ----
-  setSelectedIndex: (i: number) => void;
-  setListLength: (n: number) => void;
-  moveSelection: (delta: number) => void;
-  resetSelection: () => void;
-  toggleHints: () => void;
-  toggleCommandPalette: () => void;
-  toggleVisualMode: () => void;
-  exitVisualMode: () => void;
-  /** Get the range of indices currently selected in visual mode. */
-  getVisualRange: () => [number, number] | null;
-  /** Toggle the current cursor row in/out of the picked set. */
-  togglePick: () => void;
-  /** Clear all individually picked rows. */
-  clearPicks: () => void;
-  /** Get all selected indices (union of visual range + picked). Sorted ascending. */
-  getAllSelectedIndices: () => number[];
-
-  /** Pages call this to register their context-specific handlers. */
-  registerActions: (actions: Partial<Pick<VimState,
-    "onOpen" | "onOpenExternal" | "onRefresh" |
-    "onNextPage" | "onPrevPage" | "onFocusSearch" | "onGoBack" |
-    "onMoveDown" | "onMoveUp" | "onTabNext" | "onTabPrev" |
-    "onAssignReviewer" | "onAssignLabel" | "onMerge" | "onApprove" | "onCopy" | "onHide" | "onSpace" | "onTabDirect" | "onToggleDrafts" | "onToggleStacked" | "onToggleApproved" | "onResolve" | "onUnresolve" | "onRequestChanges" | "onGenerate" | "onGenerateTitle" | "onGenerateReview"
-  >>) => void;
-  /** Clear all registered actions (called on unmount / route change). */
-  clearActions: () => void;
-}
-
-const emptyActions = {
+const emptyActions: ActionCallbacks = {
   onOpen: null,
   onOpenExternal: null,
   onRefresh: null,
@@ -129,6 +70,67 @@ const emptyActions = {
   onEscape: null,
 };
 
+/** Mutable action callbacks — NOT part of Zustand reactive state. */
+let _actions: ActionCallbacks = { ...emptyActions };
+
+/** Read the current action callbacks (used by tinykeys handlers). */
+export function getActions(): ActionCallbacks {
+  return _actions;
+}
+
+/** Replace the current action callbacks (called by page useEffect hooks). */
+export function registerActions(actions: Partial<ActionCallbacks>): void {
+  _actions = { ...emptyActions, ...actions };
+}
+
+/** Reset all action callbacks to null. */
+export function clearActions(): void {
+  _actions = { ...emptyActions };
+}
+
+/** Set the escape override (used by dropdowns/modals). */
+export function setEscapeAction(handler: (() => void) | null): void {
+  _actions = { ..._actions, onEscape: handler };
+}
+
+// ---- Zustand store (reactive UI state only) ----
+
+export interface VimState {
+  /** Index of the highlighted row in the current list (-1 = nothing selected). */
+  selectedIndex: number;
+  /** Number of rows in the current list/table. */
+  listLength: number;
+  /** Whether the shortcut hint bar is visible. */
+  showHints: boolean;
+  /** Whether the command palette is visible. */
+  commandPaletteOpen: boolean;
+
+  /** Whether visual (multi-select) mode is active. */
+  visualMode: boolean;
+  /** The anchor index where visual mode was entered. */
+  visualAnchor: number;
+  /** Individually picked row indices (toggled via Space). */
+  pickedIndices: Set<number>;
+
+  // ---- Actions ----
+  setSelectedIndex: (i: number) => void;
+  setListLength: (n: number) => void;
+  moveSelection: (delta: number) => void;
+  resetSelection: () => void;
+  toggleHints: () => void;
+  toggleCommandPalette: () => void;
+  toggleVisualMode: () => void;
+  exitVisualMode: () => void;
+  /** Get the range of indices currently selected in visual mode. */
+  getVisualRange: () => [number, number] | null;
+  /** Toggle the current cursor row in/out of the picked set. */
+  togglePick: () => void;
+  /** Clear all individually picked rows. */
+  clearPicks: () => void;
+  /** Get all selected indices (union of visual range + picked). Sorted ascending. */
+  getAllSelectedIndices: () => number[];
+}
+
 export const useVimStore = create<VimState>((set, get) => ({
   selectedIndex: -1,
   listLength: 0,
@@ -137,7 +139,6 @@ export const useVimStore = create<VimState>((set, get) => ({
   visualMode: false,
   visualAnchor: -1,
   pickedIndices: new Set<number>(),
-  ...emptyActions,
 
   setSelectedIndex: (i) => set({ selectedIndex: i }),
 
@@ -222,7 +223,4 @@ export const useVimStore = create<VimState>((set, get) => ({
     }
     return Array.from(indices).sort((a, b) => a - b);
   },
-
-  registerActions: (actions) => set(actions),
-  clearActions: () => set(emptyActions),
 }));

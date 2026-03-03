@@ -13,7 +13,7 @@ import {
 import { usePRStore } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useVimStore } from "@/stores/vimStore";
+import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "@/components/pr/StateBadge";
@@ -338,8 +338,8 @@ export function DashboardPage() {
       actions.onMoveUp = () => scrollEl?.scrollBy({ top: -150, behavior: "smooth" });
     }
 
-    useVimStore.getState().registerActions(actions);
-    return () => useVimStore.getState().clearActions();
+    registerActions(actions);
+    return () => clearActions();
   }); // no deps — re-registers each render with fresh closures
 
   if (!isAuthenticated) {
