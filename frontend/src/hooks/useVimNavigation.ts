@@ -51,6 +51,12 @@ export function useVimNavigation() {
     const store = useVimStore.getState;
 
     const unsubscribe = tinykeys(window, {
+      // ---- Global: Command palette (Cmd+K) ----
+      "$mod+k": (event: KeyboardEvent) => {
+        event.preventDefault();
+        useVimStore.getState().toggleCommandPalette();
+      },
+
       // ---- Global: Repo selector (Cmd+0) ----
       "$mod+0": vim(() => window.dispatchEvent(new Event("repo-selector:toggle"))),
 

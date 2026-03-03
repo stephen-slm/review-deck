@@ -13,6 +13,7 @@ interface HintGroup {
 }
 
 const GLOBAL_HINTS: Hint[] = [
+  { keys: "\u2318K", label: "command palette" },
   { keys: "\u2318+1-5", label: "switch sidebar tabs" },
   { keys: "Shift+J/K", label: "smooth scroll" },
   { keys: "?", label: "toggle this popup" },

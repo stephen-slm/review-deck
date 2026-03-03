@@ -7,6 +7,8 @@ export interface VimState {
   listLength: number;
   /** Whether the shortcut hint bar is visible. */
   showHints: boolean;
+  /** Whether the command palette is visible. */
+  commandPaletteOpen: boolean;
 
   /** Whether visual (multi-select) mode is active. */
   visualMode: boolean;
@@ -72,6 +74,7 @@ export interface VimState {
   moveSelection: (delta: number) => void;
   resetSelection: () => void;
   toggleHints: () => void;
+  toggleCommandPalette: () => void;
   toggleVisualMode: () => void;
   exitVisualMode: () => void;
   /** Get the range of indices currently selected in visual mode. */
@@ -130,6 +133,7 @@ export const useVimStore = create<VimState>((set, get) => ({
   selectedIndex: -1,
   listLength: 0,
   showHints: false,
+  commandPaletteOpen: false,
   visualMode: false,
   visualAnchor: -1,
   pickedIndices: new Set<number>(),
@@ -167,6 +171,7 @@ export const useVimStore = create<VimState>((set, get) => ({
   resetSelection: () => set({ selectedIndex: -1, listLength: 0, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() }),
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
+  toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
 
   toggleVisualMode: () => {
     const { visualMode, selectedIndex, listLength } = get();
