@@ -103,6 +103,8 @@ function findPRByNodeId(nodeId: string): github.PullRequest | undefined {
   return all.find((pr) => pr.nodeId === nodeId);
 }
 
+type PaletteMode = "commands" | "repos";
+
 /** Build a flat list of all commands, filtering by availability. */
 function buildCommands(
   navigate: ReturnType<typeof useNavigate>,
@@ -111,6 +113,7 @@ function buildCommands(
   themeChoice: string,
   close: () => void,
   repos: ReturnType<typeof useRepoStore.getState>["repos"],
+  enterRepoMode: () => void,
 ): Command[] {
   const cmds: Command[] = [];
   const actions = getActions();
@@ -147,6 +150,18 @@ function buildCommands(
     icon: ArrowLeft,
     action: () => { close(); navigate(-1); },
   });
+
+  // ---- Switch repo (enters repo-only mode) ----
+  if (repos.length > 0) {
+    cmds.push({
+      id: "action:switch-repo",
+      label: "Switch Repository",
+      shortcut: `${modKey}0`,
+      category: "Actions",
+      icon: FolderGit2,
+      action: enterRepoMode,
+    });
+  }
 
   // ---- Global Actions ----
   if (actions.onRefresh) {
@@ -450,6 +465,7 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState("");
   const [highlightedIdx, setHighlightedIdx] = useState(0);
+  const [mode, setMode] = useState<PaletteMode>("commands");
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -458,11 +474,17 @@ export function CommandPalette() {
     if (isOpen) toggle();
   }, [isOpen, toggle]);
 
+  const enterRepoMode = useCallback(() => {
+    setMode("repos");
+    setQuery("");
+    setHighlightedIdx(0);
+  }, []);
+
   // Build the full list of commands + repo items, then filter by query.
   const commands = useMemo(
-    () => (isOpen ? buildCommands(navigate, location, setTheme, themeChoice, close, repos) : []),
+    () => (isOpen ? buildCommands(navigate, location, setTheme, themeChoice, close, repos, enterRepoMode) : []),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isOpen, navigate, location.pathname, setTheme, themeChoice, close, repos],
+    [isOpen, navigate, location.pathname, setTheme, themeChoice, close, repos, enterRepoMode],
   );
 
   // Filter repos by search query.
@@ -567,20 +589,28 @@ export function CommandPalette() {
 
   const selectableItems = useMemo<SelectableItem[]>(() => {
     const items: SelectableItem[] = [];
-    for (const group of commandGroups) {
-      for (const cmd of group.items) {
-        items.push({ type: "command", command: cmd });
+    if (mode === "commands") {
+      for (const group of commandGroups) {
+        for (const cmd of group.items) {
+          items.push({ type: "command", command: cmd });
+        }
       }
+      for (const pr of filteredPRs) {
+        items.push({ type: "pr", pr });
+      }
+      for (let i = 0; i < filteredRepos.length; i++) {
+        items.push({ type: "repo", index: i });
+      }
+      items.push({ type: "add-repo" });
+    } else {
+      // repos mode — only repos + add-repo
+      for (let i = 0; i < filteredRepos.length; i++) {
+        items.push({ type: "repo", index: i });
+      }
+      items.push({ type: "add-repo" });
     }
-    for (const pr of filteredPRs) {
-      items.push({ type: "pr", pr });
-    }
-    for (let i = 0; i < filteredRepos.length; i++) {
-      items.push({ type: "repo", index: i });
-    }
-    items.push({ type: "add-repo" });
     return items;
-  }, [commandGroups, filteredPRs, filteredRepos]);
+  }, [mode, commandGroups, filteredPRs, filteredRepos]);
 
   const totalItems = selectableItems.length;
 
@@ -589,6 +619,7 @@ export function CommandPalette() {
     if (isOpen) {
       setQuery("");
       setHighlightedIdx(0);
+      setMode("commands");
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [isOpen]);
@@ -656,7 +687,22 @@ export function CommandPalette() {
         }
         case "Escape": {
           e.preventDefault();
-          close();
+          if (mode !== "commands") {
+            setMode("commands");
+            setQuery("");
+            setHighlightedIdx(0);
+          } else {
+            close();
+          }
+          break;
+        }
+        case "Backspace": {
+          // When query is empty in repos mode, go back to commands mode.
+          if (mode !== "commands" && query === "") {
+            e.preventDefault();
+            setMode("commands");
+            setHighlightedIdx(0);
+          }
           break;
         }
         case "k": {
@@ -671,7 +717,7 @@ export function CommandPalette() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, totalItems, highlightedIdx, handleSelect, close]);
+  }, [isOpen, totalItems, highlightedIdx, handleSelect, close, mode, query]);
 
   if (!isOpen) return null;
 
@@ -690,7 +736,17 @@ export function CommandPalette() {
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xl">
           {/* Search input */}
           <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            {mode !== "commands" ? (
+              <button
+                onClick={() => { setMode("commands"); setQuery(""); setHighlightedIdx(0); }}
+                className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+                title="Back to commands"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            ) : (
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
             <input
               ref={inputRef}
               type="text"
@@ -699,11 +755,11 @@ export function CommandPalette() {
                 setQuery(e.target.value);
                 setHighlightedIdx(0);
               }}
-              placeholder="Type a command or search PRs..."
+              placeholder={mode === "repos" ? "Search repositories..." : "Type a command or search PRs..."}
               className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
             />
             <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground sm:inline-block">
-              {modKey}K
+              {mode === "repos" ? "esc" : `${modKey}K`}
             </kbd>
           </div>
 
@@ -711,12 +767,12 @@ export function CommandPalette() {
           <div ref={listRef} className="max-h-[40vh] overflow-auto py-1">
             {totalItems === 0 && (
               <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No matching commands, PRs, or repositories
+                {mode === "repos" ? "No matching repositories" : "No matching commands, PRs, or repositories"}
               </div>
             )}
 
-            {/* Command groups */}
-            {commandGroups.map((group) => (
+            {/* Command groups (only in commands mode) */}
+            {mode === "commands" && commandGroups.map((group) => (
               <div key={group.category}>
                 <div className="px-4 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   {group.category}
@@ -750,8 +806,8 @@ export function CommandPalette() {
               </div>
             ))}
 
-            {/* PR search results */}
-            {filteredPRs.length > 0 && (
+            {/* PR search results (only in commands mode) */}
+            {mode === "commands" && filteredPRs.length > 0 && (
               <div>
                 <div className="px-4 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                   Pull Requests
@@ -805,7 +861,7 @@ export function CommandPalette() {
             {/* Repositories section */}
             {(filteredRepos.length > 0 || query.trim() === "") && (
               <div>
-                {(filteredRepos.length > 0) && (
+                {(filteredRepos.length > 0) && mode === "commands" && (
                   <div className="px-4 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                     Repositories
                   </div>
