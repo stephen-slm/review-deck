@@ -732,15 +732,15 @@ export function CommandPalette() {
                       onClick={() => handleSelect(idx)}
                       onMouseEnter={() => setHighlightedIdx(idx)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 px-4 py-2 text-sm transition-colors",
-                        isHighlighted && "bg-accent text-accent-foreground",
-                        !isHighlighted && "text-foreground",
+                        "mx-1 flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
+                        isHighlighted && "bg-primary/5 ring-1 ring-primary/40",
+                        !isHighlighted && "hover:bg-muted/50",
                       )}
                     >
-                      <Icon className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
+                      <Icon className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-primary" : "text-muted-foreground")} />
                       <span className="flex-1 truncate">{cmd.label}</span>
                       {cmd.shortcut && (
-                        <kbd className={cn("shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px]", isHighlighted ? "border-accent-foreground/20 bg-accent-foreground/10 text-accent-foreground/70" : "border-border bg-muted text-muted-foreground")}>
+                        <kbd className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                           {cmd.shortcut}
                         </kbd>
                       )}
@@ -766,19 +766,19 @@ export function CommandPalette() {
                       onClick={() => handleSelect(idx)}
                       onMouseEnter={() => setHighlightedIdx(idx)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 px-4 py-2 text-sm transition-colors",
-                        isHighlighted && "bg-accent text-accent-foreground",
-                        !isHighlighted && "text-foreground",
+                        "mx-1 flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
+                        isHighlighted && "bg-primary/5 ring-1 ring-primary/40",
+                        !isHighlighted && "hover:bg-muted/50",
                       )}
                     >
-                      <GitPullRequest className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
+                      <GitPullRequest className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-primary" : "text-muted-foreground")} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-medium">
                             {pr.title}
                           </span>
                         </div>
-                        <div className={cn("flex items-center gap-1.5 text-xs", isHighlighted ? "text-accent-foreground/60" : "text-muted-foreground")}>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                           <span>{pr.repoOwner}/{pr.repoName}</span>
                           <span className="font-mono">#{pr.number}</span>
                           {pr.authorAvatar && (
@@ -821,17 +821,17 @@ export function CommandPalette() {
                       onClick={() => handleSelect(idx)}
                       onMouseEnter={() => setHighlightedIdx(idx)}
                       className={cn(
-                        "flex cursor-pointer items-center gap-3 px-4 py-2 text-sm transition-colors",
-                        isHighlighted && "bg-accent text-accent-foreground",
-                        !isHighlighted && "text-foreground",
+                        "mx-1 flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
+                        isHighlighted && "bg-primary/5 ring-1 ring-primary/40",
+                        !isHighlighted && "hover:bg-muted/50",
                       )}
                     >
-                      <FolderGit2 className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-accent-foreground/70" : "text-muted-foreground")} />
+                      <FolderGit2 className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-primary" : "text-muted-foreground")} />
                       <span className="flex-1 truncate">
                         {repo.repoOwner}/{repo.repoName}
                       </span>
                       {isSelected && (
-                        <Check className={cn("h-3.5 w-3.5 shrink-0", isHighlighted ? "text-accent-foreground" : "text-primary")} />
+                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
                       )}
                     </div>
                   );
@@ -842,20 +842,22 @@ export function CommandPalette() {
             {/* Add repository action */}
             {(() => {
               const idx = flatIdx++;
+              const isHighlighted = idx === highlightedIdx;
               return (
-                <div
-                  ref={(el) => { itemRefs.current[idx] = el; }}
-                  onClick={() => handleSelect(idx)}
-                  onMouseEnter={() => setHighlightedIdx(idx)}
-                  className={cn(
-                    "flex cursor-pointer items-center gap-3 border-t border-border px-4 py-2 text-sm transition-colors",
-                    idx === highlightedIdx
-                      ? "bg-accent text-accent-foreground"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  <Plus className="h-4 w-4 shrink-0" />
-                  <span className="flex-1">Add repository...</span>
+                <div className="border-t border-border px-1 py-1">
+                  <div
+                    ref={(el) => { itemRefs.current[idx] = el; }}
+                    onClick={() => handleSelect(idx)}
+                    onMouseEnter={() => setHighlightedIdx(idx)}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors",
+                      isHighlighted && "bg-primary/5 ring-1 ring-primary/40 text-foreground",
+                      !isHighlighted && "hover:bg-muted/50",
+                    )}
+                  >
+                    <Plus className={cn("h-4 w-4 shrink-0", isHighlighted && "text-primary")} />
+                    <span className="flex-1">Add repository...</span>
+                  </div>
                 </div>
               );
             })()}
