@@ -434,6 +434,57 @@ func (c *Client) GetReviewedByUserForRepoPage(ctx context.Context, owner, repo, 
 	return c.searchPRsPage(ctx, buildQuery(q, filterBots, nil), pageSize, cursor)
 }
 
+// ---- Multi-repo paginated variants (used by "All Repos" mode) ----
+
+// buildRepoScope returns a search qualifier string that scopes the query to the
+// given set of repos. Each entry should be "owner/name". If the list is empty
+// the returned string is empty (which effectively means unscoped).
+func buildRepoScope(repos []string) string {
+	if len(repos) == 0 {
+		return ""
+	}
+	var b string
+	for _, r := range repos {
+		b += fmt.Sprintf(" repo:%s", r)
+	}
+	return b
+}
+
+// GetMyOpenPRsMultiRepoPage returns a single page of open PRs authored by the
+// given user across all the specified repos.
+func (c *Client) GetMyOpenPRsMultiRepoPage(ctx context.Context, repos []string, user string, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := buildQuery(fmt.Sprintf("is:pr author:%s is:open sort:updated-desc%s", user, buildRepoScope(repos)), filterBots, nil)
+	return c.searchPRsPage(ctx, q, pageSize, cursor)
+}
+
+// GetMyRecentMergedPRsMultiRepoPage returns a single page of recently merged
+// PRs across all specified repos.
+func (c *Client) GetMyRecentMergedPRsMultiRepoPage(ctx context.Context, repos []string, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := buildQuery(fmt.Sprintf("is:pr author:%s is:merged merged:>=%s sort:updated-desc%s",
+		user, since.Format("2006-01-02"), buildRepoScope(repos)), filterBots, nil)
+	return c.searchPRsPage(ctx, q, pageSize, cursor)
+}
+
+// GetReviewRequestsMultiRepoPage returns a single page of review requests
+// across all specified repos.
+func (c *Client) GetReviewRequestsMultiRepoPage(ctx context.Context, repos []string, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr review-requested:%s is:open sort:updated-desc%s", user, buildRepoScope(repos))
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, nil), pageSize, cursor)
+}
+
+// GetReviewedByUserMultiRepoPage returns a single page of PRs reviewed by the
+// user across all specified repos.
+func (c *Client) GetReviewedByUserMultiRepoPage(ctx context.Context, repos []string, user string, since time.Time, pageSize int, cursor string, filterBots bool) (*PRPage, error) {
+	q := fmt.Sprintf("is:pr reviewed-by:%s is:open sort:updated-desc%s", user, buildRepoScope(repos))
+	if !since.IsZero() {
+		q += fmt.Sprintf(" updated:>=%s", since.Format("2006-01-02"))
+	}
+	return c.searchPRsPage(ctx, buildQuery(q, filterBots, nil), pageSize, cursor)
+}
+
 // ---- On-demand detail queries (used by PRDetailPage) ----
 
 // checkRunsQuery fetches individual check runs for a PR by node ID.

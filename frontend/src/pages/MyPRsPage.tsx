@@ -8,6 +8,8 @@ import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import {
   GetMyPRsForRepoPage,
   GetMyRecentMergedForRepoPage,
+  GetMyPRsAllReposPage,
+  GetMyRecentMergedAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 type Tab = "open" | "merged";
@@ -15,6 +17,7 @@ type Tab = "open" | "merged";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
+  const isAllRepos = useRepoStore((s) => s.isAllRepos);
 
   const {
     pages,
@@ -37,12 +40,35 @@ export function MyPRsPage() {
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
 
-  // --- Fetch helpers that use the repo-scoped endpoints ---
+  // Whether we have a valid fetch target (either a specific repo or all-repos mode).
+  const canFetch = isAllRepos || (!!owner && !!repo);
+
+  // --- Unified fetch helpers that dispatch to repo-scoped or all-repos endpoints ---
+
+  const fetchOpenRaw = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (isAllRepos) {
+        return GetMyPRsAllReposPage(pageSize, cursor);
+      }
+      return GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
+    },
+    [isAllRepos, owner, repo],
+  );
+
+  const fetchMergedRaw = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (isAllRepos) {
+        return GetMyRecentMergedAllReposPage(14, pageSize, cursor);
+      }
+      return GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
+    },
+    [isAllRepos, owner, repo],
+  );
 
   const fetchOpenPage = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (!owner || !repo) return;
-      const page = await GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
+      if (!canFetch) return;
+      const page = await fetchOpenRaw(pageSize, cursor);
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
       const now = Date.now();
@@ -66,13 +92,13 @@ export function MyPRsPage() {
         lastFetchedAt: { ...s.lastFetchedAt, myPRs: now },
       }));
     },
-    [owner, repo],
+    [canFetch, fetchOpenRaw],
   );
 
   const fetchMergedPage = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (!owner || !repo) return;
-      const page = await GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
+      if (!canFetch) return;
+      const page = await fetchMergedRaw(pageSize, cursor);
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
       const now = Date.now();
@@ -96,11 +122,11 @@ export function MyPRsPage() {
         lastFetchedAt: { ...s.lastFetchedAt, myRecentMerged: now },
       }));
     },
-    [owner, repo],
+    [canFetch, fetchMergedRaw],
   );
 
   const forceRefresh = useCallback(() => {
-    if (!owner || !repo) return;
+    if (!canFetch) return;
     clearError();
     const ps = usePRStore.getState().pages;
     if (activeTab === "open") {
@@ -114,17 +140,17 @@ export function MyPRsPage() {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
       );
     }
-  }, [owner, repo, activeTab, fetchOpenPage, fetchMergedPage, clearError]);
+  }, [canFetch, activeTab, fetchOpenPage, fetchMergedPage, clearError]);
 
   // Open tab pagination
   const handlePageChangeOpen = useCallback(
     (direction: PageDirection) => {
-      if (!owner || !repo) return;
+      if (!canFetch) return;
       const pg = usePRStore.getState().pages.myPRs;
       const nav = resolveNav(pg, direction);
       if (!nav) return;
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
-      GetMyPRsForRepoPage(owner, repo, pg.pageSize, nav.cursor)
+      fetchOpenRaw(pg.pageSize, nav.cursor)
         .then((page) => {
           const prs = page.pullRequests || [];
           usePRStore.setState((s) => ({
@@ -151,29 +177,29 @@ export function MyPRsPage() {
           usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } })),
         );
     },
-    [owner, repo],
+    [canFetch, fetchOpenRaw],
   );
 
   const handlePageSizeChangeOpen = useCallback(
     (size: number) => {
       setPageSize("myPRs", size, () => {
-        if (!owner || !repo) return Promise.resolve();
+        if (!canFetch) return Promise.resolve();
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
         return fetchOpenPage(size, "");
       });
     },
-    [owner, repo, fetchOpenPage, setPageSize],
+    [canFetch, fetchOpenPage, setPageSize],
   );
 
   // Merged tab pagination
   const handlePageChangeMerged = useCallback(
     (direction: PageDirection) => {
-      if (!owner || !repo) return;
+      if (!canFetch) return;
       const pg = usePRStore.getState().pages.myRecentMerged;
       const nav = resolveNav(pg, direction);
       if (!nav) return;
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
-      GetMyRecentMergedForRepoPage(owner, repo, 14, pg.pageSize, nav.cursor)
+      fetchMergedRaw(pg.pageSize, nav.cursor)
         .then((page) => {
           const prs = page.pullRequests || [];
           usePRStore.setState((s) => ({
@@ -200,33 +226,29 @@ export function MyPRsPage() {
           usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
         );
     },
-    [owner, repo],
+    [canFetch, fetchMergedRaw],
   );
 
   const handlePageSizeChangeMerged = useCallback(
     (size: number) => {
       setPageSize("myRecentMerged", size, () => {
-        if (!owner || !repo) return Promise.resolve();
+        if (!canFetch) return Promise.resolve();
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
         return fetchMergedPage(size, "");
       });
     },
-    [owner, repo, fetchMergedPage, setPageSize],
+    [canFetch, fetchMergedPage, setPageSize],
   );
 
   const handleFetchMoreOpen = useCallback(() => {
-    if (!owner || !repo) return;
-    appendNextPage("myPRs", (pageSize, cursor) =>
-      GetMyPRsForRepoPage(owner, repo, pageSize, cursor),
-    );
-  }, [owner, repo, appendNextPage]);
+    if (!canFetch) return;
+    appendNextPage("myPRs", (pageSize, cursor) => fetchOpenRaw(pageSize, cursor));
+  }, [canFetch, fetchOpenRaw, appendNextPage]);
 
   const handleFetchMoreMerged = useCallback(() => {
-    if (!owner || !repo) return;
-    appendNextPage("myRecentMerged", (pageSize, cursor) =>
-      GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor),
-    );
-  }, [owner, repo, appendNextPage]);
+    if (!canFetch) return;
+    appendNextPage("myRecentMerged", (pageSize, cursor) => fetchMergedRaw(pageSize, cursor));
+  }, [canFetch, fetchMergedRaw, appendNextPage]);
 
   const handleTabDirect = useCallback((index: number) => {
     const tabs: Tab[] = ["open", "merged"];
@@ -235,7 +257,7 @@ export function MyPRsPage() {
 
   // Fetch data when repo changes or tab switches
   useEffect(() => {
-    if (!isAuthenticated || !owner || !repo) return;
+    if (!isAuthenticated || !canFetch) return;
     if (activeTab === "open") {
       usePRStore.getState().fetchIfStale("myPRs", async () => {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
@@ -247,7 +269,7 @@ export function MyPRsPage() {
         await fetchMergedPage(usePRStore.getState().pages.myRecentMerged.pageSize, "");
       });
     }
-  }, [isAuthenticated, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
+  }, [isAuthenticated, canFetch, isAllRepos, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
 
   if (!isAuthenticated) {
     return (
@@ -262,7 +284,7 @@ export function MyPRsPage() {
     );
   }
 
-  if (!selectedRepo) {
+  if (!selectedRepo && !isAllRepos) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -282,7 +304,9 @@ export function MyPRsPage() {
           <h2 className="text-2xl font-bold tracking-tight">My Pull Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Pull requests you have authored in{" "}
-            <span className="font-medium text-foreground">{owner}/{repo}</span>.
+            <span className="font-medium text-foreground">
+              {isAllRepos ? "all tracked repos" : `${owner}/${repo}`}
+            </span>.
           </p>
         </div>
         <div className="flex items-center gap-3">

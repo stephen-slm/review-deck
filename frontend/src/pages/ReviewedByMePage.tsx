@@ -6,11 +6,15 @@ import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import { useFlagStore } from "@/stores/flagStore";
-import { GetReviewedByMeForRepoPage } from "../../wailsjs/go/services/PullRequestService";
+import {
+  GetReviewedByMeForRepoPage,
+  GetReviewedByMeAllReposPage,
+} from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewedByMePage() {
   const { isAuthenticated, user } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
+  const isAllRepos = useRepoStore((s) => s.isAllRepos);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
   const {
@@ -28,12 +32,23 @@ export function ReviewedByMePage() {
 
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
+  const canFetch = isAllRepos || (!!owner && !!repo);
 
-  // --- Fetch helper ---
+  // --- Unified fetch helper ---
+  const fetchRaw = useCallback(
+    async (pageSize: number, cursor: string) => {
+      if (isAllRepos) {
+        return GetReviewedByMeAllReposPage(pageSize, cursor);
+      }
+      return GetReviewedByMeForRepoPage(owner, repo, pageSize, cursor);
+    },
+    [isAllRepos, owner, repo],
+  );
+
   const fetchPage = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (!owner || !repo) return;
-      const page = await GetReviewedByMeForRepoPage(owner, repo, pageSize, cursor);
+      if (!canFetch) return;
+      const page = await fetchRaw(pageSize, cursor);
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
       const now = Date.now();
@@ -57,26 +72,26 @@ export function ReviewedByMePage() {
         lastFetchedAt: { ...s.lastFetchedAt, reviewedByMe: now },
       }));
     },
-    [owner, repo],
+    [canFetch, fetchRaw],
   );
 
   const forceRefresh = useCallback(() => {
-    if (!owner || !repo) return;
+    if (!canFetch) return;
     clearError();
     usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true } }));
     fetchPage(usePRStore.getState().pages.reviewedByMe.pageSize, "").catch(() =>
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false } })),
     );
-  }, [owner, repo, fetchPage, clearError]);
+  }, [canFetch, fetchPage, clearError]);
 
   const handlePageChange = useCallback(
     (direction: PageDirection) => {
-      if (!owner || !repo) return;
+      if (!canFetch) return;
       const pgState = usePRStore.getState().pages.reviewedByMe;
       const nav = resolveNav(pgState, direction);
       if (!nav) return;
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true } }));
-      GetReviewedByMeForRepoPage(owner, repo, pgState.pageSize, nav.cursor)
+      fetchRaw(pgState.pageSize, nav.cursor)
         .then((page) => {
           const prs = page.pullRequests || [];
           usePRStore.setState((s) => ({
@@ -103,26 +118,24 @@ export function ReviewedByMePage() {
           usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false } })),
         );
     },
-    [owner, repo],
+    [canFetch, fetchRaw],
   );
 
   const handlePageSizeChange = useCallback(
     (size: number) => {
       setPageSize("reviewedByMe", size, () => {
-        if (!owner || !repo) return Promise.resolve();
+        if (!canFetch) return Promise.resolve();
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true } }));
         return fetchPage(size, "");
       });
     },
-    [owner, repo, fetchPage, setPageSize],
+    [canFetch, fetchPage, setPageSize],
   );
 
   const handleFetchMore = useCallback(() => {
-    if (!owner || !repo) return;
-    appendNextPage("reviewedByMe", (pageSize, cursor) =>
-      GetReviewedByMeForRepoPage(owner, repo, pageSize, cursor),
-    );
-  }, [owner, repo, appendNextPage]);
+    if (!canFetch) return;
+    appendNextPage("reviewedByMe", (pageSize, cursor) => fetchRaw(pageSize, cursor));
+  }, [canFetch, fetchRaw, appendNextPage]);
 
   // Filter out the viewer's own PRs — this page is for PRs authored by others.
   const viewerLogin = user?.login;
@@ -140,12 +153,12 @@ export function ReviewedByMePage() {
 
   // Fetch data when repo changes
   useEffect(() => {
-    if (!isAuthenticated || !owner || !repo) return;
+    if (!isAuthenticated || !canFetch) return;
     usePRStore.getState().fetchIfStale("reviewedByMe", async () => {
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true } }));
       await fetchPage(usePRStore.getState().pages.reviewedByMe.pageSize, "");
     });
-  }, [isAuthenticated, owner, repo, fetchPage]);
+  }, [isAuthenticated, canFetch, isAllRepos, owner, repo, fetchPage]);
 
   if (!isAuthenticated) {
     return (
@@ -160,7 +173,7 @@ export function ReviewedByMePage() {
     );
   }
 
-  if (!selectedRepo) {
+  if (!selectedRepo && !isAllRepos) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -180,7 +193,9 @@ export function ReviewedByMePage() {
           <h2 className="text-2xl font-bold tracking-tight">Reviewed by Me</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Open pull requests you have reviewed in{" "}
-            <span className="font-medium text-foreground">{owner}/{repo}</span>.
+            <span className="font-medium text-foreground">
+              {isAllRepos ? "all tracked repos" : `${owner}/${repo}`}
+            </span>.
           </p>
         </div>
         <div className="flex items-center gap-3">

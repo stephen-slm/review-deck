@@ -31,6 +31,7 @@ function AppContent() {
 
   const repos = useRepoStore((s) => s.repos);
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
+  const isAllRepos = useRepoStore((s) => s.isAllRepos);
 
   // Hydrate persisted settings and cache timestamps on startup.
   useEffect(() => {
@@ -45,16 +46,17 @@ function AppContent() {
   }, []);
 
   // Reload repo-scoped settings whenever the selected repo changes.
+  // In "All Repos" mode, load global (unscoped) settings.
   useEffect(() => {
     const repoId = selectedRepo
       ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
       : "";
     useSettingsStore.getState().loadRepoSettings(repoId);
     useFlagStore.getState().loadRules(repoId);
-  }, [selectedRepo?.repoOwner, selectedRepo?.repoName]);
+  }, [selectedRepo?.repoOwner, selectedRepo?.repoName, isAllRepos]);
 
-  // Show onboarding if no repos are tracked yet.
-  const showOnboarding = repos.length === 0 || !selectedRepo;
+  // Show onboarding if no repos are tracked yet (but not in all-repos mode with repos).
+  const showOnboarding = repos.length === 0 || (!selectedRepo && !isAllRepos);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">

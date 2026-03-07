@@ -103,9 +103,10 @@ export function usePollerEvents() {
       // The poller fetches data for ALL tracked repos, but the frontend is
       // repo-scoped. Filter to only keep PRs matching the currently selected
       // repo so we don't overwrite the view with data from other repos.
-      const selected = useRepoStore.getState().selectedRepo;
+      // In "All Repos" mode, skip filtering so all data comes through.
+      const { selectedRepo: selected, isAllRepos } = useRepoStore.getState();
       const filterForRepo = (prs: github.PullRequest[]): github.PullRequest[] => {
-        if (!selected) return prs;
+        if (isAllRepos || !selected) return prs;
         return prs.filter(
           (pr) => pr.repoOwner === selected.repoOwner && pr.repoName === selected.repoName,
         );

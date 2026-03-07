@@ -219,6 +219,95 @@ func (s *PullRequestService) GetReviewedByMeForRepoPage(owner, repo string, page
 	return page, nil
 }
 
+// ---- Multi-repo paginated methods (used by the "All Repos" frontend mode) ----
+
+// trackedRepoSlugs returns all enabled tracked repos as "owner/name" strings.
+func (s *PullRequestService) trackedRepoSlugs() ([]string, error) {
+	repos, err := s.db.GetTrackedRepos()
+	if err != nil {
+		return nil, fmt.Errorf("get tracked repos: %w", err)
+	}
+	slugs := make([]string, len(repos))
+	for i, r := range repos {
+		slugs[i] = fmt.Sprintf("%s/%s", r.RepoOwner, r.RepoName)
+	}
+	return slugs, nil
+}
+
+// GetMyPRsAllReposPage returns a single page of open PRs across all tracked repos.
+func (s *PullRequestService) GetMyPRsAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	repos, err := s.trackedRepoSlugs()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetMyOpenPRsMultiRepoPage(context.Background(), repos, login, pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch my PRs (all repos): %w", err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetMyRecentMergedAllReposPage returns a single page of recently merged PRs across all tracked repos.
+func (s *PullRequestService) GetMyRecentMergedAllReposPage(daysBack int, pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	repos, err := s.trackedRepoSlugs()
+	if err != nil {
+		return nil, err
+	}
+	since := time.Now().AddDate(0, 0, -daysBack)
+	page, err := s.client.GetMyRecentMergedPRsMultiRepoPage(context.Background(), repos, login, since, pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch merged PRs (all repos): %w", err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetReviewRequestsAllReposPage returns a single page of review requests across all tracked repos.
+func (s *PullRequestService) GetReviewRequestsAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	repos, err := s.trackedRepoSlugs()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetReviewRequestsMultiRepoPage(context.Background(), repos, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch review requests (all repos): %w", err)
+	}
+	s.filterDisabledTeamPRs(page, login)
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
+// GetReviewedByMeAllReposPage returns a single page of PRs reviewed by the user across all tracked repos.
+func (s *PullRequestService) GetReviewedByMeAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	login, err := s.getViewerLogin()
+	if err != nil {
+		return nil, err
+	}
+	repos, err := s.trackedRepoSlugs()
+	if err != nil {
+		return nil, err
+	}
+	page, err := s.client.GetReviewedByUserMultiRepoPage(context.Background(), repos, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	if err != nil {
+		return nil, fmt.Errorf("fetch reviewed PRs (all repos): %w", err)
+	}
+	_ = s.db.UpsertPullRequests(page.PullRequests)
+	return page, nil
+}
+
 // ---- Legacy fetch-all methods (kept for poller compatibility) ----
 
 // GetMyPRs fetches ALL open PRs authored by the current user (used by poller).
