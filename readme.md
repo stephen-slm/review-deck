@@ -6,52 +6,98 @@ A native macOS desktop app for managing GitHub pull requests across your reposit
 
 ### Pull Request Views
 
+- **Dashboard** — overview with stat cards and PR lists across all categories
 - **My PRs** — your open pull requests and recently merged PRs, with tab switching (`1`/`2`)
 - **Review Requests** — PRs awaiting your review (personal and team), with priority sorting and flagged PR highlighting
 - **Reviewed By Me** — PRs you have already reviewed, with "hide approved by me" filter (`f`)
 - **Flagged PRs** — aggregated view of PRs matching your configurable flag rules
 - **PR Detail** — full view with description, unified file diffs, CI checks, comments/review threads, commits, AI review, and a reviewers sidebar
 
+### All Repos Mode
+
+View PRs across all tracked repositories at once, instead of one repo at a time:
+
+- Select "All Repos" from the sidebar repo dropdown or Command Palette (`Cmd+0`)
+- All PR list pages fetch across every tracked repo simultaneously
+- Persisted between sessions — your last selection is restored on startup
+
+### Command Palette
+
+Press `Cmd+K` to open the Command Palette. It provides fuzzy-searchable access to:
+
+- **Navigation** — jump to any page (`Cmd+1`-`5`), go back
+- **Repository switching** — enter repo picker sub-mode (`Cmd+0`), select All Repos or a specific repo, add new repos
+- **Actions** — refresh, focus search, copy PR, show shortcuts, force refresh all data, sign out
+- **Filters** — toggle drafts (`t`), stacked PRs (`s`), approved-by-me (`f`), hide/unhide PRs (`x`)
+- **PR actions** (on detail page) — open in GitHub, approve, request changes, merge, assign reviewer/label, mark ready for review
+- **Workspace** (on detail page with local repo) — checkout branch, open terminal
+- **AI** (on detail page) — generate title (`H`), description (`D`), review (`E`)
+- **Theme** — switch between Light, Dark, and System themes
+- **PR search** — type to search across all loaded PRs by number, title, author, branch, repo, and labels
+
 ### Keyboard-First Navigation
 
 Vim-style keybindings throughout the app. Press `?` to see all available shortcuts for the current page.
 
+**Global**
+
 | Key | Action |
 |-----|--------|
-| `j`/`k` | Navigate rows / scroll |
-| `Enter` / `l` | Open selected PR |
-| `o` | Open in GitHub |
+| `Cmd+K` | Command Palette |
+| `Cmd+0` | Switch repository |
+| `Cmd+1`-`5` | Switch sidebar tabs |
+| `?` | Show keyboard shortcuts |
 | `Shift+J`/`K` | Smooth scroll page |
-| `Cmd+1-5` | Switch sidebar tabs |
-| `1-6` | Switch in-page tabs (PR detail) |
-| `Space` | Toggle pick / expand file |
-| `v` | Visual select mode |
-| `c` | Copy selected PRs |
+| `Backspace` | Go back |
+
+**List Navigation**
+
+| Key | Action |
+|-----|--------|
+| `j`/`k` | Navigate rows |
+| `Enter`/`l` | Open selected PR |
+| `o` | Open in GitHub |
+| `gg`/`G` | Jump to top / bottom |
+| `n`/`N` | Next / previous page |
 | `/` | Focus search |
 | `R` | Refresh |
-| `gg` / `G` | Jump to top / bottom of list |
-| `D` | Generate AI description |
-| `H` | Generate AI title |
-| `E` | Generate AI review |
-| `A` | Approve PR |
-| `m` | Squash and merge PR |
-| `d` | Request changes |
-| `a` | Assign reviewer |
-| `r`/`u` | Resolve / unresolve review thread |
+| `v` | Visual select mode |
+| `Space` | Toggle pick |
+| `c` | Copy selected PRs |
+
+**Filters**
+
+| Key | Action |
+|-----|--------|
 | `t` | Toggle draft PR visibility |
 | `s` | Toggle stacked PR visibility |
 | `f` | Toggle "approved by me" filter |
 | `x` | Hide review request |
-| `n`/`N` | Next / previous page |
-| `?` | Show keyboard shortcuts |
+
+**PR Detail**
+
+| Key | Action |
+|-----|--------|
+| `1`-`6` | Switch tabs (Description, Checks, Comments, Files, Commits, AI Review) |
+| `h`/`l` | Previous / next tab |
+| `A` | Approve PR |
+| `d` | Request changes |
+| `m` | Squash and merge PR |
+| `a` | Assign reviewer |
+| `b` | Assign label |
+| `r`/`u` | Resolve / unresolve review thread |
+| `Space` | Expand/collapse file |
+| `D` | Generate AI description |
+| `H` | Generate AI title |
+| `E` | Generate AI review |
 
 ### AI Integration
 
 Powered by the [Claude CLI](https://docs.anthropic.com/en/docs/claude-cli) and [GitHub CLI](https://cli.github.com/):
 
 - **AI Code Review** (`E`) — generates a detailed code review of the PR diff using Claude
-- **AI Description** (`G`) — generates a PR description from the diff and commits, with one-click apply to GitHub
-- **AI Title** (`H`) — generates a concise PR title, with one-click apply to GitHub
+- **AI Description** (`D`) — generates a PR description from the diff and commits, with one-click apply to GitHub
+- **AI Title** (`H`) — generates a concise PR title, with one-click apply to GitHub. Auto-prepends ticket prefix from branch name (e.g. `JIRA-123`)
 - Generated title/description action buttons (Regenerate, Discard, Apply) are navigable via `j`/`k` and `Enter`
 - Configurable prompts and cost limits in Global Settings
 - Review results are cached locally with a 7-day TTL
@@ -74,7 +120,7 @@ Configure rules in Settings to flag PRs that need extra attention:
 - Hide PRs you've already approved on Reviewed By Me (`f`)
 - Hide individual review requests (`x`)
 - Filter out bot PRs (Dependabot, Renovate, GitHub Actions, Snyk)
-- Filter out Copilot review comments and review threads
+- Filter out specific users' comments and reviews (configurable per-repo)
 - Exclude specific repositories per org
 - Review max age setting — limit review queries to PRs updated within N days (default 7, range 1-90)
 - Auto-fills table by fetching additional pages when filters reduce visible rows
@@ -83,13 +129,21 @@ Configure rules in Settings to flag PRs that need extra attention:
 
 - Configurable poll interval (1-60 minutes)
 - Desktop notifications for new review requests, approvals, CI status changes, and merged PRs
-- Local SQLite cache for fast startup
+- Local SQLite cache with automatic pruning of stale records (30-day TTL)
 
-### Per-Repository Settings
+### Settings
 
-- All settings (filters, flag rules, teams, priorities) are scoped per repository
-- Switching repos applies independent configuration
-- Global defaults are materialized into per-repo keys on first access
+**Per-Repository** (Settings page, 3 tabs):
+
+- **Filters** — bot filtering, draft/stacked visibility, filtered comment users, filtered review users, label sync
+- **Teams & Priority** — enable/disable teams for review request views, priority reviewers for triage ordering
+- **Flag Rules** — keyword and size-based flag rules
+
+**Global** (Global Settings page, 3 tabs):
+
+- **General** — GitHub authentication, theme picker, tracked repositories management
+- **AI** — custom prompts and cost limits for AI review, description, and title generation
+- **Advanced** — cache expiry (1-60 min), poll interval (1-60 min), PR detail refresh interval (10-300 sec)
 
 ### Table Features
 
@@ -101,7 +155,7 @@ Configure rules in Settings to flag PRs that need extra attention:
 
 ### Themes
 
-- System, Dark, Nord, Light
+- System (follows OS preference), Dark, Light
 
 ## Requirements
 
@@ -144,47 +198,105 @@ review-deck/
 │   ├── github/
 │   │   ├── client.go                # GraphQL + REST client
 │   │   ├── models.go                # Data types (PR, CheckRun, Review, etc.)
-│   │   ├── queries.go               # GraphQL search queries
-│   │   ├── mutations.go             # GraphQL mutations (merge, approve)
+│   │   ├── queries.go               # GraphQL search queries (paginated, all, multi-repo)
+│   │   ├── mutations.go             # GraphQL mutations (merge, approve, labels)
 │   │   ├── auth.go                  # Viewer info, org members, teams
 │   │   ├── files.go                 # REST API for file diffs
 │   │   └── ratelimit.go             # Rate limit queries
 │   ├── services/
 │   │   ├── auth.go                  # PAT authentication + token storage
-│   │   ├── pullrequest.go           # PR fetching, actions, pagination
-│   │   ├── settings.go              # Settings CRUD
+│   │   ├── pullrequest.go           # PR fetching, actions, pagination (repo/org/all-repos)
+│   │   ├── poller.go                # Background polling + desktop notifications
 │   │   ├── repo.go                  # Tracked repository management
 │   │   ├── workspace.go             # AI review/description/title, PR checkout, terminal
-│   │   └── poller.go                # Background polling + desktop notifications
-│   ├── storage/                     # SQLite persistence (11 migrations)
-│   ├── gitutil/                     # Git helpers (remotes, checkout, branch, terminal)
-│   └── config/                      # App data directory helpers
+│   │   ├── settings.go              # Settings CRUD
+│   │   └── settings_helpers.go      # Shared helpers (bot filter, review age, excluded repos)
+│   ├── storage/
+│   │   ├── db.go                    # SQLite init + connection
+│   │   ├── migrations.go            # Schema migrations (12 migrations)
+│   │   ├── settings.go              # Settings CRUD
+│   │   ├── repos.go                 # Tracked repos CRUD
+│   │   ├── pullrequests.go          # PR storage + pruning
+│   │   ├── reviews.go               # Review storage
+│   │   ├── labels.go                # Label storage
+│   │   ├── teams.go                 # Team storage
+│   │   ├── priorities.go            # Priority reviewer storage
+│   │   ├── org_members.go           # Org members cache
+│   │   ├── excluded_repos.go        # Excluded repos storage
+│   │   ├── metrics.go               # Metrics snapshots
+│   │   └── ai_reviews.go            # AI review cache (7-day TTL)
+│   ├── gitutil/
+│   │   ├── remote.go                # Git remote URL parsing
+│   │   ├── checkout.go              # Branch checkout
+│   │   └── terminal.go              # Terminal launcher
+│   └── config/
+│       └── config.go                # App data directory helpers
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx                  # Routes, startup hydration
-│   │   ├── pages/                   # Route pages
+│   │   ├── App.tsx                  # Routes, startup hydration, onboarding guard
+│   │   ├── pages/
+│   │   │   ├── DashboardPage.tsx    # Overview dashboard with stat cards
 │   │   │   ├── OnboardingPage.tsx   # PAT login + repo setup
 │   │   │   ├── MyPRsPage.tsx        # Open / recently merged tabs
 │   │   │   ├── ReviewRequestsPage.tsx
 │   │   │   ├── ReviewedByMePage.tsx
 │   │   │   ├── FlaggedPRsPage.tsx
 │   │   │   ├── PRDetailPage.tsx     # Full PR detail with 6 tabs
-│   │   │   ├── SettingsPage.tsx     # Per-repo settings
-│   │   │   └── GlobalSettingsPage.tsx
+│   │   │   ├── SettingsPage.tsx     # Per-repo settings (3 tabs)
+│   │   │   └── GlobalSettingsPage.tsx  # App-wide settings (3 tabs)
 │   │   ├── components/
-│   │   │   ├── layout/              # Sidebar, ShortcutHintBar
-│   │   │   ├── pr/                  # PRTable, DiffView, badges, ReviewerAssign
-│   │   │   └── ui/                  # Toast, LastRefreshed
-│   │   ├── stores/                  # Zustand stores
+│   │   │   ├── layout/
+│   │   │   │   ├── Sidebar.tsx      # Navigation sidebar with repo dropdown
+│   │   │   │   ├── CommandPalette.tsx  # Cmd+K command palette
+│   │   │   │   └── ShortcutHintBar.tsx  # Keyboard shortcut overlay
+│   │   │   ├── pr/
+│   │   │   │   ├── PRTable.tsx      # Reusable PR list table
+│   │   │   │   ├── DiffView.tsx     # Unified file diff viewer
+│   │   │   │   ├── StateBadge.tsx   # PR state badge
+│   │   │   │   ├── ReviewStatusBadge.tsx
+│   │   │   │   ├── ReviewStateBadge.tsx
+│   │   │   │   ├── ChecksStatusIcon.tsx
+│   │   │   │   ├── PRSizeBadge.tsx
+│   │   │   │   ├── LabelBadge.tsx
+│   │   │   │   ├── MergeButton.tsx
+│   │   │   │   ├── ReviewerAssign.tsx
+│   │   │   │   ├── LabelAssign.tsx
+│   │   │   │   └── detail/         # PR detail sub-components
+│   │   │   │       ├── ChecksTab.tsx
+│   │   │   │       ├── CommentsTab.tsx
+│   │   │   │       ├── AIReviewPanel.tsx
+│   │   │   │       ├── ReviewersSidebar.tsx
+│   │   │   │       ├── SidebarSection.tsx
+│   │   │   │       ├── DetailMergeButton.tsx
+│   │   │   │       ├── DetailApproveButton.tsx
+│   │   │   │       ├── DetailRequestChangesButton.tsx
+│   │   │   │       └── DetailReadyForReviewButton.tsx
+│   │   │   ├── ui/
+│   │   │   │   ├── Toast.tsx
+│   │   │   │   └── LastRefreshed.tsx
+│   │   │   └── ErrorBoundary.tsx
+│   │   ├── stores/
 │   │   │   ├── authStore.ts         # Authentication state
-│   │   │   ├── prStore.ts           # PR data + pagination
-│   │   │   ├── settingsStore.ts     # Filters, teams, priorities, excluded repos
-│   │   │   ├── repoStore.ts         # Tracked repos + selection
+│   │   │   ├── prStore.ts           # PR data + pagination + actions
+│   │   │   ├── repoStore.ts         # Tracked repos, All Repos mode
+│   │   │   ├── settingsStore.ts     # Filters, teams, priorities, AI prompts, theme
 │   │   │   ├── flagStore.ts         # Flag rules (keyword, size)
-│   │   │   └── vimStore.ts          # Vim navigation state
-│   │   ├── hooks/                   # useVimNavigation, usePollerEvents, useWindowFocus
-│   │   ├── theme/                   # Theme provider + token definitions
-│   │   └── lib/                     # Clipboard formatting, utilities
+│   │   │   └── vimStore.ts          # Vim navigation state + command palette
+│   │   ├── hooks/
+│   │   │   ├── useVimNavigation.ts  # Global tinykeys keyboard bindings
+│   │   │   ├── usePollerEvents.ts   # Wails event listener for poller updates
+│   │   │   ├── useFindPR.ts         # Find PR by nodeId across store categories
+│   │   │   └── useWindowFocus.ts    # Window focus/blur detection
+│   │   ├── theme/
+│   │   │   ├── tokens.ts            # ThemeTokens interface + ThemeDefinition type
+│   │   │   ├── light.ts             # Light theme values
+│   │   │   ├── dark.ts              # Dark theme values
+│   │   │   ├── index.ts             # Theme registry + CSS variable application
+│   │   │   └── ThemeProvider.tsx     # React context + system preference detection
+│   │   └── lib/
+│   │       ├── utils.ts             # cn(), timeAgo(), hexLuminance()
+│   │       ├── clipboard.ts         # PR copy formatting
+│   │       └── markdownComponents.tsx  # Custom ReactMarkdown renderers
 │   └── wailsjs/                     # Auto-generated Wails TypeScript bindings
 └── build/
     └── darwin/                      # macOS app bundle config (Info.plist)
