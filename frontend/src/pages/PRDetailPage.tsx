@@ -115,8 +115,12 @@ export function PRDetailPage() {
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsError, setCommitsError] = useState<string | null>(null);
 
-  // Reactive vim selectedIndex — used by inline commit list rendering.
-  const vimSelectedIndex = useVimStore((s) => s.selectedIndex);
+  // Reactive vim selectedIndex — only needed for commit list rendering.
+  // Subscribe via a narrow selector so changes only trigger a re-render
+  // when we're on the commits tab and the value actually changes.
+  const vimSelectedIndex = useVimStore((s) =>
+    activeTab === "commits" ? s.selectedIndex : -1,
+  );
   const commitListRef = useRef<HTMLUListElement>(null);
 
   // Workspace: tool availability, checkout state, current branch, Claude review
@@ -418,15 +422,20 @@ export function PRDetailPage() {
       .finally(() => setCommentsLoading(false));
   }, [activeTab, comments, commentsLoading, nodeId]);
 
-  // Fetch files when the files tab is first selected
+  // Fetch files when the files tab is first selected.
+  // Use primitive deps (owner/repo/number) instead of the `pr` object to
+  // avoid re-firing when the object reference changes but the data is identical.
+  const prOwner = pr?.repoOwner;
+  const prRepo = pr?.repoName;
+  const prNumber = pr?.number;
   useEffect(() => {
-    if (activeTab !== "files" || prFiles !== null || filesLoading || !pr) return;
+    if (activeTab !== "files" || prFiles !== null || filesLoading || !prOwner || !prRepo || !prNumber) return;
     setFilesLoading(true);
-    GetPRFiles(pr.repoOwner, pr.repoName, pr.number)
+    GetPRFiles(prOwner, prRepo, prNumber)
       .then(setPRFiles)
       .catch((err) => setFilesError(String(err)))
       .finally(() => setFilesLoading(false));
-  }, [activeTab, prFiles, filesLoading, pr]);
+  }, [activeTab, prFiles, filesLoading, prOwner, prRepo, prNumber]);
 
   // Fetch commits when the commits tab is first selected
   useEffect(() => {
@@ -507,32 +516,32 @@ export function PRDetailPage() {
 
   // Reset selection when the active tab changes.
   useEffect(() => {
-    useVimStore.getState().setSelectedIndex(-1);
+    const vs = useVimStore.getState();
+    if (vs.selectedIndex !== -1) vs.setSelectedIndex(-1);
   }, [activeTab]);
 
   // Update list length based on active tab and loaded data.
   useEffect(() => {
+    const vs = useVimStore.getState();
+    let len = 0;
+    let idx: number | undefined;
     if (activeTab === "checks") {
-      useVimStore.getState().setListLength(checkRuns?.length ?? 0);
+      len = checkRuns?.length ?? 0;
     } else if (activeTab === "comments") {
       const ic = comments?.issueComments?.length ?? 0;
       const rt = comments?.reviewThreads?.length ?? 0;
-      useVimStore.getState().setListLength(ic + rt);
+      len = ic + rt;
     } else if (activeTab === "files") {
-      useVimStore.getState().setListLength(prFiles?.length ?? 0);
+      len = prFiles?.length ?? 0;
     } else if (activeTab === "commits") {
-      useVimStore.getState().setListLength(commits?.length ?? 0);
-    } else if (activeTab === "ai-review") {
+      len = commits?.length ?? 0;
+    } else if (activeTab === "ai-review" || activeTab === "description") {
       // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
-      useVimStore.getState().setListLength(1);
-      useVimStore.getState().setSelectedIndex(0);
-    } else if (activeTab === "description") {
-      // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
-      useVimStore.getState().setListLength(1);
-      useVimStore.getState().setSelectedIndex(0);
-    } else {
-      useVimStore.getState().setListLength(0);
+      len = 1;
+      idx = 0;
     }
+    if (vs.listLength !== len) vs.setListLength(len);
+    if (idx !== undefined && vs.selectedIndex !== idx) vs.setSelectedIndex(idx);
   }, [activeTab, checkRuns, comments, commits, prFiles]);
 
   // Auto-scroll the selected commit into view.
