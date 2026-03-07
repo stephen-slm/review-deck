@@ -124,6 +124,18 @@ func (db *DB) GetPullRequests(authorLogin string, state string) ([]gh.PullReques
 	return prs, rows.Err()
 }
 
+// PruneStalePullRequests deletes pull requests that haven't been synced in the
+// given duration. This prevents the database from growing unbounded with
+// closed/merged PRs or PRs from repos that are no longer tracked.
+// Returns the number of rows deleted.
+func (db *DB) PruneStalePullRequests(olderThan time.Time) (int64, error) {
+	res, err := db.conn.Exec("DELETE FROM pull_requests WHERE last_synced_at < ?", olderThan.UTC())
+	if err != nil {
+		return 0, fmt.Errorf("prune stale pull requests: %w", err)
+	}
+	return res.RowsAffected()
+}
+
 // GetPullRequestJSON returns a pull request with all relations as JSON bytes.
 func (db *DB) GetPullRequestJSON(nodeID string) ([]byte, error) {
 	prs, err := db.GetPullRequests("", "")

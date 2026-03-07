@@ -58,6 +58,8 @@ export function GetReviewedByMePage(arg1:string,arg2:number,arg3:string):Promise
 
 export function GetSinglePR(arg1:string,arg2:string,arg3:number):Promise<github.PullRequest>;
 
+export function GetSinglePRByNodeID(arg1:string):Promise<github.PullRequest>;
+
 export function GetTeamReviewRequests(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
 
 export function GetTeamReviewRequestsPage(arg1:string,arg2:string,arg3:number,arg4:string):Promise<github.PRPage>;

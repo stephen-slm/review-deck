@@ -593,6 +593,21 @@ func (s *PullRequestService) GetSinglePR(owner, repoName string, number int) (*g
 	return pr, nil
 }
 
+// GetSinglePRByNodeID fetches a single pull request by its GraphQL node ID.
+// This is used by the PR detail page when the PR is not in the store (e.g. in
+// "All Repos" mode where the store was reset).
+func (s *PullRequestService) GetSinglePRByNodeID(nodeID string) (*gh.PullRequest, error) {
+	if s.client == nil {
+		return nil, fmt.Errorf("not authenticated")
+	}
+	pr, err := s.client.GetSinglePRByNodeID(context.Background(), nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("fetch single PR by node ID: %w", err)
+	}
+	_ = s.db.UpsertPullRequests([]gh.PullRequest{*pr})
+	return pr, nil
+}
+
 // GetPRCheckRuns fetches individual CI check runs for a specific PR.
 func (s *PullRequestService) GetPRCheckRuns(nodeID string) ([]gh.CheckRun, error) {
 	if s.client == nil {

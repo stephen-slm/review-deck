@@ -110,6 +110,10 @@ export function GetSinglePR(arg1, arg2, arg3) {
   return window['go']['services']['PullRequestService']['GetSinglePR'](arg1, arg2, arg3);
 }
 
+export function GetSinglePRByNodeID(arg1) {
+  return window['go']['services']['PullRequestService']['GetSinglePRByNodeID'](arg1);
+}
+
 export function GetTeamReviewRequests(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetTeamReviewRequests'](arg1, arg2);
 }

@@ -609,6 +609,28 @@ func (c *Client) GetSinglePR(ctx context.Context, owner, repoName string, number
 	return &result, nil
 }
 
+// singlePRByNodeIDQuery fetches a single PR by its GraphQL node ID.
+type singlePRByNodeIDQuery struct {
+	Node struct {
+		PullRequest prFields `graphql:"... on PullRequest"`
+	} `graphql:"node(id: $id)"`
+}
+
+// GetSinglePRByNodeID fetches a single pull request by its GraphQL node ID.
+func (c *Client) GetSinglePRByNodeID(ctx context.Context, nodeID string) (*PullRequest, error) {
+	variables := map[string]interface{}{
+		"id": githubv4.ID(nodeID),
+	}
+
+	var q singlePRByNodeIDQuery
+	if err := c.graphql.Query(ctx, &q, variables); err != nil {
+		return nil, fmt.Errorf("github graphql single PR by node ID: %w", err)
+	}
+
+	result := convertPRFields(q.Node.PullRequest)
+	return &result, nil
+}
+
 // GetPRComments fetches all comments and review threads for a pull request.
 func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments, error) {
 	variables := map[string]interface{}{

@@ -27,8 +27,6 @@ const DEFAULT_PAGE_SIZE = 25;
 
 export type CacheKey = "myPRs" | "myRecentMerged" | "reviewRequests" | "teamReviewRequests" | "reviewedByMe";
 
-const CACHE_KEYS: CacheKey[] = ["myPRs", "myRecentMerged", "reviewRequests", "teamReviewRequests", "reviewedByMe"];
-
 /** Persist a cache timestamp to the settings DB (fire-and-forget). */
 function persistCacheTs(key: CacheKey, ts: number): void {
   SetSetting(`cache_ts:${key}`, String(ts)).catch(() => {});
@@ -551,23 +549,15 @@ export const usePRStore = create<PRState>((set, get) => ({
   },
 
   loadCacheTimestamps: async () => {
-    const timestamps: Partial<Record<CacheKey, number>> = {};
-    await Promise.all(
-      CACHE_KEYS.map(async (key) => {
-        try {
-          const val = await GetSetting(`cache_ts:${key}`);
-          const ts = parseInt(val, 10);
-          if (!isNaN(ts) && ts > 0) {
-            timestamps[key] = ts;
-          }
-        } catch {
-          // Setting doesn't exist yet — leave at 0 (will trigger fetch).
-        }
-      }),
-    );
-    set((s) => ({
-      lastFetchedAt: { ...s.lastFetchedAt, ...timestamps },
-    }));
+    // Intentionally a no-op. Previously this restored persisted timestamps,
+    // but the actual PR data is NOT persisted across restarts (the Zustand
+    // store initializes with empty pages). Restoring timestamps without data
+    // caused fetchIfStale to consider empty pages "fresh", leaving users
+    // staring at blank tables until the cache TTL expired.
+    //
+    // With timestamps starting at 0, the first fetchIfStale call on each page
+    // correctly triggers a fetch. The poller and manual refreshes then keep
+    // lastFetchedAt up-to-date for the remainder of the session.
   },
 
   appendNextPage: async (key, fetcher) => {
@@ -614,7 +604,7 @@ export const usePRStore = create<PRState>((set, get) => ({
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),
   clearError: () => set({ error: null }),
 
-  resetPages: () =>
+  resetPages: () => {
     set({
       pages: {
         myPRs: emptyPagination(get().pages.myPRs.pageSize),
@@ -625,7 +615,12 @@ export const usePRStore = create<PRState>((set, get) => ({
       },
       lastFetchedAt: { ...defaultLastFetched },
       error: null,
-    }),
+    });
+    // Persist zeroed timestamps so a crash/restart doesn't restore stale values.
+    for (const key of Object.keys(defaultLastFetched)) {
+      persistCacheTs(key as CacheKey, 0);
+    }
+  },
 
   // ---- Hidden PRs (persisted as JSON array of nodeIds) ----
 

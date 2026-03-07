@@ -109,12 +109,13 @@ export const useRepoStore = create<RepoState>((set, get) => ({
 
   selectRepo: (id: number) => {
     const prev = get().selectedRepoId;
+    const wasAllRepos = get().isAllRepos;
     const repo = get().repos.find((r) => r.id === id) ?? null;
     set({ selectedRepoId: id, selectedRepo: repo, isAllRepos: false });
     SetSetting("selected_repo_id", String(id)).catch(() => {});
-    // When the repo actually changes, clear all cached PR pages so pages
-    // re-fetch for the new repo instead of showing stale data.
-    if (prev !== id || get().isAllRepos) {
+    // When the repo actually changes (or switching from all-repos mode),
+    // clear all cached PR pages so pages re-fetch for the new repo.
+    if (prev !== id || wasAllRepos) {
       usePRStore.getState().resetPages();
     }
   },

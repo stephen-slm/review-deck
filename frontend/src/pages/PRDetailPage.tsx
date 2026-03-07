@@ -26,7 +26,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
 import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
@@ -449,14 +449,23 @@ export function PRDetailPage() {
   const refreshingRef = useRef(false);
 
   /** Refresh the PR by re-fetching from GitHub. */
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    // If we already know owner/repo/number (from a previous fetch or store),
+    // use the fast path. Otherwise fall back to fetching by node ID.
     const info = prRef.current;
-    if (!info || refreshingRef.current) return;
     refreshingRef.current = true;
     setRefreshing(true);
     setRefreshError(null);
     try {
-      const fresh = await GetSinglePR(info.owner, info.repo, info.number);
+      let fresh: github.PullRequest;
+      if (info) {
+        fresh = await GetSinglePR(info.owner, info.repo, info.number);
+      } else if (nodeId) {
+        fresh = await GetSinglePRByNodeID(nodeId);
+      } else {
+        return;
+      }
       setFetchedPR(fresh);
       // Also reset lazy-loaded tab data so they re-fetch on next view.
       setCheckRuns(null);
@@ -473,14 +482,16 @@ export function PRDetailPage() {
       refreshingRef.current = false;
       setRefreshing(false);
     }
-  };
+  }, [nodeId]);
 
-  // Auto-fetch fresh PR data on mount (the store copy may be stale).
+  // Auto-fetch fresh PR data on mount. Always fetch — the store copy may be
+  // stale, or the PR may not be in the store at all (e.g. in "All Repos" mode
+  // after a repo switch that cleared the store).
   useEffect(() => {
-    if (storePR && !fetchedPR) {
+    if (!fetchedPR) {
       handleRefresh();
     }
-  }, [storePR?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-refresh at the configured interval.
   const prRefreshIntervalSeconds = useSettingsStore((s) => s.prRefreshIntervalSeconds);

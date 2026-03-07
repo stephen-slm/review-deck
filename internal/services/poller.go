@@ -410,6 +410,18 @@ func (p *Poller) poll(ctx context.Context) {
 	// Record a metrics snapshot for the trending dashboard.
 	p.recordMetrics(&result)
 
+	// Prune pull requests that haven't been synced in 30 days.
+	if n, err := p.db.PruneStalePullRequests(time.Now().AddDate(0, 0, -30)); err != nil {
+		log.Printf("poller: prune stale PRs: %v", err)
+	} else if n > 0 {
+		log.Printf("poller: pruned %d stale pull requests", n)
+	}
+
+	// Delete expired AI reviews (older than 7 days).
+	if err := p.db.DeleteExpiredAIReviews(); err != nil {
+		log.Printf("poller: prune expired AI reviews: %v", err)
+	}
+
 	// Sync org members cache if stale (daily).
 	// Derive unique orgs from tracked repos.
 	var orgList []string
