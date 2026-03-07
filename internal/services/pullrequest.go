@@ -2,8 +2,8 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -12,6 +12,10 @@ import (
 
 	"github.com/shurcooL/githubv4"
 )
+
+// ErrNotAuthenticated is returned when an operation requires a GitHub client
+// but none has been configured (the user hasn't logged in yet).
+var ErrNotAuthenticated = errors.New("not authenticated")
 
 // PullRequestService provides PR data to the frontend.
 type PullRequestService struct {
@@ -37,7 +41,7 @@ func (s *PullRequestService) getViewerLogin() (string, error) {
 		return s.viewerLogin, nil
 	}
 	if s.client == nil {
-		return "", fmt.Errorf("not authenticated")
+		return "", ErrNotAuthenticated
 	}
 	viewer, err := s.client.GetViewer(context.Background())
 	if err != nil {
@@ -45,45 +49,6 @@ func (s *PullRequestService) getViewerLogin() (string, error) {
 	}
 	s.viewerLogin = viewer.Login
 	return s.viewerLogin, nil
-}
-
-// filterBotsEnabled reads the filter_bots setting from the database.
-func (s *PullRequestService) filterBotsEnabled() bool {
-	val, err := s.db.GetSetting("filter_bots")
-	if err != nil {
-		return false
-	}
-	return val == "true"
-}
-
-// reviewSince returns the cutoff time for review-related queries based on the
-// review_max_age_days setting (default 7, range 1-90).
-func (s *PullRequestService) reviewSince() time.Time {
-	val, err := s.db.GetSetting("review_max_age_days")
-	if err != nil || val == "" {
-		return time.Now().AddDate(0, 0, -7)
-	}
-	days, err := strconv.Atoi(val)
-	if err != nil || days < 1 {
-		return time.Now().AddDate(0, 0, -7)
-	}
-	if days > 90 {
-		days = 90
-	}
-	return time.Now().AddDate(0, 0, -days)
-}
-
-// getExcludedRepos returns excluded repos for an org formatted as "org/repo" for query exclusion.
-func (s *PullRequestService) getExcludedRepos(org string) []string {
-	repos, err := s.db.GetExcludedRepos(org)
-	if err != nil {
-		return nil
-	}
-	qualified := make([]string, len(repos))
-	for i, r := range repos {
-		qualified[i] = fmt.Sprintf("%s/%s", org, r)
-	}
-	return qualified
 }
 
 // ---- Paginated methods (used by the frontend) ----
@@ -94,7 +59,7 @@ func (s *PullRequestService) GetMyPRsPage(org string, pageSize int, cursor strin
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetMyOpenPRsPage(context.Background(), org, login, pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetMyOpenPRsPage(context.Background(), org, login, pageSize, cursor, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs: %w", err)
 	}
@@ -109,7 +74,7 @@ func (s *PullRequestService) GetMyRecentMergedPage(org string, daysBack int, pag
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	page, err := s.client.GetMyRecentMergedPRsPage(context.Background(), org, login, since, pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetMyRecentMergedPRsPage(context.Background(), org, login, since, pageSize, cursor, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs: %w", err)
 	}
@@ -123,7 +88,7 @@ func (s *PullRequestService) GetReviewRequestsPage(org string, pageSize int, cur
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewRequestsPage(context.Background(), org, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetReviewRequestsPage(context.Background(), org, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -135,9 +100,9 @@ func (s *PullRequestService) GetReviewRequestsPage(org string, pageSize int, cur
 // GetTeamReviewRequestsPage returns a single page of team review requests.
 func (s *PullRequestService) GetTeamReviewRequestsPage(org, team string, pageSize int, cursor string) (*gh.PRPage, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
-	page, err := s.client.GetTeamReviewRequestsPage(context.Background(), org, team, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetTeamReviewRequestsPage(context.Background(), org, team, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch team review requests: %w", err)
 	}
@@ -151,7 +116,7 @@ func (s *PullRequestService) GetReviewedByMePage(org string, pageSize int, curso
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewedByUserPage(context.Background(), org, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	page, err := s.client.GetReviewedByUserPage(context.Background(), org, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
@@ -167,7 +132,7 @@ func (s *PullRequestService) GetMyPRsForRepoPage(owner, repo string, pageSize in
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetMyOpenPRsForRepoPage(context.Background(), owner, repo, login, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyOpenPRsForRepoPage(context.Background(), owner, repo, login, pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs for %s/%s: %w", owner, repo, err)
 	}
@@ -182,7 +147,7 @@ func (s *PullRequestService) GetMyRecentMergedForRepoPage(owner, repo string, da
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	page, err := s.client.GetMyRecentMergedPRsForRepoPage(context.Background(), owner, repo, login, since, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyRecentMergedPRsForRepoPage(context.Background(), owner, repo, login, since, pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs for %s/%s: %w", owner, repo, err)
 	}
@@ -196,7 +161,7 @@ func (s *PullRequestService) GetReviewRequestsForRepoPage(owner, repo string, pa
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewRequestsForRepoPage(context.Background(), owner, repo, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewRequestsForRepoPage(context.Background(), owner, repo, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests for %s/%s: %w", owner, repo, err)
 	}
@@ -211,7 +176,7 @@ func (s *PullRequestService) GetReviewedByMeForRepoPage(owner, repo string, page
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewedByUserForRepoPage(context.Background(), owner, repo, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewedByUserForRepoPage(context.Background(), owner, repo, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs for %s/%s: %w", owner, repo, err)
 	}
@@ -229,7 +194,7 @@ func (s *PullRequestService) trackedRepoSlugs() ([]string, error) {
 	}
 	slugs := make([]string, len(repos))
 	for i, r := range repos {
-		slugs[i] = fmt.Sprintf("%s/%s", r.RepoOwner, r.RepoName)
+		slugs[i] = r.RepoOwner + "/" + r.RepoName
 	}
 	return slugs, nil
 }
@@ -244,7 +209,7 @@ func (s *PullRequestService) GetMyPRsAllReposPage(pageSize int, cursor string) (
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetMyOpenPRsMultiRepoPage(context.Background(), repos, login, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyOpenPRsMultiRepoPage(context.Background(), repos, login, pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs (all repos): %w", err)
 	}
@@ -263,7 +228,7 @@ func (s *PullRequestService) GetMyRecentMergedAllReposPage(daysBack int, pageSiz
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	page, err := s.client.GetMyRecentMergedPRsMultiRepoPage(context.Background(), repos, login, since, pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetMyRecentMergedPRsMultiRepoPage(context.Background(), repos, login, since, pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs (all repos): %w", err)
 	}
@@ -281,7 +246,7 @@ func (s *PullRequestService) GetReviewRequestsAllReposPage(pageSize int, cursor 
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewRequestsMultiRepoPage(context.Background(), repos, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewRequestsMultiRepoPage(context.Background(), repos, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests (all repos): %w", err)
 	}
@@ -300,7 +265,7 @@ func (s *PullRequestService) GetReviewedByMeAllReposPage(pageSize int, cursor st
 	if err != nil {
 		return nil, err
 	}
-	page, err := s.client.GetReviewedByUserMultiRepoPage(context.Background(), repos, login, s.reviewSince(), pageSize, cursor, s.filterBotsEnabled())
+	page, err := s.client.GetReviewedByUserMultiRepoPage(context.Background(), repos, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs (all repos): %w", err)
 	}
@@ -316,7 +281,7 @@ func (s *PullRequestService) GetMyPRs(org string) ([]gh.PullRequest, error) {
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetMyOpenPRs(context.Background(), org, login, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetMyOpenPRs(context.Background(), org, login, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch my PRs: %w", err)
 	}
@@ -331,7 +296,7 @@ func (s *PullRequestService) GetMyRecentMerged(org string, daysBack int) ([]gh.P
 		return nil, err
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
-	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, login, since, s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetMyRecentMergedPRs(context.Background(), org, login, since, filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch merged PRs: %w", err)
 	}
@@ -345,7 +310,7 @@ func (s *PullRequestService) GetReviewRequests(org string) ([]gh.PullRequest, er
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetReviewRequestsForUser(context.Background(), org, login, reviewSince(s.db), filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch review requests: %w", err)
 	}
@@ -356,9 +321,9 @@ func (s *PullRequestService) GetReviewRequests(org string) ([]gh.PullRequest, er
 // GetTeamReviewRequests returns ALL team review requests (used by poller).
 func (s *PullRequestService) GetTeamReviewRequests(org, team string) ([]gh.PullRequest, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
-	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetTeamReviewRequests(context.Background(), org, team, reviewSince(s.db), filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch team review requests: %w", err)
 	}
@@ -372,7 +337,7 @@ func (s *PullRequestService) GetReviewedByMe(org string) ([]gh.PullRequest, erro
 	if err != nil {
 		return nil, err
 	}
-	prs, err := s.client.GetReviewedByUser(context.Background(), org, login, s.reviewSince(), s.filterBotsEnabled(), s.getExcludedRepos(org))
+	prs, err := s.client.GetReviewedByUser(context.Background(), org, login, reviewSince(s.db), filterBotsEnabled(s.db), excludedReposForOrg(s.db, org))
 	if err != nil {
 		return nil, fmt.Errorf("fetch reviewed PRs: %w", err)
 	}
@@ -391,7 +356,7 @@ func (s *PullRequestService) GetCachedPRs(authorLogin string, state string) ([]g
 // requires a merge queue and the PR was added to it.
 func (s *PullRequestService) MergePR(prNodeID string, method string) (string, error) {
 	if s.client == nil {
-		return "", fmt.Errorf("not authenticated")
+		return "", ErrNotAuthenticated
 	}
 
 	var mergeMethod githubv4.PullRequestMergeMethod
@@ -426,7 +391,7 @@ func (s *PullRequestService) MergePR(prNodeID string, method string) (string, er
 // An optional body can be provided as a comment with the approval.
 func (s *PullRequestService) ApprovePR(prNodeID string, body string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.ApprovePR(context.Background(), prNodeID, body)
 }
@@ -434,7 +399,7 @@ func (s *PullRequestService) ApprovePR(prNodeID string, body string) error {
 // RequestChangesPR submits a "request changes" review on a pull request.
 func (s *PullRequestService) RequestChangesPR(prNodeID string, body string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	if body == "" {
 		return fmt.Errorf("a review body is required when requesting changes")
@@ -445,7 +410,7 @@ func (s *PullRequestService) RequestChangesPR(prNodeID string, body string) erro
 // ResolveThread resolves a review thread.
 func (s *PullRequestService) ResolveThread(threadID string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.ResolveThread(context.Background(), threadID)
 }
@@ -453,7 +418,7 @@ func (s *PullRequestService) ResolveThread(threadID string) error {
 // UnresolveThread unresolves a review thread.
 func (s *PullRequestService) UnresolveThread(threadID string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.UnresolveThread(context.Background(), threadID)
 }
@@ -462,7 +427,7 @@ func (s *PullRequestService) UnresolveThread(threadID string) error {
 // userIDs and teamIDs are GitHub GraphQL node IDs.
 func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, teamIDs []string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 
 	return s.client.RequestReviews(context.Background(), prNodeID, userIDs, teamIDs)
@@ -472,7 +437,7 @@ func (s *PullRequestService) RequestReviews(prNodeID string, userIDs []string, t
 // them to the local DB cache for offline/startup access.
 func (s *PullRequestService) GetRepoLabels(owner string, repo string) ([]gh.Label, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	labels, err := s.client.GetRepoLabels(context.Background(), owner, repo)
 	if err != nil {
@@ -489,7 +454,7 @@ func (s *PullRequestService) GetRepoLabels(owner string, repo string) ([]gh.Labe
 // MarkReadyForReview marks a draft pull request as ready for review.
 func (s *PullRequestService) MarkReadyForReview(prNodeID string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.MarkReadyForReview(context.Background(), prNodeID)
 }
@@ -497,7 +462,7 @@ func (s *PullRequestService) MarkReadyForReview(prNodeID string) error {
 // AddLabels adds labels to a pull request by its node ID.
 func (s *PullRequestService) AddLabels(prNodeID string, labelIDs []string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.AddLabels(context.Background(), prNodeID, labelIDs)
 }
@@ -505,7 +470,7 @@ func (s *PullRequestService) AddLabels(prNodeID string, labelIDs []string) error
 // RemoveLabels removes labels from a pull request by its node ID.
 func (s *PullRequestService) RemoveLabels(prNodeID string, labelIDs []string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 	return s.client.RemoveLabels(context.Background(), prNodeID, labelIDs)
 }
@@ -520,7 +485,7 @@ func (s *PullRequestService) GetOrgMembers(org string) ([]gh.User, error) {
 // Searches the local DB cache first; falls back to the GitHub API if the cache is empty.
 func (s *PullRequestService) SearchOrgMembers(org string, query string) ([]gh.User, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 
 	// Check if we have cached members for this org.
@@ -538,7 +503,7 @@ func (s *PullRequestService) SearchOrgMembers(org string, query string) ([]gh.Us
 // stores them in the local database cache.
 func (s *PullRequestService) SyncOrgMembers(org string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 
 	members, err := s.client.ListOrgMembers(context.Background(), org)
@@ -568,7 +533,7 @@ func (s *PullRequestService) SyncOrgMembersIfStale(org string, maxAge time.Durat
 // teams keep their current enabled state.
 func (s *PullRequestService) SyncTeamsForOrg(org string) error {
 	if s.client == nil {
-		return fmt.Errorf("not authenticated")
+		return ErrNotAuthenticated
 	}
 
 	teams, err := s.client.GetViewerTeams(context.Background(), org)
@@ -584,7 +549,7 @@ func (s *PullRequestService) SyncTeamsForOrg(org string) error {
 // GetSinglePR fetches a single pull request by owner, repo name, and number.
 func (s *PullRequestService) GetSinglePR(owner, repoName string, number int) (*gh.PullRequest, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	pr, err := s.client.GetSinglePR(context.Background(), owner, repoName, number)
 	if err != nil {
@@ -598,7 +563,7 @@ func (s *PullRequestService) GetSinglePR(owner, repoName string, number int) (*g
 // "All Repos" mode where the store was reset).
 func (s *PullRequestService) GetSinglePRByNodeID(nodeID string) (*gh.PullRequest, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	pr, err := s.client.GetSinglePRByNodeID(context.Background(), nodeID)
 	if err != nil {
@@ -611,7 +576,7 @@ func (s *PullRequestService) GetSinglePRByNodeID(nodeID string) (*gh.PullRequest
 // GetPRCheckRuns fetches individual CI check runs for a specific PR.
 func (s *PullRequestService) GetPRCheckRuns(nodeID string) ([]gh.CheckRun, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	runs, err := s.client.GetPRCheckRuns(context.Background(), nodeID)
 	if err != nil {
@@ -623,7 +588,7 @@ func (s *PullRequestService) GetPRCheckRuns(nodeID string) ([]gh.CheckRun, error
 // GetPRComments fetches all comments and review threads for a specific PR.
 func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	comments, err := s.client.GetPRComments(context.Background(), nodeID)
 	if err != nil {
@@ -635,7 +600,7 @@ func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error
 // GetPRFiles fetches the list of changed files with diff patches for a PR.
 func (s *PullRequestService) GetPRFiles(owner, repo string, number int) ([]gh.PRFile, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	files, err := s.client.GetPRFiles(context.Background(), owner, repo, number)
 	if err != nil {
@@ -647,7 +612,7 @@ func (s *PullRequestService) GetPRFiles(owner, repo string, number int) ([]gh.PR
 // GetPRCommits fetches all commits for a specific PR.
 func (s *PullRequestService) GetPRCommits(nodeID string) ([]gh.PRCommit, error) {
 	if s.client == nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 	commits, err := s.client.GetPRCommits(context.Background(), nodeID)
 	if err != nil {

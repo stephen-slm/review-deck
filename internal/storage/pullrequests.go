@@ -87,7 +87,7 @@ func (db *DB) UpsertPullRequests(prs []gh.PullRequest) error {
 // GetPullRequests returns cached pull requests as JSON (for the frontend).
 func (db *DB) GetPullRequests(authorLogin string, state string) ([]gh.PullRequest, error) {
 	query := "SELECT node_id, number, repo_owner, repo_name, title, state, author_login, author_avatar, is_draft, is_in_merge_queue, additions, deletions, changed_files, commits_count, mergeable, review_decision, head_ref, base_ref, url, body, checks_status, merged_by, created_at, updated_at, merged_at, closed_at FROM pull_requests WHERE 1=1"
-	var args []interface{}
+	var args []any
 
 	if authorLogin != "" {
 		query += " AND author_login = ?"
@@ -138,14 +138,23 @@ func (db *DB) PruneStalePullRequests(olderThan time.Time) (int64, error) {
 
 // GetPullRequestJSON returns a pull request with all relations as JSON bytes.
 func (db *DB) GetPullRequestJSON(nodeID string) ([]byte, error) {
-	prs, err := db.GetPullRequests("", "")
+	row := db.conn.QueryRow(`SELECT node_id, number, repo_owner, repo_name, title, state, author_login, author_avatar,
+		is_draft, is_in_merge_queue, additions, deletions, changed_files, commits_count,
+		mergeable, review_decision, head_ref, base_ref, url, body, checks_status, merged_by,
+		created_at, updated_at, merged_at, closed_at
+		FROM pull_requests WHERE node_id = ?`, nodeID)
+
+	var pr gh.PullRequest
+	err := row.Scan(
+		&pr.NodeID, &pr.Number, &pr.RepoOwner, &pr.RepoName, &pr.Title, &pr.State,
+		&pr.Author, &pr.AuthorAvatar, &pr.IsDraft, &pr.IsInMergeQueue,
+		&pr.Additions, &pr.Deletions, &pr.ChangedFiles, &pr.CommitCount,
+		&pr.Mergeable, &pr.ReviewDecision, &pr.HeadRef, &pr.BaseRef, &pr.URL, &pr.Body,
+		&pr.ChecksStatus, &pr.MergedBy,
+		&pr.CreatedAt, &pr.UpdatedAt, &pr.MergedAt, &pr.ClosedAt,
+	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("pull request not found: %s", nodeID)
 	}
-	for _, pr := range prs {
-		if pr.NodeID == nodeID {
-			return json.Marshal(pr)
-		}
-	}
-	return nil, fmt.Errorf("pull request not found: %s", nodeID)
+	return json.Marshal(pr)
 }

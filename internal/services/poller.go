@@ -2,8 +2,9 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -47,7 +48,7 @@ type PollResult struct {
 }
 
 // EventEmitter is the function signature for Wails runtime.EventsEmit.
-type EventEmitter func(ctx context.Context, eventName string, data ...interface{})
+type EventEmitter func(ctx context.Context, eventName string, data ...any)
 
 // memberSyncInterval is how often the poller refreshes the org members cache.
 const memberSyncInterval = 24 * time.Hour
@@ -75,7 +76,7 @@ type Poller struct {
 func NewPoller(db *storage.DB, defaultInterval time.Duration) *Poller {
 	interval := defaultInterval
 	if val, err := db.GetSetting("poll_interval_minutes"); err == nil && val != "" {
-		if mins := parseMinutes(val); mins > 0 {
+		if mins, err := strconv.Atoi(val); err == nil && mins > 0 {
 			interval = time.Duration(mins) * time.Minute
 		}
 	}
@@ -85,23 +86,9 @@ func NewPoller(db *storage.DB, defaultInterval time.Duration) *Poller {
 	}
 }
 
-// parseMinutes parses a string as an integer of minutes.
-func parseMinutes(s string) int {
-	n := 0
-	for _, c := range s {
-		if c < '0' || c > '9' {
-			return 0
-		}
-		n = n*10 + int(c-'0')
-	}
-	return n
-}
-
 // SetInterval updates the poll interval and restarts the loop if running.
 func (p *Poller) SetInterval(minutes int) {
-	if minutes < 1 {
-		minutes = 1
-	}
+	minutes = max(1, minutes)
 	p.mu.Lock()
 	p.interval = time.Duration(minutes) * time.Minute
 	wasRunning := p.running
@@ -166,45 +153,6 @@ func (p *Poller) IsRunning() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.running
-}
-
-// filterBotsEnabled reads the filter_bots setting from the database.
-func (p *Poller) filterBotsEnabled() bool {
-	val, err := p.db.GetSetting("filter_bots")
-	if err != nil {
-		return false
-	}
-	return val == "true"
-}
-
-// reviewMaxAgeDays reads the review_max_age_days setting from the database.
-// Returns the configured value or 7 as a default.
-func (p *Poller) reviewMaxAgeDays() int {
-	val, err := p.db.GetSetting("review_max_age_days")
-	if err != nil || val == "" {
-		return 7
-	}
-	days, err := strconv.Atoi(val)
-	if err != nil || days < 1 {
-		return 7
-	}
-	if days > 90 {
-		return 90
-	}
-	return days
-}
-
-// getExcludedRepos returns excluded repos for an org formatted as "org/repo".
-func (p *Poller) getExcludedRepos(org string) []string {
-	repos, err := p.db.GetExcludedRepos(org)
-	if err != nil {
-		return nil
-	}
-	qualified := make([]string, len(repos))
-	for i, r := range repos {
-		qualified[i] = fmt.Sprintf("%s/%s", org, r)
-	}
-	return qualified
 }
 
 func (p *Poller) loop(ctx context.Context) {
@@ -292,8 +240,8 @@ func (p *Poller) poll(ctx context.Context) {
 
 	result := PollResult{Timestamp: time.Now()}
 
-	filterBots := p.filterBotsEnabled()
-	reviewSince := time.Now().AddDate(0, 0, -p.reviewMaxAgeDays())
+	filterBots := filterBotsEnabled(p.db)
+	reviewSince := time.Now().AddDate(0, 0, -reviewMaxAgeDays(p.db))
 	mergedSince := time.Now().AddDate(0, 0, -14)
 
 	for _, repo := range repos {
@@ -357,7 +305,7 @@ func (p *Poller) poll(ctx context.Context) {
 	for org := range uniqueOrgs {
 		enabledTeams, err := p.db.GetEnabledTeamSlugs(org)
 		if err == nil {
-			excludedRepos := p.getExcludedRepos(org)
+			excludedRepos := excludedReposForOrg(p.db, org)
 			for _, team := range enabledTeams {
 				if prs, err := client.GetTeamReviewRequests(ctx, org, team, reviewSince, filterBots, excludedRepos); err == nil {
 					result.TeamReviewRequests = append(result.TeamReviewRequests, prs...)
@@ -423,11 +371,7 @@ func (p *Poller) poll(ctx context.Context) {
 	}
 
 	// Sync org members cache if stale (daily).
-	// Derive unique orgs from tracked repos.
-	var orgList []string
-	for org := range uniqueOrgs {
-		orgList = append(orgList, org)
-	}
+	orgList := slices.Collect(maps.Keys(uniqueOrgs))
 	if p.shouldSyncMembersNow() {
 		p.syncOrgMembersIfNeeded(ctx, client, orgList)
 	}
@@ -480,16 +424,11 @@ func (p *Poller) syncOrgMembersIfNeeded(ctx context.Context, client *gh.Client, 
 
 // ---- Change detection ----
 
-// prKey uniquely identifies a PR for diffing.
-func prKey(pr gh.PullRequest) string {
-	return pr.NodeID
-}
-
 // indexPRs builds a lookup map keyed by NodeID.
 func indexPRs(prs []gh.PullRequest) map[string]gh.PullRequest {
 	m := make(map[string]gh.PullRequest, len(prs))
 	for _, pr := range prs {
-		m[prKey(pr)] = pr
+		m[pr.NodeID] = pr
 	}
 	return m
 }
@@ -500,7 +439,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 	// --- New review requests (PRs that appeared in reviewRequests) ---
 	prevRR := indexPRs(prev.ReviewRequests)
 	for _, pr := range curr.ReviewRequests {
-		if _, existed := prevRR[prKey(pr)]; !existed {
+		if _, existed := prevRR[pr.NodeID]; !existed {
 			notes = append(notes, Notification{
 				Type:    "new-review-request",
 				Title:   pr.Title,
@@ -509,7 +448,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 				NodeID:  pr.NodeID,
 				URL:     pr.URL,
 				Author:  pr.Author,
-				Message: pr.Author + " requested your review on " + pr.RepoName + "#" + itoa(pr.Number),
+				Message: pr.Author + " requested your review on " + pr.RepoName + "#" + strconv.Itoa(pr.Number),
 			})
 		}
 	}
@@ -517,12 +456,12 @@ func diffResults(prev, curr *PollResult) []Notification {
 	// --- Changes on my PRs (review decision, CI, merged) ---
 	prevMyPRs := indexPRs(prev.MyPRs)
 	for _, pr := range curr.MyPRs {
-		old, existed := prevMyPRs[prKey(pr)]
+		old, existed := prevMyPRs[pr.NodeID]
 		if !existed {
 			continue // new PR showing up is not noteworthy from poller
 		}
 
-		repo := pr.RepoName + "#" + itoa(pr.Number)
+		repo := pr.RepoName + "#" + strconv.Itoa(pr.Number)
 
 		// Review decision changed.
 		if old.ReviewDecision != pr.ReviewDecision {
@@ -582,9 +521,9 @@ func diffResults(prev, curr *PollResult) []Notification {
 	// --- PRs that were open but are now merged ---
 	prevMerged := indexPRs(prev.RecentMerged)
 	for _, pr := range curr.RecentMerged {
-		if _, existed := prevMerged[prKey(pr)]; !existed {
+		if _, existed := prevMerged[pr.NodeID]; !existed {
 			// Check it was previously in our open PRs.
-			if _, wasOpen := prevMyPRs[prKey(pr)]; wasOpen {
+			if _, wasOpen := prevMyPRs[pr.NodeID]; wasOpen {
 				notes = append(notes, Notification{
 					Type:    "pr-merged",
 					Title:   pr.Title,
@@ -592,7 +531,7 @@ func diffResults(prev, curr *PollResult) []Notification {
 					Number:  pr.Number,
 					NodeID:  pr.NodeID,
 					URL:     pr.URL,
-					Message: pr.RepoName + "#" + itoa(pr.Number) + " has been merged",
+					Message: pr.RepoName + "#" + strconv.Itoa(pr.Number) + " has been merged",
 				})
 			}
 		}
@@ -603,10 +542,10 @@ func diffResults(prev, curr *PollResult) []Notification {
 
 // findPRByNodeID looks up a PR in a slice by its GraphQL node ID.
 func findPRByNodeID(prs []gh.PullRequest, nodeID string) *gh.PullRequest {
-	for i := range prs {
-		if prs[i].NodeID == nodeID {
-			return &prs[i]
-		}
+	if i := slices.IndexFunc(prs, func(pr gh.PullRequest) bool {
+		return pr.NodeID == nodeID
+	}); i >= 0 {
+		return &prs[i]
 	}
 	return nil
 }
@@ -680,28 +619,4 @@ func (p *Poller) recordMetrics(result *PollResult) {
 	if _, err := p.db.PruneMetricsSnapshots(time.Now().AddDate(0, 0, -90)); err != nil {
 		log.Printf("poller: prune metrics: %v", err)
 	}
-}
-
-// itoa converts an int to a string without importing strconv.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := false
-	if n < 0 {
-		neg = true
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }

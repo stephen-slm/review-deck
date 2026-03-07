@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	gh "review-deck/internal/github"
@@ -38,7 +39,7 @@ func (s *RepoService) SetContext(ctx context.Context) {
 // Returns an empty string if the user cancels.
 func (s *RepoService) SelectFolder() (string, error) {
 	if s.ctx == nil {
-		return "", fmt.Errorf("app context not set")
+		return "", errors.New("app context not set")
 	}
 	path, err := wailsRuntime.OpenDirectoryDialog(s.ctx, wailsRuntime.OpenDialogOptions{
 		Title: "Select a Git Repository",
@@ -53,7 +54,7 @@ func (s *RepoService) SelectFolder() (string, error) {
 // remote and returns the parsed owner/repo info.
 func (s *RepoService) ValidateGitRepo(path string) (*gitutil.RepoInfo, error) {
 	if path == "" {
-		return nil, fmt.Errorf("path is empty")
+		return nil, errors.New("path is empty")
 	}
 
 	if !gitutil.IsGitRepo(path) {

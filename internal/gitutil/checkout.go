@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -17,7 +18,7 @@ func CheckoutPR(repoPath string, prNumber int, env []string) (string, error) {
 		return "", fmt.Errorf("resolve path: %w", err)
 	}
 
-	cmd := exec.Command("gh", "pr", "checkout", fmt.Sprintf("%d", prNumber))
+	cmd := exec.Command("gh", "pr", "checkout", strconv.Itoa(prNumber))
 	cmd.Dir = absPath
 	if env != nil {
 		cmd.Env = env

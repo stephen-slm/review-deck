@@ -3,6 +3,7 @@ package github
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shurcooL/githubv4"
@@ -202,7 +203,7 @@ func convertPRFields(pr prFields) PullRequest {
 
 // searchAllPRs fetches ALL pages of a search (used by the background poller).
 func (c *Client) searchAllPRs(ctx context.Context, queryStr string) ([]PullRequest, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"query":  githubv4.String(queryStr),
 		"first":  githubv4.Int(50),
 		"cursor": (*githubv4.String)(nil),
@@ -236,7 +237,7 @@ func (c *Client) searchPRsPage(ctx context.Context, queryStr string, pageSize in
 		pageSize = 10
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"query":  githubv4.String(queryStr),
 		"first":  githubv4.Int(pageSize),
 		"cursor": (*githubv4.String)(nil),
@@ -320,7 +321,7 @@ func buildQuery(base string, filterBots bool, excludedRepos []string) string {
 		q += botExclusions
 	}
 	for _, repo := range excludedRepos {
-		q += fmt.Sprintf(" -repo:%s", repo)
+		q += " -repo:" + repo
 	}
 	return q
 }
@@ -443,11 +444,12 @@ func buildRepoScope(repos []string) string {
 	if len(repos) == 0 {
 		return ""
 	}
-	var b string
+	var b strings.Builder
 	for _, r := range repos {
-		b += fmt.Sprintf(" repo:%s", r)
+		b.WriteString(" repo:")
+		b.WriteString(r)
 	}
-	return b
+	return b.String()
 }
 
 // GetMyOpenPRsMultiRepoPage returns a single page of open PRs authored by the
@@ -515,7 +517,7 @@ type checkRunsQuery struct {
 
 // GetPRCheckRuns fetches individual CI check runs for a pull request.
 func (c *Client) GetPRCheckRuns(ctx context.Context, nodeID string) ([]CheckRun, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"id": githubv4.ID(nodeID),
 	}
 
@@ -594,7 +596,7 @@ type singlePRQuery struct {
 
 // GetSinglePR fetches a single pull request by owner, repo name, and number.
 func (c *Client) GetSinglePR(ctx context.Context, owner, repoName string, number int) (*PullRequest, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner":  githubv4.String(owner),
 		"name":   githubv4.String(repoName),
 		"number": githubv4.Int(number),
@@ -618,7 +620,7 @@ type singlePRByNodeIDQuery struct {
 
 // GetSinglePRByNodeID fetches a single pull request by its GraphQL node ID.
 func (c *Client) GetSinglePRByNodeID(ctx context.Context, nodeID string) (*PullRequest, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"id": githubv4.ID(nodeID),
 	}
 
@@ -633,7 +635,7 @@ func (c *Client) GetSinglePRByNodeID(ctx context.Context, nodeID string) (*PullR
 
 // GetPRComments fetches all comments and review threads for a pull request.
 func (c *Client) GetPRComments(ctx context.Context, nodeID string) (*PRComments, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"id": githubv4.ID(nodeID),
 	}
 
@@ -713,7 +715,7 @@ type prCommitsQuery struct {
 
 // GetPRCommits fetches all commits for a pull request.
 func (c *Client) GetPRCommits(ctx context.Context, nodeID string) ([]PRCommit, error) {
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"id": githubv4.ID(nodeID),
 	}
 
@@ -761,7 +763,7 @@ func (c *Client) GetRepoLabels(ctx context.Context, owner, repo string) ([]Label
 		} `graphql:"repository(owner: $owner, name: $repo)"`
 	}
 
-	vars := map[string]interface{}{
+	vars := map[string]any{
 		"owner":  githubv4.String(owner),
 		"repo":   githubv4.String(repo),
 		"cursor": (*githubv4.String)(nil),

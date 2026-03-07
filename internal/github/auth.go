@@ -36,7 +36,7 @@ func (c *Client) RepoExists(ctx context.Context, owner, name string) error {
 			Name string
 		} `graphql:"repository(owner: $owner, name: $name)"`
 	}
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"owner": githubv4.String(owner),
 		"name":  githubv4.String(name),
 	}
@@ -61,7 +61,7 @@ func (c *Client) SearchOrgMembers(ctx context.Context, org string, query string)
 	}
 
 	searchQuery := query + " org:" + org + " type:user"
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"query": githubv4.String(searchQuery),
 	}
 
@@ -105,7 +105,7 @@ func (c *Client) ListOrgMembers(ctx context.Context, org string) ([]User, error)
 		} `graphql:"organization(login: $org)"`
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"org":    githubv4.String(org),
 		"cursor": (*githubv4.String)(nil),
 	}
@@ -160,7 +160,7 @@ func (c *Client) GetViewerTeams(ctx context.Context, org string) ([]Team, error)
 		return nil, err
 	}
 
-	variables := map[string]interface{}{
+	variables := map[string]any{
 		"org":    githubv4.String(org),
 		"login":  githubv4.String(viewer.Login),
 		"cursor": (*githubv4.String)(nil),

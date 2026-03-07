@@ -93,7 +93,7 @@ func (s *AuthService) IsAuthenticated() bool {
 func (s *AuthService) GetUser() (*gh.ViewerInfo, error) {
 	login, err := s.db.GetSetting("viewer_login")
 	if err != nil {
-		return nil, fmt.Errorf("not authenticated")
+		return nil, ErrNotAuthenticated
 	}
 
 	name, _ := s.db.GetSetting("viewer_name")

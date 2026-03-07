@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -122,13 +123,8 @@ func (a *App) SyncOrgMembers(org string) error {
 
 // SetPollInterval updates the poller interval and persists it to the database.
 func (a *App) SetPollInterval(minutes int) error {
-	if minutes < 1 {
-		minutes = 1
-	}
-	if minutes > 60 {
-		minutes = 60
-	}
-	if err := a.db.SetSetting("poll_interval_minutes", fmt.Sprintf("%d", minutes)); err != nil {
+	minutes = max(1, min(60, minutes))
+	if err := a.db.SetSetting("poll_interval_minutes", strconv.Itoa(minutes)); err != nil {
 		return err
 	}
 	a.poller.SetInterval(minutes)
@@ -154,12 +150,9 @@ func (a *App) ImageProxyMiddleware() func(next http.Handler) http.Handler {
 			return false
 		}
 		host := strings.ToLower(u.Hostname())
-		for _, allowed := range allowedHosts {
-			if host == allowed || strings.HasSuffix(host, "."+allowed) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(allowedHosts, func(allowed string) bool {
+			return host == allowed || strings.HasSuffix(host, "."+allowed)
+		})
 	}
 
 	return func(next http.Handler) http.Handler {

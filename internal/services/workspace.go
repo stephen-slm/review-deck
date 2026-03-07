@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -178,7 +179,7 @@ func (s *WorkspaceService) CheckoutPR(repoOwner, repoName string, prNumber int) 
 	}
 
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+		return errors.New("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
 	dirty, err := gitutil.HasUncommittedChanges(repo.LocalPath)
@@ -276,15 +277,15 @@ func (s *WorkspaceService) DeleteAIReview(prNodeID string) error {
 // It emits Wails events: "ai:started", "ai:result", "ai:error".
 func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber int, prNodeID string) error {
 	if s.ctx == nil {
-		return fmt.Errorf("app context not set")
+		return errors.New("app context not set")
 	}
 
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+		return errors.New("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
 	if !gitutil.IsClaudeInstalled() {
-		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+		return errors.New("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
 	}
 
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
@@ -323,12 +324,12 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
 			}
-			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": errMsg})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]any{"error": errMsg})
 			return
 		}
 
 		if len(bytes.TrimSpace(diff)) == 0 {
-			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": "PR diff is empty"})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]any{"error": "PR diff is empty"})
 			return
 		}
 
@@ -336,11 +337,11 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		reviewText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Review this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": "Claude review timed out (3 minute limit)"})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]any{"error": "Claude review timed out (3 minute limit)"})
 			return
 		}
 		if err != nil {
-			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]interface{}{"error": err.Error()})
+			wailsRuntime.EventsEmit(appCtx, "ai:error", map[string]any{"error": err.Error()})
 			return
 		}
 
@@ -350,7 +351,7 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 		}
 
 		now := time.Now().UTC().Format(time.RFC3339)
-		wailsRuntime.EventsEmit(appCtx, "ai:result", map[string]interface{}{
+		wailsRuntime.EventsEmit(appCtx, "ai:result", map[string]any{
 			"review":     reviewText,
 			"cost":       cost,
 			"duration":   durationMs,
@@ -438,15 +439,15 @@ func (s *WorkspaceService) getDescriptionPrompt() string {
 // It emits Wails events: "description:started", "description:result", "description:error".
 func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, prNumber int) error {
 	if s.ctx == nil {
-		return fmt.Errorf("app context not set")
+		return errors.New("app context not set")
 	}
 
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+		return errors.New("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
 	if !gitutil.IsClaudeInstalled() {
-		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+		return errors.New("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
 	}
 
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
@@ -484,12 +485,12 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
 			}
-			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": errMsg})
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]any{"error": errMsg})
 			return
 		}
 
 		if len(bytes.TrimSpace(diff)) == 0 {
-			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": "PR diff is empty"})
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]any{"error": "PR diff is empty"})
 			return
 		}
 
@@ -497,15 +498,15 @@ func (s *WorkspaceService) StartGenerateDescription(repoOwner, repoName string, 
 		descriptionText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Generate a description for this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": "Claude description generation timed out (3 minute limit)"})
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]any{"error": "Claude description generation timed out (3 minute limit)"})
 			return
 		}
 		if err != nil {
-			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]interface{}{"error": err.Error()})
+			wailsRuntime.EventsEmit(appCtx, "description:error", map[string]any{"error": err.Error()})
 			return
 		}
 
-		wailsRuntime.EventsEmit(appCtx, "description:result", map[string]interface{}{
+		wailsRuntime.EventsEmit(appCtx, "description:result", map[string]any{
 			"description": descriptionText,
 			"cost":        cost,
 			"duration":    durationMs,
@@ -528,7 +529,7 @@ func (s *WorkspaceService) CancelGenerateDescription() {
 // ApplyPRDescription updates a PR's body on GitHub via `gh pr edit --body`.
 func (s *WorkspaceService) ApplyPRDescription(repoOwner, repoName string, prNumber int, body string) error {
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed")
+		return errors.New("the GitHub CLI (gh) is not installed")
 	}
 
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
@@ -579,15 +580,15 @@ func (s *WorkspaceService) getTitlePrompt() string {
 // It emits Wails events: "title:started", "title:result", "title:error".
 func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumber int, branchName string) error {
 	if s.ctx == nil {
-		return fmt.Errorf("app context not set")
+		return errors.New("app context not set")
 	}
 
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+		return errors.New("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
 	}
 
 	if !gitutil.IsClaudeInstalled() {
-		return fmt.Errorf("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+		return errors.New("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
 	}
 
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
@@ -625,12 +626,12 @@ func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumb
 			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
 				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
 			}
-			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": errMsg})
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]any{"error": errMsg})
 			return
 		}
 
 		if len(bytes.TrimSpace(diff)) == 0 {
-			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": "PR diff is empty"})
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]any{"error": "PR diff is empty"})
 			return
 		}
 
@@ -638,11 +639,11 @@ func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumb
 		titleText, _, _, err := s.runClaude(ctx, repo.LocalPath, diff, prompt, maxCost, "Generate a short concise title for this pull request diff:")
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": "Claude title generation timed out (3 minute limit)"})
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]any{"error": "Claude title generation timed out (3 minute limit)"})
 			return
 		}
 		if err != nil {
-			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]interface{}{"error": err.Error()})
+			wailsRuntime.EventsEmit(appCtx, "title:error", map[string]any{"error": err.Error()})
 			return
 		}
 
@@ -656,7 +657,7 @@ func (s *WorkspaceService) StartGenerateTitle(repoOwner, repoName string, prNumb
 			titleText = match + ": " + titleText
 		}
 
-		wailsRuntime.EventsEmit(appCtx, "title:result", map[string]interface{}{
+		wailsRuntime.EventsEmit(appCtx, "title:result", map[string]any{
 			"title": titleText,
 		})
 	}()
@@ -677,7 +678,7 @@ func (s *WorkspaceService) CancelGenerateTitle() {
 // ApplyPRTitle updates a PR's title on GitHub via `gh pr edit --title`.
 func (s *WorkspaceService) ApplyPRTitle(repoOwner, repoName string, prNumber int, title string) error {
 	if !gitutil.IsGhInstalled() {
-		return fmt.Errorf("the GitHub CLI (gh) is not installed")
+		return errors.New("the GitHub CLI (gh) is not installed")
 	}
 
 	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)

@@ -103,7 +103,7 @@ func main() {
 				Message: "Pull Request Review Tracker v0.1.0",
 			},
 		},
-		Bind: []interface{}{
+		Bind: []any{
 			app,
 			app.authService,
 			app.prService,
