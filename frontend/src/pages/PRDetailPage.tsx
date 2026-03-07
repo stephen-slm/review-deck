@@ -115,12 +115,8 @@ export function PRDetailPage() {
   const [commitsLoading, setCommitsLoading] = useState(false);
   const [commitsError, setCommitsError] = useState<string | null>(null);
 
-  // Reactive vim selectedIndex — only needed for commit list rendering.
-  // Subscribe via a narrow selector so changes only trigger a re-render
-  // when we're on the commits tab and the value actually changes.
-  const vimSelectedIndex = useVimStore((s) =>
-    activeTab === "commits" ? s.selectedIndex : -1,
-  );
+  // Reactive vim selectedIndex — used for commit list rendering + scroll.
+  const vimSelectedIndex = useVimStore((s) => s.selectedIndex);
   const commitListRef = useRef<HTMLUListElement>(null);
 
   // Workspace: tool availability, checkout state, current branch, Claude review
@@ -164,13 +160,8 @@ export function PRDetailPage() {
   // Check tool availability on mount
   useEffect(() => {
     CheckToolAvailability()
-      .then((tools) => {
-        console.log("[review-deck] tool availability:", tools);
-        setToolAvailability(tools);
-      })
-      .catch((err) => {
-        console.error("[review-deck] failed to check tool availability:", err);
-      });
+      .then(setToolAvailability)
+      .catch(() => {});
   }, []);
 
   // Fetch current branch when PR loads (for checkout button label)
@@ -496,9 +487,12 @@ export function PRDetailPage() {
   // Auto-fetch fresh PR data on mount. Always fetch — the store copy may be
   // stale, or the PR may not be in the store at all (e.g. in "All Repos" mode
   // after a repo switch that cleared the store).
+  // NOTE: Wrapped in setTimeout(0) to defer the fetch out of React's commit
+  // phase, preventing nested-update count overflow (error #185).
   useEffect(() => {
     if (!fetchedPR) {
-      handleRefresh();
+      const id = setTimeout(() => handleRefresh(), 0);
+      return () => clearTimeout(id);
     }
   }, [nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -514,17 +508,14 @@ export function PRDetailPage() {
     return () => clearInterval(interval);
   }, [prRefreshIntervalSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset selection when the active tab changes.
+  // Synchronise vimStore list length + selected index with the active tab
+  // and its loaded data. Wrapped in setTimeout(0) to defer Zustand mutations
+  // out of React's commit phase — calling set() during effects can exceed
+  // React's nested-update limit (error #185) when combined with other
+  // synchronous updates in the same commit cycle.
   useEffect(() => {
-    const vs = useVimStore.getState();
-    if (vs.selectedIndex !== -1) vs.setSelectedIndex(-1);
-  }, [activeTab]);
-
-  // Update list length based on active tab and loaded data.
-  useEffect(() => {
-    const vs = useVimStore.getState();
     let len = 0;
-    let idx: number | undefined;
+    let idx = -1; // default: nothing selected (reset on tab change)
     if (activeTab === "checks") {
       len = checkRuns?.length ?? 0;
     } else if (activeTab === "comments") {
@@ -536,12 +527,15 @@ export function PRDetailPage() {
     } else if (activeTab === "commits") {
       len = commits?.length ?? 0;
     } else if (activeTab === "ai-review" || activeTab === "description") {
-      // Length 1 + selectedIndex 0 so Enter fires immediately without needing j first.
       len = 1;
       idx = 0;
     }
-    if (vs.listLength !== len) vs.setListLength(len);
-    if (idx !== undefined && vs.selectedIndex !== idx) vs.setSelectedIndex(idx);
+    const id = setTimeout(() => {
+      const vs = useVimStore.getState();
+      if (vs.listLength !== len) vs.setListLength(len);
+      if (vs.selectedIndex !== idx) vs.setSelectedIndex(idx);
+    }, 0);
+    return () => clearTimeout(id);
   }, [activeTab, checkRuns, comments, commits, prFiles]);
 
   // Auto-scroll the selected commit into view.
@@ -552,8 +546,12 @@ export function PRDetailPage() {
   }, [activeTab, vimSelectedIndex]);
 
   // Register VIM actions for the detail page.
-  // h/l cycle tabs, j/k scroll (description) or navigate items (checks/comments).
-  useEffect(() => {
+  // All action callbacks read from refs (via reviewerToggleRef, etc.) or read
+  // current state inside the callback body, so the registration can be done
+  // during render rather than in a no-deps useEffect. This avoids an
+  // effect cleanup/setup cycle on every render, which contributed to React's
+  // nested-update count and caused error #185 on rapid re-render sequences.
+  {
     const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
@@ -665,8 +663,12 @@ export function PRDetailPage() {
     }
 
     registerActions(actions);
+  }
+
+  // Clean up vim actions when the component unmounts.
+  useEffect(() => {
     return () => clearActions();
-  }); // no deps — re-registers each render with fresh closures
+  }, []);
 
   if (!pr) {
     return (

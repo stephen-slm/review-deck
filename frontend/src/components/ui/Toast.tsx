@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, useMemo, createContext, useContext } from "react";
 import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -39,8 +39,13 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
+  // Memoize the context value so that toast add/remove doesn't re-render
+  // every useToast() consumer in the tree (which caused React error #185
+  // when a toast expired during PRDetailPage's mount cycle).
+  const ctxValue = useMemo(() => ({ addToast }), [addToast]);
+
   return (
-    <ToastContext.Provider value={{ addToast }}>
+    <ToastContext.Provider value={ctxValue}>
       {children}
       <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
         {toasts.map((toast) => (
