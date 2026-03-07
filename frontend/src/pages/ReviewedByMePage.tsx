@@ -157,7 +157,9 @@ export function ReviewedByMePage() {
     usePRStore.getState().fetchIfStale("reviewedByMe", async () => {
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: true } }));
       await fetchPage(usePRStore.getState().pages.reviewedByMe.pageSize, "");
-    });
+    }).catch(() =>
+      usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false } })),
+    );
   }, [isAuthenticated, canFetch, isAllRepos, owner, repo, fetchPage]);
 
   if (!isAuthenticated) {

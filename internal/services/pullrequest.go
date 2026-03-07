@@ -201,6 +201,9 @@ func (s *PullRequestService) trackedRepoSlugs() ([]string, error) {
 
 // GetMyPRsAllReposPage returns a single page of open PRs across all tracked repos.
 func (s *PullRequestService) GetMyPRsAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	if s.client == nil {
+		return nil, ErrNotAuthenticated
+	}
 	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
@@ -208,6 +211,9 @@ func (s *PullRequestService) GetMyPRsAllReposPage(pageSize int, cursor string) (
 	repos, err := s.trackedRepoSlugs()
 	if err != nil {
 		return nil, err
+	}
+	if len(repos) == 0 {
+		return &gh.PRPage{}, nil
 	}
 	page, err := s.client.GetMyOpenPRsMultiRepoPage(context.Background(), repos, login, pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
@@ -219,6 +225,9 @@ func (s *PullRequestService) GetMyPRsAllReposPage(pageSize int, cursor string) (
 
 // GetMyRecentMergedAllReposPage returns a single page of recently merged PRs across all tracked repos.
 func (s *PullRequestService) GetMyRecentMergedAllReposPage(daysBack int, pageSize int, cursor string) (*gh.PRPage, error) {
+	if s.client == nil {
+		return nil, ErrNotAuthenticated
+	}
 	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
@@ -226,6 +235,9 @@ func (s *PullRequestService) GetMyRecentMergedAllReposPage(daysBack int, pageSiz
 	repos, err := s.trackedRepoSlugs()
 	if err != nil {
 		return nil, err
+	}
+	if len(repos) == 0 {
+		return &gh.PRPage{}, nil
 	}
 	since := time.Now().AddDate(0, 0, -daysBack)
 	page, err := s.client.GetMyRecentMergedPRsMultiRepoPage(context.Background(), repos, login, since, pageSize, cursor, filterBotsEnabled(s.db))
@@ -238,6 +250,9 @@ func (s *PullRequestService) GetMyRecentMergedAllReposPage(daysBack int, pageSiz
 
 // GetReviewRequestsAllReposPage returns a single page of review requests across all tracked repos.
 func (s *PullRequestService) GetReviewRequestsAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	if s.client == nil {
+		return nil, ErrNotAuthenticated
+	}
 	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
@@ -245,6 +260,9 @@ func (s *PullRequestService) GetReviewRequestsAllReposPage(pageSize int, cursor 
 	repos, err := s.trackedRepoSlugs()
 	if err != nil {
 		return nil, err
+	}
+	if len(repos) == 0 {
+		return &gh.PRPage{}, nil
 	}
 	page, err := s.client.GetReviewRequestsMultiRepoPage(context.Background(), repos, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {
@@ -257,6 +275,9 @@ func (s *PullRequestService) GetReviewRequestsAllReposPage(pageSize int, cursor 
 
 // GetReviewedByMeAllReposPage returns a single page of PRs reviewed by the user across all tracked repos.
 func (s *PullRequestService) GetReviewedByMeAllReposPage(pageSize int, cursor string) (*gh.PRPage, error) {
+	if s.client == nil {
+		return nil, ErrNotAuthenticated
+	}
 	login, err := s.getViewerLogin()
 	if err != nil {
 		return nil, err
@@ -264,6 +285,9 @@ func (s *PullRequestService) GetReviewedByMeAllReposPage(pageSize int, cursor st
 	repos, err := s.trackedRepoSlugs()
 	if err != nil {
 		return nil, err
+	}
+	if len(repos) == 0 {
+		return &gh.PRPage{}, nil
 	}
 	page, err := s.client.GetReviewedByUserMultiRepoPage(context.Background(), repos, login, reviewSince(s.db), pageSize, cursor, filterBotsEnabled(s.db))
 	if err != nil {

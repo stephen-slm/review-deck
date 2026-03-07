@@ -262,12 +262,16 @@ export function MyPRsPage() {
       usePRStore.getState().fetchIfStale("myPRs", async () => {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
         await fetchOpenPage(usePRStore.getState().pages.myPRs.pageSize, "");
-      });
+      }).catch(() =>
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } })),
+      );
     } else {
       usePRStore.getState().fetchIfStale("myRecentMerged", async () => {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
         await fetchMergedPage(usePRStore.getState().pages.myRecentMerged.pageSize, "");
-      });
+      }).catch(() =>
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
+      );
     }
   }, [isAuthenticated, canFetch, isAllRepos, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
 
