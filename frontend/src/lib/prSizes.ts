@@ -6,11 +6,12 @@
  * from here instead of defining its own thresholds.
  */
 
-export type PRSizeLabel = "S" | "M" | "L" | "XL" | "XXL";
+export type PRSizeLabel = "XS" | "S" | "M" | "L" | "XL" | "XXL";
 
 /**
  * Upper-bound thresholds (exclusive) for each size bucket.
  * A PR whose `additions + deletions` is:
+ *   < xs  → XS
  *   < s   → S
  *   < m   → M
  *   < l   → L
@@ -18,6 +19,7 @@ export type PRSizeLabel = "S" | "M" | "L" | "XL" | "XXL";
  *   >= xl → XXL
  */
 export interface PRSizeThresholds {
+  xs: number;
   s: number;
   m: number;
   l: number;
@@ -25,10 +27,11 @@ export interface PRSizeThresholds {
 }
 
 export const DEFAULT_PR_SIZE_THRESHOLDS: PRSizeThresholds = {
-  s: 10,
-  m: 50,
-  l: 200,
-  xl: 500,
+  xs: 10,
+  s: 50,
+  m: 200,
+  l: 500,
+  xl: 1000,
 };
 
 /** Determine the size label for a PR given its line counts and thresholds. */
@@ -38,6 +41,7 @@ export function getPRSizeLabel(
   thresholds: PRSizeThresholds = DEFAULT_PR_SIZE_THRESHOLDS,
 ): PRSizeLabel {
   const total = additions + deletions;
+  if (total < thresholds.xs) return "XS";
   if (total < thresholds.s) return "S";
   if (total < thresholds.m) return "M";
   if (total < thresholds.l) return "L";
@@ -47,6 +51,7 @@ export function getPRSizeLabel(
 
 /** Tailwind classes for the inline badge component. */
 export const PR_SIZE_BADGE_STYLES: Record<PRSizeLabel, string> = {
+  XS: "bg-slate-200 text-slate-800 dark:bg-slate-800/70 dark:text-slate-200",
   S: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200",
   M: "bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200",
   L: "bg-orange-100 text-orange-800 dark:bg-orange-900/60 dark:text-orange-200",
@@ -56,6 +61,7 @@ export const PR_SIZE_BADGE_STYLES: Record<PRSizeLabel, string> = {
 
 /** Human-readable display names for size group headers. */
 export const PR_SIZE_DISPLAY: Record<PRSizeLabel, string> = {
+  XS: "Extra Small",
   S: "Small",
   M: "Medium",
   L: "Large",
@@ -63,5 +69,5 @@ export const PR_SIZE_DISPLAY: Record<PRSizeLabel, string> = {
   XXL: "Extra Extra Large",
 };
 
-/** Ordered list so groups always appear S -> XXL. */
-export const PR_SIZE_ORDER: PRSizeLabel[] = ["S", "M", "L", "XL", "XXL"];
+/** Ordered list so groups always appear XS -> XXL. */
+export const PR_SIZE_ORDER: PRSizeLabel[] = ["XS", "S", "M", "L", "XL", "XXL"];

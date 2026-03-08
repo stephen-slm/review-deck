@@ -266,11 +266,12 @@ export function GlobalSettingsPage() {
 
               <div className="rounded-lg border border-border bg-card p-3 space-y-3">
                 {([
-                  { key: "s" as const, label: "S", desc: "Small" },
-                  { key: "m" as const, label: "M", desc: "Medium" },
-                  { key: "l" as const, label: "L", desc: "Large" },
-                  { key: "xl" as const, label: "XL", desc: "Extra Large" },
-                ] as const).map((bucket, i) => (
+                  { key: "xs" as const, label: "XS" as const, desc: "Extra Small" },
+                  { key: "s" as const, label: "S" as const, desc: "Small" },
+                  { key: "m" as const, label: "M" as const, desc: "Medium" },
+                  { key: "l" as const, label: "L" as const, desc: "Large" },
+                  { key: "xl" as const, label: "XL" as const, desc: "Extra Large" },
+                ]).map((bucket, i) => (
                   <div
                     key={bucket.key}
                     className={cn(
@@ -290,13 +291,7 @@ export function GlobalSettingsPage() {
                       <div>
                         <p className="text-sm font-medium text-foreground">{bucket.desc}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {bucket.key === "s"
-                            ? `< ${prSizeThresholds.s} lines`
-                            : bucket.key === "m"
-                              ? `< ${prSizeThresholds.m} lines`
-                              : bucket.key === "l"
-                                ? `< ${prSizeThresholds.l} lines`
-                                : `< ${prSizeThresholds.xl} lines`}
+                          &lt; {prSizeThresholds[bucket.key]} lines
                         </p>
                       </div>
                     </div>

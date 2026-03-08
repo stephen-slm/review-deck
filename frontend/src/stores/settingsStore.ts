@@ -655,6 +655,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (val) {
         const parsed = JSON.parse(val) as PRSizeThresholds;
         if (
+          typeof parsed.xs === "number" &&
           typeof parsed.s === "number" &&
           typeof parsed.m === "number" &&
           typeof parsed.l === "number" &&
