@@ -456,9 +456,7 @@ export function CommandPalette() {
 
   const repos = useRepoStore((s) => s.repos);
   const selectedRepoId = useRepoStore((s) => s.selectedRepoId);
-  const isAllRepos = useRepoStore((s) => s.isAllRepos);
   const selectRepo = useRepoStore((s) => s.selectRepo);
-  const selectAllRepos = useRepoStore((s) => s.selectAllRepos);
   const addRepo = useRepoStore((s) => s.addRepo);
 
   const navigate = useNavigate();
@@ -586,7 +584,6 @@ export function CommandPalette() {
   type SelectableItem =
     | { type: "command"; command: Command }
     | { type: "pr"; pr: github.PullRequest }
-    | { type: "all-repos" }
     | { type: "repo"; index: number }
     | { type: "add-repo" };
 
@@ -601,14 +598,12 @@ export function CommandPalette() {
       for (const pr of filteredPRs) {
         items.push({ type: "pr", pr });
       }
-      items.push({ type: "all-repos" });
       for (let i = 0; i < filteredRepos.length; i++) {
         items.push({ type: "repo", index: i });
       }
       items.push({ type: "add-repo" });
     } else {
-      // repos mode — all-repos + repos + add-repo
-      items.push({ type: "all-repos" });
+      // repos mode
       for (let i = 0; i < filteredRepos.length; i++) {
         items.push({ type: "repo", index: i });
       }
@@ -649,9 +644,6 @@ export function CommandPalette() {
       } else if (item.type === "pr") {
         close();
         navigate(`/pr/${item.pr.nodeId}`);
-      } else if (item.type === "all-repos") {
-        selectAllRepos();
-        close();
       } else if (item.type === "repo") {
         selectRepo(filteredRepos[item.index].id);
         close();
@@ -660,7 +652,7 @@ export function CommandPalette() {
         addRepo();
       }
     },
-    [selectableItems, filteredRepos, selectRepo, selectAllRepos, addRepo, close, navigate],
+    [selectableItems, filteredRepos, selectRepo, addRepo, close, navigate],
   );
 
   // Keyboard navigation within the palette.
@@ -874,32 +866,9 @@ export function CommandPalette() {
                     Repositories
                   </div>
                 )}
-                {/* "All Repos" option */}
-                {(() => {
-                  const idx = flatIdx++;
-                  const isHighlighted = idx === highlightedIdx;
-                  return (
-                    <div
-                      ref={(el) => { itemRefs.current[idx] = el; }}
-                      onClick={() => handleSelect(idx)}
-                      onMouseEnter={() => setHighlightedIdx(idx)}
-                      className={cn(
-                        "mx-1 flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm text-foreground transition-colors",
-                        isHighlighted && "bg-primary/5 ring-1 ring-primary/40",
-                        !isHighlighted && "hover:bg-muted/50",
-                      )}
-                    >
-                      <Layers className={cn("h-4 w-4 shrink-0", isHighlighted ? "text-primary" : "text-muted-foreground")} />
-                      <span className="flex-1 truncate">All Repos</span>
-                      {isAllRepos && (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
-                      )}
-                    </div>
-                  );
-                })()}
                 {filteredRepos.map((repo) => {
                   const idx = flatIdx++;
-                  const isSelected = !isAllRepos && repo.id === selectedRepoId;
+                  const isSelected = repo.id === selectedRepoId;
                   const isHighlighted = idx === highlightedIdx;
                   return (
                     <div

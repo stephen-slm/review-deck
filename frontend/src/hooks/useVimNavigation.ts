@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect } from "react";
+import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { tinykeys } from "tinykeys";
 import { useVimStore, getActions } from "@/stores/vimStore";
+import { dlog } from "@/lib/debugLog";
 
 /** Routes corresponding to sidebar tabs 1-5. */
 const TAB_ROUTES = [
@@ -40,11 +41,19 @@ export function useVimNavigation() {
   const location = useLocation();
 
   // Reset selection when the route changes so each page starts fresh.
-  // useLayoutEffect ensures this runs synchronously before child
-  // useEffect hooks (e.g. PRTable's setListLength), preventing the
-  // parent reset from wiping out the child's freshly-set listLength.
-  useLayoutEffect(() => {
-    useVimStore.getState().resetSelection();
+  // Deferred via setTimeout(0) to move the Zustand set() out of React's
+  // commit phase — synchronous store mutations during commit count toward
+  // React's 50-update nested limit (error #185). The ordering is safe
+  // because child pages also defer their vimStore writes via setTimeout(0),
+  // and parent effects fire before child effects, so the reset's setTimeout
+  // is queued first and executes before the child's vimSync setTimeout.
+  useEffect(() => {
+    dlog("vimNav:effect", `resetSelection (deferred) for path=${location.pathname}`);
+    const id = setTimeout(() => {
+      dlog("vimNav:reset", `fire resetSelection for path=${location.pathname}`);
+      useVimStore.getState().resetSelection();
+    }, 0);
+    return () => clearTimeout(id);
   }, [location.pathname]);
 
   useEffect(() => {

@@ -8,13 +8,11 @@ import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import { useFlagStore } from "@/stores/flagStore";
 import {
   GetReviewedByMeForRepoPage,
-  GetReviewedByMeAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewedByMePage() {
   const { isAuthenticated, user } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
-  const isAllRepos = useRepoStore((s) => s.isAllRepos);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
   const {
@@ -32,17 +30,13 @@ export function ReviewedByMePage() {
 
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
-  const canFetch = isAllRepos || (!!owner && !!repo);
+  const canFetch = !!owner && !!repo;
 
-  // --- Unified fetch helper ---
   const fetchRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (isAllRepos) {
-        return GetReviewedByMeAllReposPage(pageSize, cursor);
-      }
       return GetReviewedByMeForRepoPage(owner, repo, pageSize, cursor);
     },
-    [isAllRepos, owner, repo],
+    [owner, repo],
   );
 
   const fetchPage = useCallback(
@@ -160,7 +154,7 @@ export function ReviewedByMePage() {
     }).catch(() =>
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false } })),
     );
-  }, [isAuthenticated, canFetch, isAllRepos, owner, repo, fetchPage]);
+  }, [isAuthenticated, canFetch, owner, repo, fetchPage]);
 
   if (!isAuthenticated) {
     return (
@@ -175,7 +169,7 @@ export function ReviewedByMePage() {
     );
   }
 
-  if (!selectedRepo && !isAllRepos) {
+  if (!selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -196,7 +190,7 @@ export function ReviewedByMePage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Open pull requests you have reviewed in{" "}
             <span className="font-medium text-foreground">
-              {isAllRepos ? "all tracked repos" : `${owner}/${repo}`}
+              {`${owner}/${repo}`}
             </span>.
           </p>
         </div>

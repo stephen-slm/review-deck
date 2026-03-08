@@ -6,6 +6,7 @@ import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { github } from "../../wailsjs/go/models";
 import { useToast } from "@/components/ui/Toast";
+import { dlog } from "@/lib/debugLog";
 
 interface PollResult {
   myPRs: unknown[] | null;
@@ -95,6 +96,7 @@ export function usePollerEvents() {
 
   useEffect(() => {
     const handleUpdate = (result: PollResult) => {
+      dlog("poller:update", `err=${!!result.error} myPRs=${(result.myPRs||[]).length}`);
       if (result.error) {
         console.warn("poller error:", result.error);
         return;
@@ -103,10 +105,9 @@ export function usePollerEvents() {
       // The poller fetches data for ALL tracked repos, but the frontend is
       // repo-scoped. Filter to only keep PRs matching the currently selected
       // repo so we don't overwrite the view with data from other repos.
-      // In "All Repos" mode, skip filtering so all data comes through.
-      const { selectedRepo: selected, isAllRepos } = useRepoStore.getState();
+      const { selectedRepo: selected } = useRepoStore.getState();
       const filterForRepo = (prs: github.PullRequest[]): github.PullRequest[] => {
-        if (isAllRepos || !selected) return prs;
+        if (!selected) return prs;
         return prs.filter(
           (pr) => pr.repoOwner === selected.repoOwner && pr.repoName === selected.repoName,
         );

@@ -8,8 +8,6 @@ import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import {
   GetMyPRsForRepoPage,
   GetMyRecentMergedForRepoPage,
-  GetMyPRsAllReposPage,
-  GetMyRecentMergedAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 type Tab = "open" | "merged";
@@ -17,7 +15,6 @@ type Tab = "open" | "merged";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
-  const isAllRepos = useRepoStore((s) => s.isAllRepos);
 
   const {
     pages,
@@ -40,29 +37,20 @@ export function MyPRsPage() {
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
 
-  // Whether we have a valid fetch target (either a specific repo or all-repos mode).
-  const canFetch = isAllRepos || (!!owner && !!repo);
-
-  // --- Unified fetch helpers that dispatch to repo-scoped or all-repos endpoints ---
+  const canFetch = !!owner && !!repo;
 
   const fetchOpenRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (isAllRepos) {
-        return GetMyPRsAllReposPage(pageSize, cursor);
-      }
       return GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
     },
-    [isAllRepos, owner, repo],
+    [owner, repo],
   );
 
   const fetchMergedRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (isAllRepos) {
-        return GetMyRecentMergedAllReposPage(14, pageSize, cursor);
-      }
       return GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
     },
-    [isAllRepos, owner, repo],
+    [owner, repo],
   );
 
   const fetchOpenPage = useCallback(
@@ -273,7 +261,7 @@ export function MyPRsPage() {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
       );
     }
-  }, [isAuthenticated, canFetch, isAllRepos, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
+  }, [isAuthenticated, canFetch, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
 
   if (!isAuthenticated) {
     return (
@@ -288,7 +276,7 @@ export function MyPRsPage() {
     );
   }
 
-  if (!selectedRepo && !isAllRepos) {
+  if (!selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -309,7 +297,7 @@ export function MyPRsPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Pull requests you have authored in{" "}
             <span className="font-medium text-foreground">
-              {isAllRepos ? "all tracked repos" : `${owner}/${repo}`}
+              {`${owner}/${repo}`}
             </span>.
           </p>
         </div>

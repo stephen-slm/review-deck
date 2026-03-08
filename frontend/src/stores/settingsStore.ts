@@ -21,6 +21,7 @@ import { SetPollInterval } from "../../wailsjs/go/main/App";
 import { github, storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
 import { ThemeChoice, themeChoices } from "../theme";
+import { dlog } from "@/lib/debugLog";
 
 const DEFAULT_THEME: ThemeChoice = "system";
 
@@ -198,6 +199,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   loadRepoSettings: async (repoId: string) => {
+    dlog("settings:loadRepo", `start repoId="${repoId}"`);
     set({ repoId });
     // Reload all repo-scoped settings for the new repo.
     const [owner, repo] = repoId.split("/");
@@ -209,11 +211,13 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       get().loadFilteredReviewUsers(),
       owner && repo ? get().loadLabels(owner, repo) : Promise.resolve(),
     ]);
+    dlog("settings:loadRepo", `done repoId="${repoId}"`);
   },
 
   loadFilterBots: async () => {
     try {
       const val = await getRepoSetting(get().repoId, "filter_bots");
+      dlog("settings:set", `filterBots=${val === "true"}`);
       set({ filterBots: val === "true" });
     } catch {
       set({ filterBots: false });
@@ -303,6 +307,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       if (val) {
         const parsed = JSON.parse(val) as string[];
         if (Array.isArray(parsed)) {
+          dlog("settings:set", `filteredReviewUsers=${parsed.length} items`);
           set({ filteredReviewUsers: parsed });
           return;
         }

@@ -11,20 +11,14 @@ import {
 } from "../../wailsjs/go/services/SettingsService";
 import { usePRStore } from "./prStore";
 
-/** Sentinel value used for the "All Repos" selection. */
-export const ALL_REPOS_ID = -1;
-
 interface RepoState {
   repos: storage.TrackedRepo[];
   selectedRepoId: number | null;
   isLoading: boolean;
   error: string | null;
 
-  /** The currently selected repo (derived). null when "All Repos" is active. */
+  /** The currently selected repo (derived). */
   selectedRepo: storage.TrackedRepo | null;
-
-  /** Whether the user has selected the "All Repos" aggregate view. */
-  isAllRepos: boolean;
 
   /** Load all tracked repos from the backend. */
   loadRepos: () => Promise<void>;
@@ -34,8 +28,6 @@ interface RepoState {
   removeRepo: (id: number) => Promise<void>;
   /** Select a repo by ID. */
   selectRepo: (id: number) => void;
-  /** Select the "All Repos" aggregate view. */
-  selectAllRepos: () => void;
   /** Load persisted selected repo ID from settings. */
   loadSelectedRepo: () => Promise<void>;
   /** Clear error. */
@@ -48,17 +40,11 @@ export const useRepoStore = create<RepoState>((set, get) => ({
   isLoading: false,
   error: null,
   selectedRepo: null,
-  isAllRepos: false,
 
   loadRepos: async () => {
     try {
       const repos = await GetTrackedRepos();
       const current = get().selectedRepoId;
-      // Preserve "All Repos" selection.
-      if (current === ALL_REPOS_ID) {
-        set({ repos: repos || [], isAllRepos: true, selectedRepo: null });
-        return;
-      }
       // If selected repo no longer exists in the list, auto-select first.
       const validSelection = current != null && repos.some((r) => r.id === current);
       const selectedId = validSelection ? current : repos.length > 0 ? repos[0].id : null;
@@ -66,7 +52,6 @@ export const useRepoStore = create<RepoState>((set, get) => ({
         repos: repos || [],
         selectedRepoId: selectedId,
         selectedRepo: repos?.find((r) => r.id === selectedId) ?? null,
-        isAllRepos: false,
       });
     } catch (err) {
       set({ error: String(err) });
@@ -109,22 +94,10 @@ export const useRepoStore = create<RepoState>((set, get) => ({
 
   selectRepo: (id: number) => {
     const prev = get().selectedRepoId;
-    const wasAllRepos = get().isAllRepos;
     const repo = get().repos.find((r) => r.id === id) ?? null;
-    set({ selectedRepoId: id, selectedRepo: repo, isAllRepos: false });
+    set({ selectedRepoId: id, selectedRepo: repo });
     SetSetting("selected_repo_id", String(id)).catch(() => {});
-    // When the repo actually changes (or switching from all-repos mode),
-    // clear all cached PR pages so pages re-fetch for the new repo.
-    if (prev !== id || wasAllRepos) {
-      usePRStore.getState().resetPages();
-    }
-  },
-
-  selectAllRepos: () => {
-    const wasAllRepos = get().isAllRepos;
-    set({ selectedRepoId: ALL_REPOS_ID, selectedRepo: null, isAllRepos: true });
-    SetSetting("selected_repo_id", String(ALL_REPOS_ID)).catch(() => {});
-    if (!wasAllRepos) {
+    if (prev !== id) {
       usePRStore.getState().resetPages();
     }
   },
@@ -134,16 +107,11 @@ export const useRepoStore = create<RepoState>((set, get) => ({
       const val = await GetSetting("selected_repo_id");
       if (val) {
         const id = parseInt(val, 10);
-        if (!isNaN(id)) {
-          if (id === ALL_REPOS_ID) {
-            set({ selectedRepoId: ALL_REPOS_ID, selectedRepo: null, isAllRepos: true });
-          } else {
-            set((state) => ({
-              selectedRepoId: id,
-              selectedRepo: state.repos.find((r) => r.id === id) ?? null,
-              isAllRepos: false,
-            }));
-          }
+        if (!isNaN(id) && id > 0) {
+          set((state) => ({
+            selectedRepoId: id,
+            selectedRepo: state.repos.find((r) => r.id === id) ?? null,
+          }));
         }
       }
     } catch {

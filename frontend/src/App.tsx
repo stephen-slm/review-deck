@@ -10,6 +10,7 @@ import { FlaggedPRsPage } from "./pages/FlaggedPRsPage";
 import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { PRDetailPage } from "./pages/PRDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { CommandPalette } from "./components/layout/CommandPalette";
 import { usePollerEvents } from "./hooks/usePollerEvents";
@@ -19,8 +20,12 @@ import { usePRStore } from "./stores/prStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useFlagStore } from "./stores/flagStore";
 import { useRepoStore } from "./stores/repoStore";
+import { dlog } from "./lib/debugLog";
+
+let _appRenderSeq = 0;
 
 function AppContent() {
+  dlog("AppContent:render", `#${++_appRenderSeq}`);
   // Listen for backend poller events and push data into stores.
   usePollerEvents();
   // Global VIM-style keyboard navigation.
@@ -31,7 +36,6 @@ function AppContent() {
 
   const repos = useRepoStore((s) => s.repos);
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
-  const isAllRepos = useRepoStore((s) => s.isAllRepos);
 
   // Hydrate persisted settings and cache timestamps on startup.
   useEffect(() => {
@@ -46,17 +50,17 @@ function AppContent() {
   }, []);
 
   // Reload repo-scoped settings whenever the selected repo changes.
-  // In "All Repos" mode, load global (unscoped) settings.
   useEffect(() => {
     const repoId = selectedRepo
       ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
       : "";
+    dlog("AppContent:effect", `loadRepoSettings("${repoId}")`);
     useSettingsStore.getState().loadRepoSettings(repoId);
     useFlagStore.getState().loadRules(repoId);
-  }, [selectedRepo?.repoOwner, selectedRepo?.repoName, isAllRepos]);
+  }, [selectedRepo?.repoOwner, selectedRepo?.repoName]);
 
-  // Show onboarding if no repos are tracked yet (but not in all-repos mode with repos).
-  const showOnboarding = repos.length === 0 || (!selectedRepo && !isAllRepos);
+  // Show onboarding if no repos are tracked yet.
+  const showOnboarding = repos.length === 0 || !selectedRepo;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-background">
@@ -82,7 +86,7 @@ function AppContent() {
             <Route path="/flagged" element={<FlaggedPRsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/global-settings" element={<GlobalSettingsPage />} />
-            <Route path="/pr/:nodeId" element={<PRDetailPage />} />
+            <Route path="/pr/:nodeId" element={<ErrorBoundary label="PR Detail"><PRDetailPage /></ErrorBoundary>} />
           </Routes>
         </div>
         <ShortcutHintBar />

@@ -9,7 +9,6 @@ import {
   ChevronDown,
   Plus,
   FolderGit2,
-  Layers,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
 import { cn } from "@/lib/utils";
@@ -40,9 +39,13 @@ const navItems: NavItem[] = [
 ];
 
 export function Sidebar() {
-  const { isAuthenticated, user, checkAuth } = useAuthStore();
+  // Narrow selectors — only re-render when the specific value changes.
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const pages = usePRStore((s) => s.pages);
-  const { repos, selectedRepoId, selectedRepo, isAllRepos, selectRepo, selectAllRepos, addRepo, loadRepos, loadSelectedRepo } = useRepoStore();
+  const repos = useRepoStore((s) => s.repos);
+  const selectedRepoId = useRepoStore((s) => s.selectedRepoId);
+  const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [highlightedIdx, setHighlightedIdx] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -77,24 +80,21 @@ export function Sidebar() {
   };
 
   useEffect(() => {
+    const { checkAuth } = useAuthStore.getState();
+    const { loadRepos, loadSelectedRepo } = useRepoStore.getState();
     checkAuth();
     loadRepos().then(() => loadSelectedRepo());
-  }, [checkAuth, loadRepos, loadSelectedRepo]);
+  }, []);
 
   // Reset highlight when dropdown opens/closes.
   useEffect(() => {
     if (dropdownOpen) {
-      if (isAllRepos) {
-        setHighlightedIdx(0); // "All Repos" is index 0
-      } else {
-        // Repos are offset by 1 in the dropdown list.
-        const idx = repos.findIndex((r) => r.id === selectedRepoId);
-        setHighlightedIdx(idx >= 0 ? idx + 1 : 0);
-      }
+      const idx = repos.findIndex((r) => r.id === selectedRepoId);
+      setHighlightedIdx(idx >= 0 ? idx : 0);
     } else {
       setHighlightedIdx(-1);
     }
-  }, [dropdownOpen, repos, selectedRepoId, isAllRepos]);
+  }, [dropdownOpen, repos, selectedRepoId]);
 
   // Auto-scroll highlighted item into view.
   useEffect(() => {
@@ -125,8 +125,7 @@ export function Sidebar() {
 
   // Vim-style keyboard navigation when dropdown is open (j/k/Enter).
   // Uses keydown on window so it works even when no input is focused.
-  // Index 0 = "All Repos", indices 1..N = individual repos.
-  const totalItems = repos.length + 1;
+  const totalItems = repos.length;
   useEffect(() => {
     if (!dropdownOpen || repos.length === 0) return;
     const handler = (e: KeyboardEvent) => {
@@ -142,18 +141,15 @@ export function Sidebar() {
         setHighlightedIdx((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter") {
         e.preventDefault();
-        if (highlightedIdx === 0) {
-          selectAllRepos();
-          setDropdownOpen(false);
-        } else if (highlightedIdx > 0 && highlightedIdx <= repos.length) {
-          selectRepo(repos[highlightedIdx - 1].id);
+        if (highlightedIdx >= 0 && highlightedIdx < repos.length) {
+          useRepoStore.getState().selectRepo(repos[highlightedIdx].id);
           setDropdownOpen(false);
         }
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dropdownOpen, repos, totalItems, highlightedIdx, selectRepo, selectAllRepos]);
+  }, [dropdownOpen, repos, totalItems, highlightedIdx]);
 
   // Listen for global toggle event (Cmd+0 keybinding).
   useEffect(() => {
@@ -164,8 +160,8 @@ export function Sidebar() {
 
   const handleAddRepo = useCallback(async () => {
     setDropdownOpen(false);
-    await addRepo();
-  }, [addRepo]);
+    await useRepoStore.getState().addRepo();
+  }, []);
 
   return (
     <aside className="flex h-full w-56 flex-col border-r border-border bg-card">
@@ -184,70 +180,42 @@ export function Sidebar() {
           onClick={() => setDropdownOpen((o) => !o)}
           className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent"
         >
-          {isAllRepos ? (
-            <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          ) : (
-            <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
+          <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="flex-1 truncate text-left">
-            {isAllRepos
-              ? "All Repos"
-              : selectedRepo
-                ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
-                : repos.length > 0
-                  ? "Select a repo"
-                  : "No repos added"}
+            {selectedRepo
+              ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
+              : repos.length > 0
+                ? "Select a repo"
+                : "No repos added"}
           </span>
           <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", dropdownOpen && "rotate-180")} />
         </button>
 
         {dropdownOpen && (
           <div className="mt-1 max-h-64 overflow-auto rounded-md border border-border bg-popover shadow-md">
-            {/* "All Repos" aggregate option */}
-            <button
-              ref={(el) => { itemRefs.current[0] = el; }}
-              onClick={() => {
-                selectAllRepos();
-                setDropdownOpen(false);
-              }}
-              onMouseEnter={() => setHighlightedIdx(0)}
-              className={cn(
-                "flex w-full items-center gap-2 border-b border-border px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                isAllRepos && highlightedIdx !== 0 && "bg-accent/50 text-accent-foreground",
-                highlightedIdx === 0 && "bg-accent text-accent-foreground",
-              )}
-            >
-              <Layers className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">All Repos</p>
-              </div>
-            </button>
-            {repos.map((repo, i) => {
-              const idx = i + 1; // offset by 1 for the "All Repos" entry
-              return (
-                <button
-                  key={repo.id}
-                  ref={(el) => { itemRefs.current[idx] = el; }}
-                  onClick={() => {
-                    selectRepo(repo.id);
-                    setDropdownOpen(false);
-                  }}
-                  onMouseEnter={() => setHighlightedIdx(idx)}
-                  className={cn(
-                    "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
-                    repo.id === selectedRepoId && !isAllRepos && idx !== highlightedIdx && "bg-accent/50 text-accent-foreground",
-                    idx === highlightedIdx && "bg-accent text-accent-foreground",
-                  )}
-                >
-                  <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {repo.repoOwner}/{repo.repoName}
-                    </p>
-                  </div>
-                </button>
-              );
-            })}
+            {repos.map((repo, i) => (
+              <button
+                key={repo.id}
+                ref={(el) => { itemRefs.current[i] = el; }}
+                onClick={() => {
+                  useRepoStore.getState().selectRepo(repo.id);
+                  setDropdownOpen(false);
+                }}
+                onMouseEnter={() => setHighlightedIdx(i)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors hover:bg-accent",
+                  repo.id === selectedRepoId && i !== highlightedIdx && "bg-accent/50 text-accent-foreground",
+                  i === highlightedIdx && "bg-accent text-accent-foreground",
+                )}
+              >
+                <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {repo.repoOwner}/{repo.repoName}
+                  </p>
+                </div>
+              </button>
+            ))}
             <button
               onClick={handleAddRepo}
               className="flex w-full items-center gap-2 border-t border-border px-3 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"

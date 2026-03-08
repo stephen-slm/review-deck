@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { dlog } from "@/lib/debugLog";
 
 // ---- Action callbacks (non-reactive) ----
 // These are stored outside Zustand's reactive state so that updating them
@@ -140,10 +141,14 @@ export const useVimStore = create<VimState>((set, get) => ({
   visualAnchor: -1,
   pickedIndices: new Set<number>(),
 
-  setSelectedIndex: (i) => set({ selectedIndex: i }),
+  setSelectedIndex: (i) => {
+    dlog("vim:setIdx", `${get().selectedIndex} -> ${i}`);
+    set({ selectedIndex: i });
+  },
 
   setListLength: (n) => {
     const { selectedIndex } = get();
+    dlog("vim:setLen", `${get().listLength} -> ${n} (selIdx=${selectedIndex})`);
     // Clamp selection if the list shrunk.
     if (selectedIndex >= n) {
       set({ listLength: n, selectedIndex: n > 0 ? n - 1 : -1 });
@@ -169,7 +174,10 @@ export const useVimStore = create<VimState>((set, get) => ({
     set({ selectedIndex: next });
   },
 
-  resetSelection: () => set({ selectedIndex: -1, listLength: 0, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() }),
+  resetSelection: () => {
+    dlog("vim:reset", `selIdx=${get().selectedIndex} listLen=${get().listLength}`);
+    set({ selectedIndex: -1, listLength: 0, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() });
+  },
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
   toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),

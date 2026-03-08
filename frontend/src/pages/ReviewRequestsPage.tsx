@@ -10,13 +10,11 @@ import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 import {
   GetReviewRequestsForRepoPage,
-  GetReviewRequestsAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewRequestsPage() {
   const { isAuthenticated } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
-  const isAllRepos = useRepoStore((s) => s.isAllRepos);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
   const { loadAllPriorities, getPriorityNames } = useSettingsStore();
@@ -37,17 +35,13 @@ export function ReviewRequestsPage() {
 
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
-  const canFetch = isAllRepos || (!!owner && !!repo);
+  const canFetch = !!owner && !!repo;
 
-  // --- Unified fetch helper ---
   const fetchRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (isAllRepos) {
-        return GetReviewRequestsAllReposPage(pageSize, cursor);
-      }
       return GetReviewRequestsForRepoPage(owner, repo, pageSize, cursor);
     },
-    [isAllRepos, owner, repo],
+    [owner, repo],
   );
 
   const fetchPage = useCallback(
@@ -178,7 +172,7 @@ export function ReviewRequestsPage() {
     }).catch(() =>
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false } })),
     );
-  }, [isAuthenticated, canFetch, isAllRepos, owner, repo, fetchPage]);
+  }, [isAuthenticated, canFetch, owner, repo, fetchPage]);
 
   if (!isAuthenticated) {
     return (
@@ -193,7 +187,7 @@ export function ReviewRequestsPage() {
     );
   }
 
-  if (!selectedRepo && !isAllRepos) {
+  if (!selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -214,7 +208,7 @@ export function ReviewRequestsPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Pull requests awaiting your review in{" "}
             <span className="font-medium text-foreground">
-              {isAllRepos ? "all tracked repos" : `${owner}/${repo}`}
+              {`${owner}/${repo}`}
             </span>.
           </p>
         </div>

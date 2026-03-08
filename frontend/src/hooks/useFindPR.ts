@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import { usePRStore } from "@/stores/prStore";
 import { github } from "../../wailsjs/go/models";
+import { dlog } from "@/lib/debugLog";
 
 /** Search all PR store arrays for a PR by nodeId.
  *  Derives a stable cache key so the expensive lookup only re-runs when page
@@ -25,6 +26,8 @@ export function useFindPR(nodeId: string | undefined): github.PullRequest | unde
   const prevRef = useRef<github.PullRequest | undefined>(undefined);
 
   return useMemo(() => {
+    const hasPrev = !!prevRef.current;
+    dlog("useFindPR", `nodeId=${nodeId} fp=${fingerprint} hasPrev=${hasPrev}`);
     if (!nodeId) {
       prevRef.current = undefined;
       return undefined;
@@ -44,9 +47,11 @@ export function useFindPR(nodeId: string | undefined): github.PullRequest | unde
     // store arrays with new object references but the data is identical.
     const prev = prevRef.current;
     if (prev && found && prev.nodeId === found.nodeId && prev.updatedAt === found.updatedAt) {
+      dlog("useFindPR", "reusing prev ref");
       return prev;
     }
 
+    dlog("useFindPR", `NEW ref: found=${!!found} prev=${!!prev} prevId=${prev?.nodeId?.slice(0,10)} foundId=${found?.nodeId?.slice(0, 10)}`);
     prevRef.current = found;
     return found;
   // eslint-disable-next-line react-hooks/exhaustive-deps
