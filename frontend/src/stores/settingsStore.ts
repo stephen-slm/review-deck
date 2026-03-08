@@ -22,6 +22,7 @@ import { github, storage } from "../../wailsjs/go/models";
 import { usePRStore } from "./prStore";
 import { ThemeChoice, themeChoices } from "../theme";
 import { dlog } from "@/lib/debugLog";
+import { PRSizeThresholds, DEFAULT_PR_SIZE_THRESHOLDS } from "@/lib/prSizes";
 
 const DEFAULT_THEME: ThemeChoice = "system";
 
@@ -131,6 +132,11 @@ interface SettingsState {
   aiTitlePrompt: string;
   loadAiTitlePrompt: () => Promise<void>;
   setAiTitlePrompt: (prompt: string) => Promise<void>;
+
+  /** Configurable thresholds that define PR size buckets (S / M / L / XL / XXL). */
+  prSizeThresholds: PRSizeThresholds;
+  loadPRSizeThresholds: () => Promise<void>;
+  setPRSizeThresholds: (thresholds: PRSizeThresholds) => Promise<void>;
 }
 
 /** Return the repo-scoped setting key, e.g. `repo:acme/my-app:filter_bots`. */
@@ -176,6 +182,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   prioritiesByOrg: {},
   excludedReposByOrg: {},
   sourceBasePath: "",
+  prSizeThresholds: DEFAULT_PR_SIZE_THRESHOLDS,
   isLoading: false,
 
   loadOrgs: async () => {
@@ -640,5 +647,31 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await SetSetting("ai_title_prompt", prompt);
     }
     set({ aiTitlePrompt: prompt });
+  },
+
+  loadPRSizeThresholds: async () => {
+    try {
+      const val = await GetSetting("pr_size_thresholds");
+      if (val) {
+        const parsed = JSON.parse(val) as PRSizeThresholds;
+        if (
+          typeof parsed.s === "number" &&
+          typeof parsed.m === "number" &&
+          typeof parsed.l === "number" &&
+          typeof parsed.xl === "number"
+        ) {
+          set({ prSizeThresholds: parsed });
+          return;
+        }
+      }
+    } catch {
+      // Setting doesn't exist yet or invalid JSON — use default.
+    }
+    set({ prSizeThresholds: DEFAULT_PR_SIZE_THRESHOLDS });
+  },
+
+  setPRSizeThresholds: async (thresholds: PRSizeThresholds) => {
+    await SetSetting("pr_size_thresholds", JSON.stringify(thresholds));
+    set({ prSizeThresholds: thresholds });
   },
 }));

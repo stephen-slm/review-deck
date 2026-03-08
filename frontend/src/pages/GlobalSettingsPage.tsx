@@ -3,7 +3,9 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { registerActions, clearActions } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2 } from "lucide-react";
+import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2, Ruler } from "lucide-react";
+import { DEFAULT_PR_SIZE_THRESHOLDS, PR_SIZE_BADGE_STYLES } from "@/lib/prSizes";
+import { cn } from "@/lib/utils";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
 import { GetDefaultReviewPrompt, GetDefaultDescriptionPrompt, GetDefaultTitlePrompt } from "../../wailsjs/go/services/WorkspaceService";
 import { useRepoStore } from "@/stores/repoStore";
@@ -20,7 +22,7 @@ const globalTabs: TabDef[] = [
 
 export function GlobalSettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt } = useSettingsStore();
+  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   const [activeTab, setActiveTab] = useState<GlobalTab>("general");
@@ -38,8 +40,9 @@ export function GlobalSettingsPage() {
     loadAiDescriptionPrompt();
     loadAiDescriptionMaxCost();
     loadAiTitlePrompt();
+    loadPRSizeThresholds();
     loadRepos();
-  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadRepos]);
+  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadPRSizeThresholds, loadRepos]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-3 switch tabs.
   useEffect(() => {
@@ -247,6 +250,105 @@ export function GlobalSettingsPage() {
                     </button>
                   );
                 })}
+              </div>
+            </section>
+
+            {/* PR Size Thresholds Section */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">PR Size Thresholds</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Define line-count boundaries (additions + deletions) for each PR size label.
+                A PR is labelled with the largest size whose threshold it falls below.
+              </p>
+
+              <div className="rounded-lg border border-border bg-card p-3 space-y-3">
+                {([
+                  { key: "s" as const, label: "S", desc: "Small" },
+                  { key: "m" as const, label: "M", desc: "Medium" },
+                  { key: "l" as const, label: "L", desc: "Large" },
+                  { key: "xl" as const, label: "XL", desc: "Extra Large" },
+                ] as const).map((bucket, i) => (
+                  <div
+                    key={bucket.key}
+                    className={cn(
+                      "flex items-center justify-between",
+                      i > 0 && "border-t border-border pt-3",
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={cn(
+                          "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold",
+                          PR_SIZE_BADGE_STYLES[bucket.label],
+                        )}
+                      >
+                        {bucket.label}
+                      </span>
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{bucket.desc}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {bucket.key === "s"
+                            ? `< ${prSizeThresholds.s} lines`
+                            : bucket.key === "m"
+                              ? `< ${prSizeThresholds.m} lines`
+                              : bucket.key === "l"
+                                ? `< ${prSizeThresholds.l} lines`
+                                : `< ${prSizeThresholds.xl} lines`}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">&lt;</span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={prSizeThresholds[bucket.key]}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1) {
+                            setPRSizeThresholds({ ...prSizeThresholds, [bucket.key]: val });
+                          }
+                        }}
+                        className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                      />
+                      <span className="text-xs text-muted-foreground">lines</span>
+                    </div>
+                  </div>
+                ))}
+
+                {/* XXL indicator (not editable — everything above XL threshold) */}
+                <div className="flex items-center justify-between border-t border-border pt-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold",
+                        PR_SIZE_BADGE_STYLES["XXL"],
+                      )}
+                    >
+                      XXL
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Extra Extra Large</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        &ge; {prSizeThresholds.xl} lines
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reset to defaults */}
+                <div className="border-t border-border pt-3">
+                  <button
+                    onClick={() => setPRSizeThresholds(DEFAULT_PR_SIZE_THRESHOLDS)}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Reset to defaults
+                  </button>
+                </div>
               </div>
             </section>
 

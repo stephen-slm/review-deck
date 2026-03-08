@@ -42,6 +42,7 @@ function AppContent() {
     usePRStore.getState().loadCacheTimestamps();
     usePRStore.getState().loadHiddenPRs();
     useSettingsStore.getState().loadPRRefreshInterval();
+    useSettingsStore.getState().loadPRSizeThresholds();
     // Load repos and persisted selection — repo-scoped settings are loaded
     // by the selectedRepo effect below once the selection is known.
     useRepoStore.getState().loadRepos().then(() => {

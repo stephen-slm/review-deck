@@ -33,14 +33,4 @@ export function hexLuminance(hex: string): number {
   return 0.299 * r + 0.587 * g + 0.114 * b;
 }
 
-export function prSize(
-  additions: number,
-  deletions: number
-): { label: string; color: string } {
-  const total = additions + deletions;
-  if (total < 10) return { label: "XS", color: "text-gray-400" };
-  if (total < 50) return { label: "S", color: "text-green-400" };
-  if (total < 200) return { label: "M", color: "text-yellow-400" };
-  if (total < 500) return { label: "L", color: "text-orange-400" };
-  return { label: "XL", color: "text-red-400" };
-}
+

@@ -1,32 +1,13 @@
 import type { github } from "../../wailsjs/go/models";
+import { getPRSizeLabel, PR_SIZE_DISPLAY, PR_SIZE_ORDER } from "@/lib/prSizes";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 export type CopyGrouping = "none" | "repo" | "size";
 
-/** Size label thresholds — must match PRSizeBadge / prSize in utils.ts */
-function getSizeLabel(additions: number, deletions: number): string {
-  const total = additions + deletions;
-  if (total < 10) return "XS";
-  if (total < 50) return "S";
-  if (total < 200) return "M";
-  if (total < 500) return "L";
-  return "XL";
-}
-
-/** Full display name for size group headers */
-const SIZE_DISPLAY: Record<string, string> = {
-  XS: "Extra Small",
-  S: "Small",
-  M: "Medium",
-  L: "Large",
-  XL: "Extra Large",
-};
-
-/** Ordered list so groups always appear XS → XL */
-const SIZE_ORDER = ["XS", "S", "M", "L", "XL"];
-
 /** Format a single PR line: `[title](url) - (SIZE, +add, -del)` */
 function formatPRLine(pr: github.PullRequest): string {
-  const size = getSizeLabel(pr.additions, pr.deletions);
+  const thresholds = useSettingsStore.getState().prSizeThresholds;
+  const size = getPRSizeLabel(pr.additions, pr.deletions, thresholds);
   return `[${pr.title}](${pr.url}) - (${size}, +${pr.additions}, -${pr.deletions})`;
 }
 
@@ -65,7 +46,7 @@ export function formatPRs(
   }
 }
 
-/** Flat list — no group headers */
+/** Flat list -- no group headers */
 function formatNoGrouping(prs: github.PullRequest[]): string {
   const lines = prs.map((pr) => formatPRLine(pr));
   return `:PR:\n\n${lines.join("\n")}`;
@@ -90,21 +71,22 @@ function formatGroupedByRepo(prs: github.PullRequest[]): string {
   return `:PR:\n\n${sections.join("\n\n")}`;
 }
 
-/** Group under `*Extra Small*`, `*Small*`, …, `*Extra Large*` headers */
+/** Group under `*Small*`, `*Medium*`, ..., `*Extra Extra Large*` headers */
 function formatGroupedBySize(prs: github.PullRequest[]): string {
+  const thresholds = useSettingsStore.getState().prSizeThresholds;
   const groups = new Map<string, github.PullRequest[]>();
   for (const pr of prs) {
-    const key = getSizeLabel(pr.additions, pr.deletions);
+    const key = getPRSizeLabel(pr.additions, pr.deletions, thresholds);
     const list = groups.get(key) ?? [];
     list.push(pr);
     groups.set(key, list);
   }
 
   const sections: string[] = [];
-  for (const code of SIZE_ORDER) {
+  for (const code of PR_SIZE_ORDER) {
     const items = groups.get(code);
     if (!items || items.length === 0) continue;
-    const header = SIZE_DISPLAY[code] ?? code;
+    const header = PR_SIZE_DISPLAY[code] ?? code;
     const lines = items.map((pr) => formatPRLine(pr));
     sections.push(`*${header}*\n${lines.join("\n")}`);
   }
