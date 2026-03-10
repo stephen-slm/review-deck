@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -129,6 +131,12 @@ func (a *App) SetPollInterval(minutes int) error {
 	}
 	a.poller.SetInterval(minutes)
 	return nil
+}
+
+// SendNotification sends a native macOS notification via osascript.
+func (a *App) SendNotification(title, message string) {
+	script := fmt.Sprintf(`display notification %q with title %q`, message, title)
+	_ = exec.Command("osascript", "-e", script).Run()
 }
 
 // ImageProxyMiddleware returns an HTTP middleware that proxies image requests

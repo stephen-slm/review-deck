@@ -3,6 +3,8 @@
 
 export function ImageProxyMiddleware():Promise<any>;
 
+export function SendNotification(arg1:string,arg2:string):Promise<void>;
+
 export function SetPollInterval(arg1:number):Promise<void>;
 
 export function StartPoller():Promise<void>;

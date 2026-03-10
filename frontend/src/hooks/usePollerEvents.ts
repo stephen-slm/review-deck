@@ -5,6 +5,7 @@ import { SetSetting } from "../../wailsjs/go/services/SettingsService";
 import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { github } from "../../wailsjs/go/models";
+import { SendNotification } from "../../wailsjs/go/main/App";
 import { useToast } from "@/components/ui/Toast";
 import { dlog } from "@/lib/debugLog";
 
@@ -163,12 +164,18 @@ export function usePollerEvents() {
     };
 
     const handleNotifications = (notifications: Notification[]) => {
+      const windowFocused = document.hasFocus();
+
       for (const n of notifications) {
-        const toastType = notificationToastType(n.type);
-        const onClick = n.nodeId
-          ? () => navigate(`/pr/${n.nodeId}`)
-          : undefined;
-        addToast(n.message, toastType, 6000, onClick);
+        if (windowFocused) {
+          const toastType = notificationToastType(n.type);
+          const onClick = n.nodeId
+            ? () => navigate(`/pr/${n.nodeId}`)
+            : undefined;
+          addToast(n.message, toastType, 6000, onClick);
+        } else {
+          SendNotification("Review Deck", n.message);
+        }
       }
     };
 
