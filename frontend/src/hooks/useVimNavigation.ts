@@ -43,10 +43,9 @@ export function useVimNavigation() {
   // Reset selection when the route changes so each page starts fresh.
   // Deferred via setTimeout(0) to move the Zustand set() out of React's
   // commit phase — synchronous store mutations during commit count toward
-  // React's 50-update nested limit (error #185). The ordering is safe
-  // because child pages also defer their vimStore writes via setTimeout(0),
-  // and parent effects fire before child effects, so the reset's setTimeout
-  // is queued first and executes before the child's vimSync setTimeout.
+  // React's 50-update nested limit (error #185).
+  // NOTE: resetSelection() intentionally does NOT reset listLength — that
+  // is owned by the mounted list component (PRTable, etc.) via setListLength().
   useEffect(() => {
     dlog("vimNav:effect", `resetSelection (deferred) for path=${location.pathname}`);
     const id = setTimeout(() => {

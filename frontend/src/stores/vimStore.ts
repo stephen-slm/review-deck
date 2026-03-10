@@ -176,7 +176,13 @@ export const useVimStore = create<VimState>((set, get) => ({
 
   resetSelection: () => {
     dlog("vim:reset", `selIdx=${get().selectedIndex} listLen=${get().listLength}`);
-    set({ selectedIndex: -1, listLength: 0, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() });
+    // NOTE: listLength is intentionally NOT reset here. It is owned by the
+    // currently mounted list component (PRTable, DiffView, ChecksTab, etc.)
+    // which sets it via setListLength(). Resetting it here causes a race
+    // condition: this function is called via setTimeout(0) on route change,
+    // which fires AFTER the new component's useEffect has already set the
+    // correct listLength, clobbering it to 0 and breaking j/k navigation.
+    set({ selectedIndex: -1, visualMode: false, visualAnchor: -1, pickedIndices: new Set<number>() });
   },
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
