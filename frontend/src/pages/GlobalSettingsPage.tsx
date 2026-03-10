@@ -3,10 +3,11 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { registerActions, clearActions } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2, Ruler } from "lucide-react";
+import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2, Ruler, Bell } from "lucide-react";
 import { DEFAULT_PR_SIZE_THRESHOLDS, PR_SIZE_BADGE_STYLES } from "@/lib/prSizes";
 import { cn } from "@/lib/utils";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
+import { SendNotification } from "../../wailsjs/go/main/App";
 import { GetDefaultReviewPrompt, GetDefaultDescriptionPrompt, GetDefaultTitlePrompt } from "../../wailsjs/go/services/WorkspaceService";
 import { useRepoStore } from "@/stores/repoStore";
 
@@ -250,6 +251,38 @@ export function GlobalSettingsPage() {
                     </button>
                   );
                 })}
+              </div>
+            </section>
+
+            {/* Notifications Section */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Notifications</h3>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                When the app is not in focus, notifications are delivered as native macOS
+                notifications. Use the button below to verify they are working.
+              </p>
+
+              <div className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Test notification
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Sends a sample native macOS notification.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => SendNotification("Review Deck", "This is a test notification.")}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-2 text-sm font-medium text-secondary-foreground transition-colors hover:bg-secondary/80"
+                  >
+                    <Bell className="h-3.5 w-3.5" />
+                    Send test
+                  </button>
+                </div>
               </div>
             </section>
 

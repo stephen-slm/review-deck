@@ -2,13 +2,11 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -100,6 +98,9 @@ func (a *App) startup(ctx context.Context) {
 
 // domReady is called after the frontend DOM has been loaded.
 func (a *App) domReady(ctx context.Context) {
+	// Request notification permission and install the foreground delegate.
+	initNotifications()
+
 	// Start the background poller if we have an authenticated client.
 	if a.authService.IsAuthenticated() {
 		a.poller.Start(ctx, wailsRuntime.EventsEmit)
@@ -133,10 +134,11 @@ func (a *App) SetPollInterval(minutes int) error {
 	return nil
 }
 
-// SendNotification sends a native macOS notification via osascript.
+// SendNotification delivers a native macOS notification via
+// UNUserNotificationCenter. This makes the app appear in
+// System Settings > Notifications so users can configure preferences.
 func (a *App) SendNotification(title, message string) {
-	script := fmt.Sprintf(`display notification %q with title %q`, message, title)
-	_ = exec.Command("osascript", "-e", script).Run()
+	sendNotification(title, message)
 }
 
 // ImageProxyMiddleware returns an HTTP middleware that proxies image requests
