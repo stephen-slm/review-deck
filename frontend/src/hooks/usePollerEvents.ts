@@ -8,6 +8,7 @@ import { github } from "../../wailsjs/go/models";
 import { SendNotification } from "../../wailsjs/go/main/App";
 import { useToast } from "@/components/ui/Toast";
 import { dlog } from "@/lib/debugLog";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 interface PollResult {
   myPRs: unknown[] | null;
@@ -167,15 +168,22 @@ export function usePollerEvents() {
       const windowFocused = document.hasFocus();
 
       for (const n of notifications) {
+        // Always send a native macOS notification.
+        SendNotification("Review Deck", n.message);
+
+        // Also show an in-app toast when the window is focused.
         if (windowFocused) {
           const toastType = notificationToastType(n.type);
           const onClick = n.nodeId
             ? () => navigate(`/pr/${n.nodeId}`)
             : undefined;
           addToast(n.message, toastType, 6000, onClick);
-        } else {
-          SendNotification("Review Deck", n.message);
         }
+      }
+
+      // Refresh notification store so inbox badge and list stay current.
+      if (notifications.length > 0) {
+        useNotificationStore.getState().refreshUnreadCount();
       }
     };
 

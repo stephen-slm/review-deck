@@ -212,6 +212,13 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_repo_labels_repo ON repo_labels(repo_owner, repo_name);`,
+
+	// Migration 12: Extend notifications with repo, number, url, author for inbox.
+	`ALTER TABLE notifications ADD COLUMN repo TEXT NOT NULL DEFAULT '';
+	ALTER TABLE notifications ADD COLUMN number INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE notifications ADD COLUMN url TEXT NOT NULL DEFAULT '';
+	ALTER TABLE notifications ADD COLUMN author TEXT NOT NULL DEFAULT '';
+	CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);`,
 }
 
 // Migrate runs all pending migrations.

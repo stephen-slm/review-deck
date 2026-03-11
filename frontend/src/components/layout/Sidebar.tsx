@@ -9,6 +9,7 @@ import {
   ChevronDown,
   Plus,
   FolderGit2,
+  Inbox,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
 import { cn } from "@/lib/utils";
@@ -17,12 +18,13 @@ import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { setEscapeAction } from "@/stores/vimStore";
 import { useFlagStore } from "@/stores/flagStore";
+import { useNotificationStore } from "@/stores/notificationStore";
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof GitPullRequest;
-  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged";
+  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged" | "inbox";
 }
 
 const navItems: NavItem[] = [
@@ -35,6 +37,7 @@ const navItems: NavItem[] = [
   },
   { to: "/reviewed", label: "Reviewed by Me", icon: CheckCheck, badgeKey: "reviewedByMe" },
   { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
+  { to: "/inbox", label: "Inbox", icon: Inbox, badgeKey: "inbox" },
   { to: "/settings", label: "Repo Settings", icon: Settings },
 ];
 
@@ -53,6 +56,7 @@ export function Sidebar() {
 
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
+  const inboxUnread = useNotificationStore((s) => s.unreadCount);
 
   const flaggedCount = useMemo(() => {
     const seen = new Set<string>();
@@ -77,6 +81,7 @@ export function Sidebar() {
     reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
     reviewedByMe: reviewedByMeCount,
     flagged: flaggedCount,
+    inbox: inboxUnread,
   };
 
   useEffect(() => {
@@ -84,6 +89,7 @@ export function Sidebar() {
     const { loadRepos, loadSelectedRepo } = useRepoStore.getState();
     checkAuth();
     loadRepos().then(() => loadSelectedRepo());
+    useNotificationStore.getState().refreshUnreadCount();
   }, []);
 
   // Reset highlight when dropdown opens/closes.
@@ -253,7 +259,9 @@ export function Sidebar() {
                       ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
                       : item.badgeKey === "reviewRequests"
                         ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                        : "bg-secondary text-secondary-foreground"
+                        : item.badgeKey === "inbox"
+                          ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
+                          : "bg-secondary text-secondary-foreground"
                   )}
                 >
                   {count}

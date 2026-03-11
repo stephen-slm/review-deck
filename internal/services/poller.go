@@ -348,6 +348,20 @@ func (p *Poller) poll(ctx context.Context) {
 			notifications = filtered
 		}
 
+		// Persist notifications to the database for inbox history.
+		for _, n := range notifications {
+			p.db.InsertNotification(storage.AppNotification{
+				PRNodeID:  n.NodeID,
+				EventType: n.Type,
+				Title:     n.Title,
+				Message:   n.Message,
+				Repo:      n.Repo,
+				Number:    n.Number,
+				URL:       n.URL,
+				Author:    n.Author,
+			})
+		}
+
 		if len(notifications) > 0 {
 			emit(ctx, NotificationEvent, notifications)
 		}
@@ -368,6 +382,13 @@ func (p *Poller) poll(ctx context.Context) {
 	// Delete expired AI reviews (older than 7 days).
 	if err := p.db.DeleteExpiredAIReviews(); err != nil {
 		log.Printf("poller: prune expired AI reviews: %v", err)
+	}
+
+	// Prune old notifications (keep 30 days).
+	if n, err := p.db.PruneOldNotifications(time.Now().AddDate(0, 0, -30)); err != nil {
+		log.Printf("poller: prune old notifications: %v", err)
+	} else if n > 0 {
+		log.Printf("poller: pruned %d old notifications", n)
 	}
 
 	// Sync org members cache if stale (daily).

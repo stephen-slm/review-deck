@@ -110,6 +110,7 @@ func main() {
 			app.settingsService,
 			app.repoService,
 			app.workspaceService,
+			app.notificationService,
 		},
 	})
 
