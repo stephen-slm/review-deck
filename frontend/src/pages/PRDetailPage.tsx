@@ -860,7 +860,7 @@ export function PRDetailPage() {
                       ) : (
                         <button
                           onClick={handleGenerateTitle}
-                          disabled={titleGenerating || descGenerating}
+                          disabled={titleGenerating}
                           title="Generate a PR title using AI"
                           className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
                         >
@@ -880,7 +880,7 @@ export function PRDetailPage() {
                       ) : (
                         <button
                           onClick={handleGenerateDescription}
-                          disabled={descGenerating || titleGenerating}
+                          disabled={descGenerating}
                           title="Generate a PR description using AI"
                           className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
                         >
