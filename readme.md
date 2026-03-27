@@ -1,5 +1,7 @@
 # Review Deck
 
+> **Note:** This project is a port of [stephensli/review](https://github.com/stephensli/review), a CLI tool, into a full desktop UI. The entire codebase — Go backend, React frontend, and everything in between — was **100% AI-generated** using [Claude Code](https://claude.ai/claude-code). PRs, issues, and contributions are welcome!
+
 A native macOS desktop app for managing GitHub pull requests across your repositories. Built with [Wails v2](https://wails.io/) (Go backend + React/TypeScript frontend).
 
 ## Features

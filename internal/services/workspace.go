@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -60,15 +61,25 @@ Rules:
 - Be specific about what changed, not vague.
 - Do not include ticket/issue numbers — those will be added automatically.`
 
-// claudeResult is the JSON output from `claude -p --output-format json`.
-type claudeResult struct {
-	Type      string  `json:"type"`
-	Subtype   string  `json:"subtype"`
-	IsError   bool    `json:"is_error"`
-	Result    string  `json:"result"`
-	Cost      float64 `json:"total_cost_usd"`
-	Duration  int     `json:"duration_ms"`
-	SessionID string  `json:"session_id"`
+// streamEvent represents a single line of `claude -p --output-format stream-json --verbose`.
+// We only care about "assistant" (text content) and "result" (metadata/errors) events.
+type streamEvent struct {
+	Type    string `json:"type"`
+	Subtype string `json:"subtype"`
+
+	// "assistant" events carry the model's response text.
+	Message struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+	} `json:"message"`
+
+	// "result" events carry metadata and optional error info.
+	IsError    bool    `json:"is_error"`
+	Result     string  `json:"result"`
+	TotalCost  float64 `json:"total_cost_usd"`
+	DurationMs float64 `json:"duration_ms"`
 }
 
 // ToolAvailability reports which external tools are installed.
@@ -365,7 +376,8 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 // runClaude executes claude -p with the diff piped to stdin.
 func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff []byte, prompt string, maxCost float64, userMessage string) (review string, cost float64, durationMs int, err error) {
 	args := []string{"-p",
-		"--output-format", "json",
+		"--verbose",
+		"--output-format", "stream-json",
 		"--max-turns", "1",
 		"--append-system-prompt", prompt,
 	}
@@ -395,18 +407,41 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 		return "", 0, 0, fmt.Errorf("%s", errMsg)
 	}
 
-	out := stdoutBuf.Bytes()
-	var result claudeResult
-	if jsonErr := json.Unmarshal(out, &result); jsonErr != nil {
-		// Non-JSON output — return raw text.
-		return strings.TrimSpace(string(out)), 0, 0, nil
+	// Parse stream-json: line-delimited JSON with "assistant" and "result" events.
+	var textParts []string
+	scanner := bufio.NewScanner(&stdoutBuf)
+	scanner.Buffer(make([]byte, 0, 64*1024), 50*1024*1024)
+
+	for scanner.Scan() {
+		var event streamEvent
+		if json.Unmarshal(scanner.Bytes(), &event) != nil {
+			continue
+		}
+		switch event.Type {
+		case "assistant":
+			for _, block := range event.Message.Content {
+				if block.Type == "text" {
+					textParts = append(textParts, block.Text)
+				}
+			}
+		case "result":
+			if event.IsError {
+				errText := event.Result
+				if errText == "" {
+					errText = "unknown Claude error"
+				}
+				return "", 0, 0, fmt.Errorf("%s", extractClaudeError(errText))
+			}
+			cost = event.TotalCost
+			durationMs = int(event.DurationMs)
+			// Fallback: use result field if populated (future CLI fix).
+			if event.Result != "" && len(textParts) == 0 {
+				textParts = append(textParts, event.Result)
+			}
+		}
 	}
 
-	if result.IsError {
-		return "", 0, 0, fmt.Errorf("%s", extractClaudeError(result.Result))
-	}
-
-	return result.Result, result.Cost, result.Duration, nil
+	return strings.Join(textParts, ""), cost, durationMs, nil
 }
 
 // CancelAIReview cancels a running AI review.
