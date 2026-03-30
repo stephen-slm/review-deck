@@ -21,6 +21,8 @@ import {
   Terminal,
   Download,
   Sparkles,
+  Pencil,
+  Eye,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -151,6 +153,8 @@ export function PRDetailPage() {
   const [generatedDesc, setGeneratedDesc] = useState<string | null>(null);
   const [descError, setDescError] = useState<string | null>(null);
   const [applyingDesc, setApplyingDesc] = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [editableDesc, setEditableDesc] = useState<string | null>(null);
 
   // AI title generation state
   const [titleGenerating, setTitleGenerating] = useState(false);
@@ -237,6 +241,8 @@ export function PRDetailPage() {
     const offResult = EventsOn("description:result", (data: { description: string; cost: number; duration: number }) => {
       setDescGenerating(false);
       setGeneratedDesc(data.description);
+      setEditingDesc(false);
+      setEditableDesc(null);
     });
     const offError = EventsOn("description:error", (data: { error: string }) => {
       setDescGenerating(false);
@@ -337,9 +343,10 @@ export function PRDetailPage() {
 
   const handleApplyDescription = useCallback(async () => {
     if (!pr || !generatedDesc || applyingDesc) return;
+    const descToApply = editableDesc ?? generatedDesc;
     setApplyingDesc(true);
     try {
-      await ApplyPRDescription(pr.repoOwner, pr.repoName, pr.number, generatedDesc);
+      await ApplyPRDescription(pr.repoOwner, pr.repoName, pr.number, descToApply);
       addToast("PR description updated on GitHub", "success");
       // Refresh the PR to show the updated body.
       setRefreshing(true);
@@ -349,12 +356,40 @@ export function PRDetailPage() {
       } catch {}
       setRefreshing(false);
       setGeneratedDesc(null);
+      setEditingDesc(false);
+      setEditableDesc(null);
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setApplyingDesc(false);
     }
-  }, [pr, generatedDesc, applyingDesc, addToast]);
+  }, [pr, generatedDesc, editableDesc, applyingDesc, addToast]);
+
+  const handleApplyDescriptionKeepCurrent = useCallback(async () => {
+    if (!pr || !generatedDesc || applyingDesc) return;
+    const descToApply = editableDesc ?? generatedDesc;
+    const combined = pr.body
+      ? `${descToApply}\n\n---\n\n${pr.body}`
+      : descToApply;
+    setApplyingDesc(true);
+    try {
+      await ApplyPRDescription(pr.repoOwner, pr.repoName, pr.number, combined);
+      addToast("PR description updated on GitHub (kept existing)", "success");
+      setRefreshing(true);
+      try {
+        const updated = await GetSinglePR(pr.repoOwner, pr.repoName, pr.number);
+        if (updated) setFetchedPR(updated);
+      } catch {}
+      setRefreshing(false);
+      setGeneratedDesc(null);
+      setEditingDesc(false);
+      setEditableDesc(null);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setApplyingDesc(false);
+    }
+  }, [pr, generatedDesc, editableDesc, applyingDesc, addToast]);
 
   const handleGenerateTitle = useCallback(async () => {
     if (!pr || titleGenerating) return;
@@ -610,8 +645,9 @@ export function PRDetailPage() {
       }
       if (generatedDesc && !descGenerating) {
         aiActions.push({ label: "Regenerate description", handler: handleGenerateDescription });
-        aiActions.push({ label: "Discard description", handler: () => setGeneratedDesc(null) });
+        aiActions.push({ label: "Discard description", handler: () => { setGeneratedDesc(null); setEditingDesc(false); setEditableDesc(null); } });
         aiActions.push({ label: "Apply description", handler: handleApplyDescription });
+        aiActions.push({ label: "Apply description (keep current)", handler: handleApplyDescriptionKeepCurrent });
       }
 
       if (aiActions.length > 0) {
@@ -998,12 +1034,37 @@ export function PRDetailPage() {
                 {generatedDesc && !descGenerating && (() => {
                   // Offset for desc action indices: 3 if title is also visible, else 0.
                   const dOff = (generatedTitle && !titleGenerating) ? 3 : 0;
+                  const currentDesc = editableDesc ?? generatedDesc;
                   return (
                   <div className="space-y-2 rounded-lg border-2 border-purple-500/40 bg-purple-500/5 p-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
-                        AI-Generated Preview
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                          AI-Generated Preview
+                        </span>
+                        <button
+                          onClick={() => {
+                            if (!editingDesc) {
+                              setEditableDesc(currentDesc);
+                              setEditingDesc(true);
+                            } else {
+                              setEditingDesc(false);
+                            }
+                          }}
+                          title={editingDesc ? "Switch to preview" : "Edit description"}
+                          className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
+                            editingDesc
+                              ? "border-purple-500/40 bg-purple-500/10 text-purple-700 dark:text-purple-300"
+                              : "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {editingDesc ? (
+                            <><Eye className="h-3 w-3" /> Preview</>
+                          ) : (
+                            <><Pencil className="h-3 w-3" /> Edit</>
+                          )}
+                        </button>
+                      </div>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={handleGenerateDescription}
@@ -1018,7 +1079,7 @@ export function PRDetailPage() {
                           Regenerate
                         </button>
                         <button
-                          onClick={() => { setGeneratedDesc(null); setFocusedAction(-1); }}
+                          onClick={() => { setGeneratedDesc(null); setEditingDesc(false); setEditableDesc(null); setFocusedAction(-1); }}
                           className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium transition-colors hover:bg-accent hover:text-foreground ${
                             focusedAction === dOff + 1
                               ? "ring-2 ring-primary border-primary text-foreground"
@@ -1042,13 +1103,35 @@ export function PRDetailPage() {
                           )}
                           {applyingDesc ? "Applying..." : "Apply to PR"}
                         </button>
+                        <button
+                          onClick={handleApplyDescriptionKeepCurrent}
+                          disabled={applyingDesc}
+                          className={`inline-flex items-center gap-1 rounded-md border border-blue-600 bg-blue-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50 ${
+                            focusedAction === dOff + 3 ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""
+                          }`}
+                        >
+                          {applyingDesc ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Plus className="h-3 w-3" />
+                          )}
+                          {applyingDesc ? "Applying..." : "Apply to PR (Keep Current)"}
+                        </button>
                       </div>
                     </div>
-                    <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
-                        {generatedDesc}
-                      </ReactMarkdown>
-                    </div>
+                    {editingDesc ? (
+                      <textarea
+                        value={editableDesc ?? generatedDesc}
+                        onChange={(e) => setEditableDesc(e.target.value)}
+                        className="w-full min-h-[200px] rounded-lg border border-border bg-card p-3 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 resize-y"
+                      />
+                    ) : (
+                      <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-3 prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
+                          {currentDesc}
+                        </ReactMarkdown>
+                      </div>
+                    )}
                   </div>
                   );
                 })()}
