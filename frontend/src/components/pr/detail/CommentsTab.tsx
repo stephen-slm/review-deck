@@ -1,15 +1,19 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
   ExternalLink,
   FileCode,
   Loader2,
   ChevronDown,
   ChevronRight,
+  Reply,
+  Send,
+  XCircle,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL } from "../../../../wailsjs/runtime/runtime";
+import { ReplyToThread } from "../../../../wailsjs/go/services/PullRequestService";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { github } from "../../../../wailsjs/go/models";
@@ -90,6 +94,74 @@ export function CommentCard({
   );
 }
 
+/** Inline reply form for a review thread. */
+function ThreadReplyForm({ threadId, onReplied }: { threadId: string; onReplied?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = useCallback(async () => {
+    if (!body.trim()) return;
+    setSubmitting(true);
+    try {
+      await ReplyToThread(threadId, body.trim());
+      setBody("");
+      setOpen(false);
+      onReplied?.();
+    } catch {
+      // User can retry
+    } finally {
+      setSubmitting(false);
+    }
+  }, [threadId, body, onReplied]);
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-1.5 px-4 py-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        <Reply className="h-3.5 w-3.5" />
+        Reply
+      </button>
+    );
+  }
+
+  return (
+    <div className="px-4 py-2">
+      <div className="flex gap-2">
+        <textarea
+          autoFocus
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") { setOpen(false); setBody(""); }
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+          }}
+          placeholder="Reply... (⌘+Enter to submit)"
+          className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+          rows={3}
+        />
+        <div className="flex flex-col gap-1">
+          <button
+            onClick={handleSubmit}
+            disabled={!body.trim() || submitting}
+            className="inline-flex items-center gap-1 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
+          >
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            onClick={() => { setOpen(false); setBody(""); }}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent"
+          >
+            <XCircle className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CommentsTab({
   comments,
   loading,
@@ -98,6 +170,7 @@ export function CommentsTab({
   resolveRef,
   unresolveRef,
   onToggleResolved,
+  onCommentAdded,
 }: {
   comments: github.PRComments | null;
   loading: boolean;
@@ -106,6 +179,7 @@ export function CommentsTab({
   resolveRef?: React.MutableRefObject<(() => void) | null>;
   unresolveRef?: React.MutableRefObject<(() => void) | null>;
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
+  onCommentAdded?: () => void;
 }) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const filteredCommentUsers = useSettingsStore((s) => s.filteredCommentUsers);
@@ -390,17 +464,35 @@ export function CommentsTab({
                     {thread.comments?.[0]?.diffHunk && (
                       <DiffHunkSnippet diffHunk={thread.comments[0].diffHunk} />
                     )}
-                    <div className="divide-y divide-border">
-                      {(thread.comments || []).map((comment) => (
-                        <CommentCard
-                          key={comment.id}
-                          author={comment.author}
-                          authorAvatar={comment.authorAvatar}
-                          body={comment.body}
-                          createdAt={comment.createdAt}
-                          compact
-                        />
-                      ))}
+                    {/* Root comment */}
+                    {thread.comments?.[0] && (
+                      <CommentCard
+                        author={thread.comments[0].author}
+                        authorAvatar={thread.comments[0].authorAvatar}
+                        body={thread.comments[0].body}
+                        createdAt={thread.comments[0].createdAt}
+                        compact
+                      />
+                    )}
+                    {/* Threaded replies — indented with left border */}
+                    {thread.comments && thread.comments.length > 1 && (
+                      <div className="ml-6 border-l-2 border-border/50">
+                        {thread.comments.slice(1).map((comment) => (
+                          <div key={comment.id} className="border-t border-border/30">
+                            <CommentCard
+                              author={comment.author}
+                              authorAvatar={comment.authorAvatar}
+                              body={comment.body}
+                              createdAt={comment.createdAt}
+                              compact
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Reply form */}
+                    <div className="border-t border-border">
+                      <ThreadReplyForm threadId={thread.id} onReplied={onCommentAdded} />
                     </div>
                   </div>
                 )}

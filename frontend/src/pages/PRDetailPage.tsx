@@ -1330,6 +1330,7 @@ export function PRDetailPage() {
               resolveRef={commentResolveRef}
               unresolveRef={commentUnresolveRef}
               onToggleResolved={handleToggleResolved}
+              onCommentAdded={refreshComments}
             />
           )}
 
