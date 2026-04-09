@@ -236,6 +236,9 @@ var migrations = []string{
 
 	CREATE INDEX IF NOT EXISTS idx_code_tours_pr ON code_tours(pr_node_id);
 	CREATE INDEX IF NOT EXISTS idx_code_tours_repo ON code_tours(repo_owner, repo_name);`,
+
+	// Migration 14: Add head_ref_oid (commit SHA) to pull_requests.
+	`ALTER TABLE pull_requests ADD COLUMN head_ref_oid TEXT NOT NULL DEFAULT '';`,
 }
 
 // Migrate runs all pending migrations.

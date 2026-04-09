@@ -1467,6 +1467,7 @@ export function PRDetailPage() {
               repo={pr.repoName}
               headRef={pr.headRef}
               prNodeId={pr.nodeId}
+              headRefOid={pr.headRefOid}
               reviewThreads={comments?.reviewThreads}
               onToggleResolved={handleToggleResolved}
               onCommentAdded={refreshComments}

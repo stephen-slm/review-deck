@@ -6,6 +6,8 @@ import {
   ChevronDown,
   ChevronUp,
   UnfoldVertical,
+  Send,
+  Check,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -23,8 +25,50 @@ import type { DiffLine } from "@/lib/diffUtils";
 import { langFromFilename, highlightLine } from "@/lib/highlighter";
 import type { CodeTourData } from "@/types/codeTour";
 import type { github } from "../../../../wailsjs/go/models";
-import { GetFileContent } from "../../../../wailsjs/go/services/PullRequestService";
+import { GetFileContent, AddPRComment } from "../../../../wailsjs/go/services/PullRequestService";
 import { InlineThreadDisplay, AddCommentButton, CommentForm } from "../InlineComment";
+
+/** Build a GitHub blob URL that renders as an embedded code snippet in comments. */
+function githubBlobUrl(repoOwner: string, repoName: string, commitSha: string, filePath: string, startLine?: number, endLine?: number): string {
+  let url = `https://github.com/${repoOwner}/${repoName}/blob/${commitSha}/${filePath}`;
+  if (startLine) {
+    url += `#L${startLine}`;
+    if (endLine && endLine !== startLine) url += `-L${endLine}`;
+  }
+  return url;
+}
+
+/** Convert a code tour to a markdown string suitable for posting as a PR comment. */
+function tourToMarkdown(tour: CodeTourData, repoOwner?: string, repoName?: string, commitSha?: string): string {
+  const lines: string[] = [];
+  lines.push(`## 🗺️ Code Tour: ${tour.title}`);
+  lines.push("");
+
+  const canLink = !!repoOwner && !!repoName && !!commitSha;
+
+  for (let i = 0; i < tour.steps.length; i++) {
+    const step = tour.steps[i];
+    lines.push(`### Step ${i + 1}: ${step.title}`);
+    lines.push("");
+    lines.push(step.description);
+    if (step.file) {
+      lines.push("");
+      if (canLink) {
+        const url = githubBlobUrl(repoOwner, repoName, commitSha, step.file, step.startLine, step.endLine);
+        lines.push(url);
+      } else {
+        lines.push(`📄 \`${step.file}\``);
+      }
+    }
+    lines.push("");
+    if (i < tour.steps.length - 1) lines.push("---");
+    if (i < tour.steps.length - 1) lines.push("");
+  }
+
+  lines.push("---");
+  lines.push("*Generated with [review-deck](https://github.com/stephen-slm/review-deck)*");
+  return lines.join("\n");
+}
 
 const EXPAND_COUNT = 20;
 
@@ -322,6 +366,7 @@ export function CodeTourPanel({
   repo,
   headRef,
   prNodeId,
+  headRefOid,
   reviewThreads,
   onToggleResolved,
   onCommentAdded,
@@ -340,12 +385,31 @@ export function CodeTourPanel({
   repo?: string;
   headRef?: string;
   prNodeId?: string;
+  headRefOid?: string;
   reviewThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
   onCommentAdded?: () => void;
   onStart: () => void;
   onCancel: () => void;
 }) {
+  const [posting, setPosting] = useState(false);
+  const [posted, setPosted] = useState(false);
+
+  const handlePostToPR = useCallback(async () => {
+    if (!tour || !prNodeId) return;
+    setPosting(true);
+    try {
+      const md = tourToMarkdown(tour, owner, repo, headRefOid);
+      await AddPRComment(prNodeId, md);
+      setPosted(true);
+      setTimeout(() => setPosted(false), 3000);
+    } catch {
+      // User can retry
+    } finally {
+      setPosting(false);
+    }
+  }, [tour, prNodeId, owner, repo, headRefOid]);
+
   if (!hasLocalPath) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
@@ -461,6 +525,21 @@ export function CodeTourPanel({
                 : `${Math.floor(duration / 60)}m ${Math.round(duration % 60)}s`}
             </span>
           )}
+          <button
+            onClick={handlePostToPR}
+            disabled={posting || posted}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            title="Post this code tour as a comment on the PR"
+          >
+            {posting ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : posted ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
+            {posted ? "Posted" : "Post to PR"}
+          </button>
         </div>
       </div>
 

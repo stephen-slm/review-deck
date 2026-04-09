@@ -93,8 +93,9 @@ type PullRequest struct {
 	// Content
 	Title   string `json:"title"`
 	Body    string `json:"body"`
-	HeadRef string `json:"headRef"`
-	BaseRef string `json:"baseRef"`
+	HeadRef    string `json:"headRef"`
+	HeadRefOid string `json:"headRefOid"`
+	BaseRef    string `json:"baseRef"`
 
 	// State
 	State          string `json:"state"` // OPEN, CLOSED, MERGED

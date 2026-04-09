@@ -6,6 +6,8 @@ import {time} from '../models';
 
 export function AddLabels(arg1:string,arg2:Array<string>):Promise<void>;
 
+export function AddPRComment(arg1:string,arg2:string):Promise<string>;
+
 export function AddPRReviewComment(arg1:string,arg2:string,arg3:string,arg4:number):Promise<string>;
 
 export function ApprovePR(arg1:string,arg2:string):Promise<void>;

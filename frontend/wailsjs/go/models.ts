@@ -373,6 +373,7 @@ export namespace github {
 	    title: string;
 	    body: string;
 	    headRef: string;
+	    headRefOid: string;
 	    baseRef: string;
 	    state: string;
 	    isDraft: boolean;
@@ -414,6 +415,7 @@ export namespace github {
 	        this.title = source["title"];
 	        this.body = source["body"];
 	        this.headRef = source["headRef"];
+	        this.headRefOid = source["headRefOid"];
 	        this.baseRef = source["baseRef"];
 	        this.state = source["state"];
 	        this.isDraft = source["isDraft"];

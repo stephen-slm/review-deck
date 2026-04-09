@@ -261,6 +261,30 @@ func (c *Client) AddPRReviewThread(ctx context.Context, prNodeID string, body st
 	return mutation.AddPullRequestReviewThread.Thread.ID, nil
 }
 
+// AddComment adds a top-level comment to a pull request (or issue).
+func (c *Client) AddComment(ctx context.Context, subjectNodeID string, body string) (string, error) {
+	var mutation struct {
+		AddComment struct {
+			CommentEdge struct {
+				Node struct {
+					ID string `graphql:"id"`
+				}
+			} `graphql:"commentEdge"`
+		} `graphql:"addComment(input: $input)"`
+	}
+
+	input := githubv4.AddCommentInput{
+		SubjectID: githubv4.ID(subjectNodeID),
+		Body:      githubv4.String(body),
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return "", fmt.Errorf("add comment: %w", err)
+	}
+	return mutation.AddComment.CommentEdge.Node.ID, nil
+}
+
 // ReplyToThread adds a reply comment to an existing review thread.
 func (c *Client) ReplyToThread(ctx context.Context, threadID string, body string) (string, error) {
 	var mutation struct {

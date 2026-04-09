@@ -446,6 +446,21 @@ func (s *PullRequestService) AddPRReviewComment(prNodeID string, body string, pa
 	return threadID, nil
 }
 
+// AddPRComment adds a top-level comment to a pull request.
+func (s *PullRequestService) AddPRComment(prNodeID string, body string) (string, error) {
+	if s.client == nil {
+		return "", ErrNotAuthenticated
+	}
+	if body == "" {
+		return "", fmt.Errorf("comment body is required")
+	}
+	commentID, err := s.client.AddComment(context.Background(), prNodeID, body)
+	if err != nil {
+		return "", fmt.Errorf("add PR comment: %w", err)
+	}
+	return commentID, nil
+}
+
 // ReplyToThread adds a reply comment to an existing review thread.
 func (s *PullRequestService) ReplyToThread(threadID string, body string) (string, error) {
 	if s.client == nil {

@@ -6,6 +6,10 @@ export function AddLabels(arg1, arg2) {
   return window['go']['services']['PullRequestService']['AddLabels'](arg1, arg2);
 }
 
+export function AddPRComment(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['AddPRComment'](arg1, arg2);
+}
+
 export function AddPRReviewComment(arg1, arg2, arg3, arg4) {
   return window['go']['services']['PullRequestService']['AddPRReviewComment'](arg1, arg2, arg3, arg4);
 }

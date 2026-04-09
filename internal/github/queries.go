@@ -30,6 +30,7 @@ type prFields struct {
 	ChangedFiles int
 
 	HeadRefName string
+	HeadRefOid  string `graphql:"headRefOid"`
 	BaseRefName string
 
 	CreatedAt time.Time
@@ -135,6 +136,7 @@ func convertPRFields(pr prFields) PullRequest {
 		Title:          pr.Title,
 		Body:           pr.Body,
 		HeadRef:        pr.HeadRefName,
+		HeadRefOid:     pr.HeadRefOid,
 		BaseRef:        pr.BaseRefName,
 		State:          string(pr.State),
 		IsDraft:        pr.IsDraft,
