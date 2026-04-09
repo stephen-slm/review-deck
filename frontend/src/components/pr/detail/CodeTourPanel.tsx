@@ -1,13 +1,11 @@
-import { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
-  Map,
+  Map as MapIcon,
   Loader2,
   XCircle,
   ChevronDown,
   ChevronUp,
   UnfoldVertical,
-  MessageSquare,
-  Send,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,7 +24,7 @@ import { langFromFilename, highlightLine } from "@/lib/highlighter";
 import type { CodeTourData } from "@/types/codeTour";
 import type { github } from "../../../../wailsjs/go/models";
 import { GetFileContent } from "../../../../wailsjs/go/services/PullRequestService";
-import { AddPRReviewComment } from "../../../../wailsjs/go/services/PullRequestService";
+import { InlineThreadDisplay, AddCommentButton, CommentForm } from "../InlineComment";
 
 const EXPAND_COUNT = 20;
 
@@ -39,6 +37,8 @@ function StepDiffSnippet({
   repo,
   headRef,
   prNodeId,
+  reviewThreads,
+  onToggleResolved,
 }: {
   file: string;
   startLine: number;
@@ -48,6 +48,8 @@ function StepDiffSnippet({
   repo?: string;
   headRef?: string;
   prNodeId?: string;
+  reviewThreads?: github.ReviewThread[];
+  onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const matchedFile = prFiles.find(
     (f) => f.filename === file || f.filename.endsWith("/" + file),
@@ -87,13 +89,25 @@ function StepDiffSnippet({
   const [fileContent, setFileContent] = useState<string[] | null>(null);
   const [loadingContent, setLoadingContent] = useState(false);
   const [commentLine, setCommentLine] = useState<number | null>(null);
-  const [commentBody, setCommentBody] = useState("");
-  const [submittingComment, setSubmittingComment] = useState(false);
 
   const canExpand = !!owner && !!repo && !!headRef && matchedFile.status !== "removed";
   const canComment = !!prNodeId;
 
   const lang = langFromFilename(file);
+
+  // Build a map of newLine -> threads for this file.
+  const threadsByLine = useMemo(() => {
+    const map = new Map<number, github.ReviewThread[]>();
+    if (!reviewThreads) return map;
+    for (const t of reviewThreads) {
+      if (t.path === matchedFile.filename || t.path === file) {
+        const existing = map.get(t.line) || [];
+        existing.push(t);
+        map.set(t.line, existing);
+      }
+    }
+    return map;
+  }, [reviewThreads, matchedFile.filename, file]);
 
   const fetchContent = useCallback(async (): Promise<string[] | null> => {
     if (fileContent) return fileContent;
@@ -127,20 +141,6 @@ function StepDiffSnippet({
   }, [fetchContent]);
 
   const trailing = fileContent ? trailingLineCount(lines, fileContent.length) : 0;
-
-  const handleSubmitComment = useCallback(async () => {
-    if (!prNodeId || !commentLine || !commentBody.trim()) return;
-    setSubmittingComment(true);
-    try {
-      await AddPRReviewComment(prNodeId, commentBody.trim(), matchedFile!.filename, commentLine);
-      setCommentLine(null);
-      setCommentBody("");
-    } catch {
-      // Silently fail — user can retry
-    } finally {
-      setSubmittingComment(false);
-    }
-  }, [prNodeId, commentLine, commentBody, matchedFile]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -209,12 +209,12 @@ function StepDiffSnippet({
               }
 
               const newLineNum = line.newLine;
-              const isCommentTarget = commentLine === newLineNum && newLineNum != null;
+              const lineThreads = newLineNum != null ? threadsByLine.get(newLineNum) : undefined;
+              const showCommentForm = commentLine === newLineNum && newLineNum != null;
 
               return (
-                <>
+                <React.Fragment key={i}>
                   <tr
-                    key={i}
                     className={`group ${
                       line.type === "add"
                         ? "bg-green-50 dark:bg-green-950/30"
@@ -234,73 +234,39 @@ function StepDiffSnippet({
                     </td>
                     <td className="whitespace-pre px-2 py-0 relative">
                       <span dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }} />
-                      {/* Comment button on hover */}
                       {canComment && line.type !== "del" && newLineNum != null && (
-                        <button
-                          onClick={() => {
-                            setCommentLine(isCommentTarget ? null : newLineNum);
-                            setCommentBody("");
-                          }}
-                          className="absolute right-1 top-0 hidden group-hover:inline-flex items-center justify-center h-full text-blue-500 hover:text-blue-600"
-                          title="Add comment"
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                        </button>
+                        <AddCommentButton onClick={() => setCommentLine(showCommentForm ? null : newLineNum)} />
                       )}
                     </td>
                   </tr>
-                  {/* Inline comment form */}
-                  {isCommentTarget && (
-                    <tr key={`comment-${i}`}>
+                  {/* Existing review threads on this line */}
+                  {lineThreads?.map((thread) => (
+                    <tr key={`thread-${thread.id}`}>
                       <td className="w-10 border-r border-border/30" />
                       <td className="w-10 border-r border-border/30" />
                       <td className="w-[1px] border-r border-border/30" />
-                      <td className="p-2">
-                        <div className="flex gap-2">
-                          <textarea
-                            autoFocus
-                            value={commentBody}
-                            onChange={(e) => setCommentBody(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                setCommentLine(null);
-                                setCommentBody("");
-                              }
-                              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                                handleSubmitComment();
-                              }
-                            }}
-                            placeholder="Leave a comment... (Cmd+Enter to submit)"
-                            className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
-                            rows={2}
-                          />
-                          <div className="flex flex-col gap-1">
-                            <button
-                              onClick={handleSubmitComment}
-                              disabled={!commentBody.trim() || submittingComment}
-                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
-                            >
-                              {submittingComment ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Send className="h-3 w-3" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() => {
-                                setCommentLine(null);
-                                setCommentBody("");
-                              }}
-                              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-                            >
-                              <XCircle className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
+                      <td>
+                        <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} />
+                      </td>
+                    </tr>
+                  ))}
+                  {/* New comment form */}
+                  {showCommentForm && prNodeId && (
+                    <tr>
+                      <td className="w-10 border-r border-border/30" />
+                      <td className="w-10 border-r border-border/30" />
+                      <td className="w-[1px] border-r border-border/30" />
+                      <td>
+                        <CommentForm
+                          prNodeId={prNodeId}
+                          filePath={matchedFile!.filename}
+                          line={newLineNum}
+                          onClose={() => setCommentLine(null)}
+                        />
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
 
@@ -354,6 +320,8 @@ export function CodeTourPanel({
   repo,
   headRef,
   prNodeId,
+  reviewThreads,
+  onToggleResolved,
   onStart,
   onCancel,
 }: {
@@ -369,13 +337,15 @@ export function CodeTourPanel({
   repo?: string;
   headRef?: string;
   prNodeId?: string;
+  reviewThreads?: github.ReviewThread[];
+  onToggleResolved?: (threadId: string, resolved: boolean) => void;
   onStart: () => void;
   onCancel: () => void;
 }) {
   if (!hasLocalPath) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
-        <Map className="h-8 w-8 text-muted-foreground" />
+        <MapIcon className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
           This repository does not have a local path configured.
         </p>
@@ -389,7 +359,7 @@ export function CodeTourPanel({
   if (!hasTools) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border py-12">
-        <Map className="h-8 w-8 text-muted-foreground" />
+        <MapIcon className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
           Required CLI tools are not installed.
         </p>
@@ -405,7 +375,7 @@ export function CodeTourPanel({
   if (!generating && !tour && !error) {
     return (
       <div className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-border py-12">
-        <Map className="h-10 w-10 text-purple-500/60" />
+        <MapIcon className="h-10 w-10 text-purple-500/60" />
         <div className="text-center">
           <p className="text-sm font-medium text-foreground">Code Tour</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -416,7 +386,7 @@ export function CodeTourPanel({
           onClick={onStart}
           className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
         >
-          <Map className="h-4 w-4" />
+          <MapIcon className="h-4 w-4" />
           Generate Code Tour
         </button>
       </div>
@@ -456,7 +426,7 @@ export function CodeTourPanel({
           onClick={onStart}
           className="inline-flex items-center gap-1.5 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700"
         >
-          <Map className="h-4 w-4" />
+          <MapIcon className="h-4 w-4" />
           Retry
         </button>
       </div>
@@ -471,7 +441,7 @@ export function CodeTourPanel({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Map className="h-4 w-4 text-purple-500" />
+          <MapIcon className="h-4 w-4 text-purple-500" />
           <h3 className="text-sm font-semibold text-foreground">{tour.title}</h3>
         </div>
         <div className="flex items-center gap-3">
@@ -552,6 +522,8 @@ export function CodeTourPanel({
               repo={repo}
               headRef={headRef}
               prNodeId={prNodeId}
+              reviewThreads={reviewThreads}
+              onToggleResolved={onToggleResolved}
             />
           )}
 

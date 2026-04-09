@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useState, useCallback } from "react";
+import React, { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import {
   FileCode,
   Plus,
@@ -22,6 +22,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { parsePatch, computeGap, expandDiffLines, trailingLineCount, expandTrailingLines } from "@/lib/diffUtils";
 import type { DiffLine } from "@/lib/diffUtils";
 import { langFromFilename, highlightLine } from "@/lib/highlighter";
+import { InlineThreadDisplay, AddCommentButton, CommentForm } from "./InlineComment";
 
 interface DiffViewProps {
   files: github.PRFile[] | null;
@@ -32,6 +33,12 @@ interface DiffViewProps {
   repo?: string;
   /** PR head branch name — used to fetch file content for diff expansion. */
   headRef?: string;
+  /** PR node ID — used for creating review comments. */
+  prNodeId?: string;
+  /** Review threads to display inline on diff lines. */
+  reviewThreads?: github.ReviewThread[];
+  /** Callback when a thread's resolved state is toggled. */
+  onToggleResolved?: (threadId: string, resolved: boolean) => void;
   /** Ref populated with a function to toggle expand/collapse of the currently selected file. */
   toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
   /** Controlled expanded files state — lifted to parent to persist across tab switches. */
@@ -126,7 +133,7 @@ function ExpandRow({ gap, onExpand }: {
 }
 
 /** Renders a single file's diff with expandable context. */
-function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owner, repo, headRef }: {
+function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owner, repo, headRef, prNodeId, fileThreads, onToggleResolved }: {
   file: github.PRFile;
   isExpanded: boolean;
   onToggle: () => void;
@@ -135,6 +142,9 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
   owner?: string;
   repo?: string;
   headRef?: string;
+  prNodeId?: string;
+  fileThreads?: github.ReviewThread[];
+  onToggleResolved?: (threadId: string, resolved: boolean) => void;
 }) {
   const initialLines = useMemo(() => parsePatch(file.patch), [file.patch]);
   const [lines, setLines] = useState<DiffLine[]>(initialLines);
@@ -148,7 +158,21 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
     setFileContent(null);
   }, [initialLines]);
 
+  const [commentLine, setCommentLine] = useState<number | null>(null);
   const canExpand = !!owner && !!repo && !!headRef && file.status !== "removed";
+  const canComment = !!prNodeId;
+
+  // Build a map of newLine -> threads for this file.
+  const threadsByLine = useMemo(() => {
+    const map = new Map<number, github.ReviewThread[]>();
+    if (!fileThreads) return map;
+    for (const t of fileThreads) {
+      const existing = map.get(t.line) || [];
+      existing.push(t);
+      map.set(t.line, existing);
+    }
+    return map;
+  }, [fileThreads]);
 
   const fetchContent = useCallback(async (): Promise<string[] | null> => {
     if (fileContent) return fileContent;
@@ -278,21 +302,57 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
                         ? "text-red-600/50 dark:text-red-400/50"
                         : "text-muted-foreground/50";
 
+                  const newLineNum = line.newLine;
+                  const lineThreads = newLineNum != null ? threadsByLine.get(newLineNum) : undefined;
+                  const showCommentForm = commentLine === newLineNum && newLineNum != null;
+
                   return (
-                    <tr key={i} className={bgClass}>
-                      <td className={`w-10 select-none border-r border-border/30 px-2 py-0.5 text-right ${lineNumClass}`}>
-                        {line.type !== "add" ? line.oldLine : ""}
-                      </td>
-                      <td className={`w-10 select-none border-r border-border/30 px-2 py-0.5 text-right ${lineNumClass}`}>
-                        {line.type !== "del" ? line.newLine : ""}
-                      </td>
-                      <td className={`whitespace-pre-wrap break-words px-3 py-0.5 ${textClass}`}>
-                        <span className="mr-1 select-none opacity-50">
-                          {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
-                        </span>
-                        <span dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }} />
-                      </td>
-                    </tr>
+                    <React.Fragment key={i}>
+                      <tr className={`group ${bgClass}`}>
+                        <td className={`w-10 select-none border-r border-border/30 px-2 py-0.5 text-right ${lineNumClass}`}>
+                          {line.type !== "add" ? line.oldLine : ""}
+                        </td>
+                        <td className={`w-10 select-none border-r border-border/30 px-2 py-0.5 text-right ${lineNumClass}`}>
+                          {line.type !== "del" ? line.newLine : ""}
+                        </td>
+                        <td className={`whitespace-pre-wrap break-words px-3 py-0.5 relative ${textClass}`}>
+                          <span className="mr-1 select-none opacity-50">
+                            {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+                          </span>
+                          <span dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }} />
+                          {canComment && line.type !== "del" && newLineNum != null && (
+                            <AddCommentButton onClick={() => {
+                              setCommentLine(showCommentForm ? null : newLineNum);
+                            }} />
+                          )}
+                        </td>
+                      </tr>
+                      {/* Existing review threads on this line */}
+                      {lineThreads?.map((thread) => (
+                        <tr key={`thread-${thread.id}`}>
+                          <td className="w-10 border-r border-border/30" />
+                          <td className="w-10 border-r border-border/30" />
+                          <td>
+                            <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} />
+                          </td>
+                        </tr>
+                      ))}
+                      {/* New comment form */}
+                      {showCommentForm && prNodeId && (
+                        <tr>
+                          <td className="w-10 border-r border-border/30" />
+                          <td className="w-10 border-r border-border/30" />
+                          <td>
+                            <CommentForm
+                              prNodeId={prNodeId}
+                              filePath={file.filename}
+                              line={newLineNum}
+                              onClose={() => setCommentLine(null)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })}
                 {/* Expand to end of file */}
@@ -330,7 +390,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
   );
 }
 
-export function DiffView({ files, loading, error, owner, repo, headRef, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
+export function DiffView({ files, loading, error, owner, repo, headRef, prNodeId, reviewThreads, onToggleResolved, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -474,6 +534,9 @@ export function DiffView({ files, loading, error, owner, repo, headRef, toggleSe
               owner={owner}
               repo={repo}
               headRef={headRef}
+              prNodeId={prNodeId}
+              fileThreads={reviewThreads?.filter((t) => t.path === file.filename)}
+              onToggleResolved={onToggleResolved}
             />
           </div>
         ))}

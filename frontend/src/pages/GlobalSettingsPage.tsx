@@ -23,7 +23,7 @@ const globalTabs: TabDef[] = [
 
 export function GlobalSettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds } = useSettingsStore();
+  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, aiMaxTurns, loadAiMaxTurns, setAiMaxTurns, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   const [activeTab, setActiveTab] = useState<GlobalTab>("general");
@@ -41,9 +41,10 @@ export function GlobalSettingsPage() {
     loadAiDescriptionPrompt();
     loadAiDescriptionMaxCost();
     loadAiTitlePrompt();
+    loadAiMaxTurns();
     loadPRSizeThresholds();
     loadRepos();
-  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadPRSizeThresholds, loadRepos]);
+  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadAiMaxTurns, loadPRSizeThresholds, loadRepos]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-3 switch tabs.
   useEffect(() => {
@@ -645,6 +646,36 @@ export function GlobalSettingsPage() {
                   <p className="text-xs text-muted-foreground">
                     Leave empty to use the built-in default prompt. Changes apply to the next title generation.
                   </p>
+                </div>
+              </div>
+            </section>
+
+            {/* Claude CLI Max Turns */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Claude CLI</h3>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Max turns
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Maximum back-and-forth cycles Claude can use per request. Higher values let Claude use more tools but cost more. Default is 20.
+                    </p>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    step={1}
+                    value={aiMaxTurns}
+                    onChange={(e) => setAiMaxTurns(e.target.value)}
+                    placeholder="20"
+                    className="w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
                 </div>
               </div>
             </section>

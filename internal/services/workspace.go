@@ -83,8 +83,7 @@ Code snippet sizing:
 - If a file has a large change (50+ lines), split it into MULTIPLE steps — one per logical section (e.g. struct definition, constructor, main logic, error handling). Each step should cover a focused, self-contained piece.
 - It is perfectly fine (and encouraged) to have multiple steps referencing the same file with different line ranges.
 - Aim for 6-15 steps total (including the overview) — more steps with smaller snippets is better than fewer steps with huge code blocks.
-- A step with no file reference (file="") is fine for narrative-only transitions between sections.
-- If an AI review is provided alongside the diff, incorporate its findings into the relevant tour steps. When a step covers code that the review flagged as having a bug, security issue, performance concern, or other problem, include a "⚠️ Review Finding" callout within that step's description summarizing the issue. This helps reviewers see potential problems in context as they walk through the code.`
+- A step with no file reference (file="") is fine for narrative-only transitions between sections.`
 
 // defaultTitlePrompt is the system prompt for generating PR titles.
 const defaultTitlePrompt = `You are a senior software engineer writing a pull request title. Based on the diff provided, generate a single concise PR title that summarizes the changes.
@@ -296,6 +295,19 @@ func (s *WorkspaceService) getMaxCost() float64 {
 	return f
 }
 
+// getMaxTurns returns the user-configured max turns for Claude CLI (default 20).
+func (s *WorkspaceService) getMaxTurns() int {
+	val, err := s.db.GetSetting("ai_max_turns")
+	if err != nil || strings.TrimSpace(val) == "" {
+		return 20
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(val))
+	if err != nil || n < 1 {
+		return 20
+	}
+	return n
+}
+
 // getDescriptionMaxCost returns the user-configured max cost per description generation in USD (0 = unlimited).
 func (s *WorkspaceService) getDescriptionMaxCost() float64 {
 	val, err := s.db.GetSetting("ai_description_max_cost")
@@ -420,12 +432,107 @@ func (s *WorkspaceService) StartAIReview(repoOwner, repoName string, prNumber in
 	return nil
 }
 
+// extractJSON finds and returns the first valid JSON object in the text.
+// It handles markdown code fences, narrative text around JSON, etc.
+func extractJSON(text string) string {
+	text = strings.TrimSpace(text)
+
+	// Try the full text first.
+	if json.Valid([]byte(text)) {
+		return text
+	}
+
+	// Try stripping markdown code fences.
+	if strings.Contains(text, "```") {
+		start := strings.Index(text, "```")
+		if start >= 0 {
+			inner := text[start+3:]
+			if nl := strings.Index(inner, "\n"); nl >= 0 {
+				inner = inner[nl+1:]
+			}
+			if end := strings.LastIndex(inner, "```"); end >= 0 {
+				inner = strings.TrimSpace(inner[:end])
+				if json.Valid([]byte(inner)) {
+					return inner
+				}
+			}
+		}
+	}
+
+	// Find the outermost { ... } in the text.
+	start := strings.Index(text, "{")
+	if start >= 0 {
+		depth := 0
+		inString := false
+		escaped := false
+		for i := start; i < len(text); i++ {
+			ch := text[i]
+			if escaped {
+				escaped = false
+				continue
+			}
+			if ch == '\\' && inString {
+				escaped = true
+				continue
+			}
+			if ch == '"' {
+				inString = !inString
+				continue
+			}
+			if inString {
+				continue
+			}
+			if ch == '{' {
+				depth++
+			} else if ch == '}' {
+				depth--
+				if depth == 0 {
+					candidate := text[start : i+1]
+					if json.Valid([]byte(candidate)) {
+						return candidate
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractStreamError scans stream-json output for a result event with is_error=true
+// and returns its error text. Falls back to collecting any non-JSON lines (plain-text
+// errors) so callers don't dump raw hook/session JSON to the UI.
+func extractStreamError(stdout string) string {
+	scanner := bufio.NewScanner(strings.NewReader(stdout))
+	scanner.Buffer(make([]byte, 0, 64*1024), 50*1024*1024)
+	var plainLines []string
+	for scanner.Scan() {
+		line := scanner.Text()
+		var ev streamEvent
+		if json.Unmarshal([]byte(line), &ev) != nil {
+			// Not JSON — likely a plain-text error message from Claude CLI.
+			if trimmed := strings.TrimSpace(line); trimmed != "" {
+				plainLines = append(plainLines, trimmed)
+			}
+			continue
+		}
+		if ev.Type == "result" && ev.IsError && ev.Result != "" {
+			return ev.Result
+		}
+	}
+	if len(plainLines) > 0 {
+		return strings.Join(plainLines, "\n")
+	}
+	return ""
+}
+
 // runClaude executes claude -p with the diff piped to stdin.
 func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff []byte, prompt string, maxCost float64, userMessage string) (review string, cost float64, durationMs int, err error) {
 	args := []string{"-p",
 		"--verbose",
 		"--output-format", "stream-json",
-		"--max-turns", "1",
+		"--max-turns", strconv.Itoa(s.getMaxTurns()),
 		"--append-system-prompt", prompt,
 	}
 	if maxCost > 0 {
@@ -442,14 +549,34 @@ func (s *WorkspaceService) runClaude(ctx context.Context, repoDir string, diff [
 	cmd.Stderr = &stderrBuf
 	if runErr := cmd.Run(); runErr != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", 0, 0, fmt.Errorf("Claude review timed out (3 minute limit)")
+			return "", 0, 0, fmt.Errorf("Claude timed out")
+		}
+		if ctx.Err() == context.Canceled {
+			return "", 0, 0, fmt.Errorf("cancelled")
 		}
 		errMsg := strings.TrimSpace(stderrBuf.String())
 		if errMsg == "" {
-			errMsg = strings.TrimSpace(stdoutBuf.String())
+			// Try to extract a meaningful error from stream-json output
+			// instead of dumping all the raw JSON (which includes hook events).
+			errMsg = extractStreamError(stdoutBuf.String())
 		}
 		if errMsg == "" {
-			errMsg = runErr.Error()
+			// Last resort: include exit code + raw output for debugging.
+			// Show the LAST 1500 chars (tail) which is where errors appear,
+			// after hook events.
+			raw := strings.TrimSpace(stdoutBuf.String())
+			stderr := strings.TrimSpace(stderrBuf.String())
+			if len(raw) > 1500 {
+				raw = "..." + raw[len(raw)-1500:]
+			}
+			if stderr != "" {
+				raw = raw + " | stderr: " + stderr
+			}
+			if raw != "" {
+				errMsg = fmt.Sprintf("%v — %s", runErr, raw)
+			} else {
+				errMsg = fmt.Sprintf("%v (no output from Claude CLI)", runErr)
+			}
 		}
 		return "", 0, 0, fmt.Errorf("%s", errMsg)
 	}
@@ -844,7 +971,6 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 
 	appCtx := s.ctx
 	db := s.db
-	reviewPrompt := s.getReviewPrompt()
 
 	go func() {
 		defer cancel()
@@ -871,42 +997,14 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 			return
 		}
 
-		// 2. Get or generate AI review to incorporate into the tour.
-		var reviewText string
-		if prNodeID != "" {
-			cached, _ := db.GetAIReview(prNodeID)
-			if cached != nil && cached.Review != "" {
-				reviewText = cached.Review
-			}
-		}
-		if reviewText == "" {
-			// No cached review — run one now and cache it.
-			rv, rvCost, rvDur, rvErr := s.runClaude(ctx, repo.LocalPath, diff, reviewPrompt, maxCost, "Review this pull request diff:")
-			if rvErr == nil && rv != "" {
-				reviewText = rv
-				if prNodeID != "" {
-					_ = db.SaveAIReview(prNodeID, repoOwner, repoName, prNumber, reviewText, rvCost, rvDur)
-					now := time.Now().UTC().Format(time.RFC3339)
-					wailsRuntime.EventsEmit(appCtx, "ai:result", map[string]any{
-						"review":     reviewText,
-						"cost":       rvCost,
-						"duration":   rvDur,
-						"created_at": now,
-					})
-				}
-			}
-			// If the review fails, continue without it — the tour can still be generated.
-		}
+		// 2. Run Claude with the tour prompt.
+		tourText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultTourPrompt, maxCost, "Generate a guided code tour for this pull request diff:")
 
-		// 3. Run Claude with the tour prompt, including the review findings.
-		userMessage := "Generate a guided code tour for this pull request diff:"
-		if reviewText != "" {
-			userMessage += "\n\n---\n\nThe following AI review has been performed on this diff. Incorporate any issues or suggestions it flagged into the relevant tour steps:\n\n" + reviewText
-		}
-		tourText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultTourPrompt, maxCost, userMessage)
-
-		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude code tour timed out (8 minute limit)"})
+		if ctx.Err() != nil {
+			if ctx.Err() == context.DeadlineExceeded {
+				wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude code tour timed out (8 minute limit)"})
+			}
+			// If cancelled, silently stop — user initiated.
 			return
 		}
 		if err != nil {
@@ -914,22 +1012,9 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 			return
 		}
 
-		// 3. Strip markdown code fences if present and validate JSON.
-		tourText = strings.TrimSpace(tourText)
-		if strings.HasPrefix(tourText, "```") {
-			// Remove opening fence (```json or ```)
-			if idx := strings.Index(tourText, "\n"); idx >= 0 {
-				tourText = tourText[idx+1:]
-			}
-			// Remove closing fence
-			if idx := strings.LastIndex(tourText, "```"); idx >= 0 {
-				tourText = tourText[:idx]
-			}
-			tourText = strings.TrimSpace(tourText)
-		}
-
-		// Validate that it's valid JSON.
-		if !json.Valid([]byte(tourText)) {
+		// 3. Extract JSON from the response.
+		tourText = extractJSON(tourText)
+		if tourText == "" {
 			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude returned invalid JSON for the code tour"})
 			return
 		}

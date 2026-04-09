@@ -49,6 +49,10 @@ function AppContent() {
     useRepoStore.getState().loadRepos().then(() => {
       useRepoStore.getState().loadSelectedRepo();
     });
+    // Load orgs then teams so PR grouping works on initial load.
+    useSettingsStore.getState().loadOrgs().then(() => {
+      useSettingsStore.getState().loadAllTeams();
+    });
   }, []);
 
   // Reload repo-scoped settings whenever the selected repo changes.

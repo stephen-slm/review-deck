@@ -525,9 +525,9 @@ export function PRDetailPage() {
       .finally(() => setChecksLoading(false));
   }, [activeTab, checkRuns, checksLoading, nodeId]);
 
-  // Fetch comments when the comments tab is first selected
+  // Fetch comments when the comments, files, or code-tour tab is first selected
   useEffect(() => {
-    if (activeTab !== "comments" || comments !== null || commentsLoading || !nodeId) return;
+    if ((activeTab !== "comments" && activeTab !== "files" && activeTab !== "code-tour") || comments !== null || commentsLoading || !nodeId) return;
     setCommentsLoading(true);
     GetPRComments(nodeId)
       .then(setComments)
@@ -566,6 +566,25 @@ export function PRDetailPage() {
   useEffect(() => {
     if (pr) prRef.current = { owner: pr.repoOwner, repo: pr.repoName, number: pr.number };
   }, [pr]);
+
+  /** Toggle resolved state on a review thread (optimistic update). */
+  const handleToggleResolved = useCallback((threadId: string, resolved: boolean) => {
+    const update = (val: boolean) =>
+      setComments((prev) => {
+        if (!prev) return prev;
+        return Object.assign(Object.create(Object.getPrototypeOf(prev)), {
+          ...prev,
+          reviewThreads: prev.reviewThreads.map((t: any) =>
+            t.id === threadId
+              ? Object.assign(Object.create(Object.getPrototypeOf(t)), { ...t, isResolved: val })
+              : t
+          ),
+        });
+      });
+    update(resolved);
+    const call = resolved ? ResolveThread(threadId) : UnresolveThread(threadId);
+    call.catch(() => update(!resolved));
+  }, []);
 
   // Ref to track whether a refresh is in progress (avoids stale closure issues).
   const refreshingRef = useRef(false);
@@ -1302,25 +1321,7 @@ export function PRDetailPage() {
               toggleSelectedRef={commentToggleRef}
               resolveRef={commentResolveRef}
               unresolveRef={commentUnresolveRef}
-              onToggleResolved={(threadId: string, resolved: boolean) => {
-                const update = (val: boolean) =>
-                  setComments((prev) => {
-                    if (!prev) return prev;
-                    return Object.assign(Object.create(Object.getPrototypeOf(prev)), {
-                      ...prev,
-                      reviewThreads: prev.reviewThreads.map((t) =>
-                        t.id === threadId
-                          ? Object.assign(Object.create(Object.getPrototypeOf(t)), { ...t, isResolved: val })
-                          : t
-                      ),
-                    });
-                  });
-                // Optimistically update local state.
-                update(resolved);
-                // Fire API call, revert on failure.
-                const call = resolved ? ResolveThread(threadId) : UnresolveThread(threadId);
-                call.catch(() => update(!resolved));
-              }}
+              onToggleResolved={handleToggleResolved}
             />
           )}
 
@@ -1332,6 +1333,9 @@ export function PRDetailPage() {
               owner={pr.repoOwner}
               repo={pr.repoName}
               headRef={pr.headRef}
+              prNodeId={pr.nodeId}
+              reviewThreads={comments?.reviewThreads}
+              onToggleResolved={handleToggleResolved}
               toggleSelectedRef={fileToggleRef}
               expandedFiles={expandedFiles}
               onExpandedFilesChange={setExpandedFiles}
@@ -1453,6 +1457,8 @@ export function PRDetailPage() {
               repo={pr.repoName}
               headRef={pr.headRef}
               prNodeId={pr.nodeId}
+              reviewThreads={comments?.reviewThreads}
+              onToggleResolved={handleToggleResolved}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
             />

@@ -133,6 +133,11 @@ interface SettingsState {
   loadAiTitlePrompt: () => Promise<void>;
   setAiTitlePrompt: (prompt: string) => Promise<void>;
 
+  /** Max turns for Claude CLI (default 20) */
+  aiMaxTurns: string;
+  loadAiMaxTurns: () => Promise<void>;
+  setAiMaxTurns: (turns: string) => Promise<void>;
+
   /** Configurable thresholds that define PR size buckets (S / M / L / XL / XXL). */
   prSizeThresholds: PRSizeThresholds;
   loadPRSizeThresholds: () => Promise<void>;
@@ -647,6 +652,20 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       await SetSetting("ai_title_prompt", prompt);
     }
     set({ aiTitlePrompt: prompt });
+  },
+
+  aiMaxTurns: "",
+  loadAiMaxTurns: async () => {
+    try {
+      const val = await GetSetting("ai_max_turns");
+      set({ aiMaxTurns: val || "" });
+    } catch {
+      set({ aiMaxTurns: "" });
+    }
+  },
+  setAiMaxTurns: async (turns: string) => {
+    await SetSetting("ai_max_turns", turns);
+    set({ aiMaxTurns: turns });
   },
 
   loadPRSizeThresholds: async () => {
