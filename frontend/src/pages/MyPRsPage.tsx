@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { usePRStore, type PageDirection } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useRepoStore } from "@/stores/repoStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
@@ -15,6 +16,7 @@ type Tab = "open" | "merged";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
+  const { teamsByOrg, loadAllTeams } = useSettingsStore();
 
   const {
     pages,
@@ -243,6 +245,12 @@ export function MyPRsPage() {
     if (index >= 0 && index < tabs.length) setActiveTab(tabs[index]);
   }, []);
 
+  useEffect(() => { loadAllTeams(); }, [loadAllTeams]);
+  const viewerTeams = useMemo(
+    () => (teamsByOrg[owner] || []).map((t) => ({ slug: t.teamSlug, name: t.teamName })),
+    [teamsByOrg, owner],
+  );
+
   // Fetch data when repo changes or tab switches
   useEffect(() => {
     if (!isAuthenticated || !canFetch) return;
@@ -378,6 +386,7 @@ export function MyPRsPage() {
           onPageSizeChange={handlePageSizeChangeOpen}
           onFetchMore={handleFetchMoreOpen}
           onTabDirect={handleTabDirect}
+          viewerTeams={viewerTeams}
         />
       ) : (
         <PRTable

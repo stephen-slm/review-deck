@@ -95,13 +95,16 @@ function AppContent() {
         <ShortcutHintBar />
         <CommandPalette />
         {/* Persistent hint indicator */}
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-border px-3 py-1">
-          <span className="text-[10px] text-muted-foreground/50">
-            <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">{navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+"}K</kbd> command palette
-          </span>
-          <span className="text-[10px] text-muted-foreground/50">
-            <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">?</kbd> shortcuts
-          </span>
+        <div className="flex shrink-0 items-center justify-between border-t border-border px-3 py-1">
+          <span className="font-mono text-[10px] text-muted-foreground/40">{__COMMIT_HASH__}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-muted-foreground/50">
+              <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">{navigator.platform.includes("Mac") ? "\u2318" : "Ctrl+"}K</kbd> command palette
+            </span>
+            <span className="text-[10px] text-muted-foreground/50">
+              <kbd className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground/60">?</kbd> shortcuts
+            </span>
+          </div>
         </div>
       </main>
     </div>

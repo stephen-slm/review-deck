@@ -17,7 +17,7 @@ export function ReviewRequestsPage() {
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
-  const { loadAllPriorities, getPriorityNames } = useSettingsStore();
+  const { loadAllPriorities, getPriorityNames, teamsByOrg, loadAllTeams } = useSettingsStore();
   const {
     pages,
     isLoading,
@@ -138,7 +138,13 @@ export function ReviewRequestsPage() {
 
   useEffect(() => {
     loadAllPriorities();
-  }, [loadAllPriorities]);
+    loadAllTeams();
+  }, [loadAllPriorities, loadAllTeams]);
+
+  const viewerTeams = useMemo(
+    () => (teamsByOrg[owner] || []).map((t) => ({ slug: t.teamSlug, name: t.teamName })),
+    [teamsByOrg, owner],
+  );
 
   // Build priority set and sort PRs so priority items come first.
   const priorityNames = useMemo(() => getPriorityNames(), [getPriorityNames]);
@@ -246,6 +252,7 @@ export function ReviewRequestsPage() {
         hiddenPRs={hiddenPRs}
         onFetchMore={handleFetchMore}
         flaggedNodeIds={flaggedNodeIds}
+        viewerTeams={viewerTeams}
       />
     </div>
   );

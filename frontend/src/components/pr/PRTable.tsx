@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   useReactTable,
@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2 } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2, Users } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -58,6 +58,8 @@ interface PRTableProps {
   flagReasons?: Map<string, string[]>;
   /** Which timestamp field to display in the time column. Defaults to "updatedAt". */
   timestampField?: "updatedAt" | "mergedAt";
+  /** Authenticated user's teams — when provided, rows are grouped by team with separator headers. */
+  viewerTeams?: { slug: string; name: string }[];
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -95,6 +97,7 @@ export function PRTable({
   onTabDirect,
   flagReasons,
   timestampField = "updatedAt",
+  viewerTeams,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -418,8 +421,61 @@ export function PRTable({
   });
 
   // Sync visible rows to vim store for j/k navigation.
-  const visibleRows = table.getRowModel().rows;
-  const visiblePRs = useMemo(() => visibleRows.map((r) => r.original), [visibleRows]);
+  const tableRows = table.getRowModel().rows;
+
+  // Group rows by the viewer's teams (based on team review requests on each PR).
+  const { orderedRows, teamSeparators } = useMemo(() => {
+    if (!viewerTeams || viewerTeams.length === 0) {
+      return { orderedRows: tableRows, teamSeparators: new Map<number, string>() };
+    }
+
+    const teamSlugs = new Set(viewerTeams.map((t) => t.slug));
+
+    // Bucket rows by the first matching viewer team in their reviewRequests.
+    const buckets = new Map<string, typeof tableRows>();
+    const ungrouped: typeof tableRows = [];
+
+    for (const row of tableRows) {
+      const pr = row.original;
+      const match = (pr.reviewRequests || []).find(
+        (rr) => rr.reviewerType === "team" && teamSlugs.has(rr.reviewer),
+      );
+      if (match) {
+        let bucket = buckets.get(match.reviewer);
+        if (!bucket) {
+          bucket = [];
+          buckets.set(match.reviewer, bucket);
+        }
+        bucket.push(row);
+      } else {
+        ungrouped.push(row);
+      }
+    }
+
+    // Only show separators when at least one team has matching PRs.
+    if (buckets.size === 0) {
+      return { orderedRows: tableRows, teamSeparators: new Map<number, string>() };
+    }
+
+    const result: typeof tableRows = [];
+    const separators = new Map<number, string>();
+
+    for (const team of viewerTeams) {
+      const bucket = buckets.get(team.slug);
+      if (bucket && bucket.length > 0) {
+        separators.set(result.length, team.name);
+        result.push(...bucket);
+      }
+    }
+    if (ungrouped.length > 0) {
+      separators.set(result.length, "Other");
+      result.push(...ungrouped);
+    }
+
+    return { orderedRows: result, teamSeparators: separators };
+  }, [tableRows, viewerTeams]);
+
+  const visiblePRs = useMemo(() => orderedRows.map((r) => r.original), [orderedRows]);
   tableRowsRef.current = visiblePRs;
 
   useEffect(() => {
@@ -601,7 +657,7 @@ export function PRTable({
                   Loading...
                 </td>
               </tr>
-            ) : table.getRowModel().rows.length === 0 ? (
+            ) : orderedRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
@@ -611,7 +667,7 @@ export function PRTable({
                 </td>
               </tr>
             ) : (
-              table.getRowModel().rows.map((row, rowIndex) => {
+              orderedRows.map((row, rowIndex) => {
                 const pr = row.original;
                 const isPriority = priorityNames && priorityNames.size > 0 && (
                   priorityNames.has(pr.author) ||
@@ -624,43 +680,58 @@ export function PRTable({
                 const isPicked = pickedIndices.has(rowIndex);
                 const isHighlighted = isInVisualRange || isPicked;
                 const isFlagged = flaggedNodeIds?.has(pr.nodeId) ?? false;
+                const teamLabel = teamSeparators.get(rowIndex);
                 return (
-                  <tr
-                    key={row.id}
-                    ref={(el) => {
-                      if (el) rowRefs.current.set(rowIndex, el);
-                      else rowRefs.current.delete(rowIndex);
-                    }}
-                    onClick={() => navigate(`/pr/${pr.nodeId}`)}
-                    className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${
-                      isHighlighted
-                        ? "ring-1 ring-blue-500 bg-blue-500/15"
-                        : isVimSelected
-                          ? "ring-1 ring-primary bg-accent/40"
-                          : isFlagged
-                            ? "ring-1 ring-destructive/60 bg-destructive/5"
-                            : ""
-                    }`}
-                  >
-                    {row.getVisibleCells().map((cell) => (
-                      <td
-                        key={cell.id}
-                        className="px-3 py-1.5"
-                        onClick={
-                          cell.column.id === "actions"
-                            ? (e) => e.stopPropagation()
-                            : undefined
-                        }
-                      >
-                        <div className="flex items-center gap-1.5">
-                          {isPriority && cell === row.getVisibleCells()[0] && (
-                            <Star className="h-3 w-3 shrink-0 fill-yellow-500 text-yellow-500" />
-                          )}
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
+                  <Fragment key={row.id}>
+                    {teamLabel && (
+                      <tr className="border-b border-border bg-muted/40">
+                        <td
+                          colSpan={columns.length}
+                          className="px-3 py-1.5"
+                        >
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                            <Users className="h-3.5 w-3.5" />
+                            {teamLabel}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    <tr
+                      ref={(el) => {
+                        if (el) rowRefs.current.set(rowIndex, el);
+                        else rowRefs.current.delete(rowIndex);
+                      }}
+                      onClick={() => navigate(`/pr/${pr.nodeId}`)}
+                      className={`cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-muted/30 ${
+                        isHighlighted
+                          ? "ring-1 ring-blue-500 bg-blue-500/15"
+                          : isVimSelected
+                            ? "ring-1 ring-primary bg-accent/40"
+                            : isFlagged
+                              ? "ring-1 ring-destructive/60 bg-destructive/5"
+                              : ""
+                      }`}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <td
+                          key={cell.id}
+                          className="px-3 py-1.5"
+                          onClick={
+                            cell.column.id === "actions"
+                              ? (e) => e.stopPropagation()
+                              : undefined
+                          }
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {isPriority && cell === row.getVisibleCells()[0] && (
+                              <Star className="h-3 w-3 shrink-0 fill-yellow-500 text-yellow-500" />
+                            )}
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </div>
+                        </td>
+                      ))}
+                    </tr>
+                  </Fragment>
                 );
               })
             )}

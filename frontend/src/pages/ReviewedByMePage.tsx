@@ -2,6 +2,7 @@ import { useEffect, useCallback, useMemo } from "react";
 import { usePRStore, type PageDirection, type PaginationState } from "@/stores/prStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useRepoStore } from "@/stores/repoStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 import { PRTable } from "@/components/pr/PRTable";
 import { LastRefreshed } from "@/components/ui/LastRefreshed";
 import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
@@ -15,6 +16,7 @@ export function ReviewedByMePage() {
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
+  const { teamsByOrg, loadAllTeams } = useSettingsStore();
   const {
     pages,
     isLoading,
@@ -131,6 +133,12 @@ export function ReviewedByMePage() {
     appendNextPage("reviewedByMe", (pageSize, cursor) => fetchRaw(pageSize, cursor));
   }, [canFetch, fetchRaw, appendNextPage]);
 
+  useEffect(() => { loadAllTeams(); }, [loadAllTeams]);
+  const viewerTeams = useMemo(
+    () => (teamsByOrg[owner] || []).map((t) => ({ slug: t.teamSlug, name: t.teamName })),
+    [teamsByOrg, owner],
+  );
+
   // Filter out the viewer's own PRs — this page is for PRs authored by others.
   const viewerLogin = user?.login;
   const filteredItems = useMemo(
@@ -226,6 +234,7 @@ export function ReviewedByMePage() {
         onFetchMore={handleFetchMore}
         viewerLogin={viewerLogin}
         flaggedNodeIds={flaggedNodeIds}
+        viewerTeams={viewerTeams}
       />
     </div>
   );
