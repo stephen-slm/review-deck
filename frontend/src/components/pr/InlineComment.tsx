@@ -68,7 +68,7 @@ export function InlineThreadDisplay({
   const commentCount = thread.comments?.length ?? 0;
 
   return (
-    <div className={`mx-2 my-1 rounded-md border ${thread.isResolved ? "border-border/30 bg-muted/40 opacity-70" : "border-blue-300 dark:border-blue-700"}`}>
+    <div className={`mx-2 my-1 rounded-md border border-blue-300 dark:border-blue-700`}>
       {/* Collapse toggle for resolved threads */}
       {thread.isResolved && (
         <button
