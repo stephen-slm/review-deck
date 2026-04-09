@@ -219,6 +219,23 @@ var migrations = []string{
 	ALTER TABLE notifications ADD COLUMN url TEXT NOT NULL DEFAULT '';
 	ALTER TABLE notifications ADD COLUMN author TEXT NOT NULL DEFAULT '';
 	CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications(created_at);`,
+
+	// Migration 13: AI code tour cache (guided PR walkthroughs, TTL 7 days).
+	`CREATE TABLE IF NOT EXISTS code_tours (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		pr_node_id   TEXT NOT NULL,
+		repo_owner   TEXT NOT NULL,
+		repo_name    TEXT NOT NULL,
+		pr_number    INTEGER NOT NULL,
+		tour         TEXT NOT NULL,
+		cost         REAL NOT NULL DEFAULT 0,
+		duration_ms  INTEGER NOT NULL DEFAULT 0,
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(pr_node_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_code_tours_pr ON code_tours(pr_node_id);
+	CREATE INDEX IF NOT EXISTS idx_code_tours_repo ON code_tours(repo_owner, repo_name);`,
 }
 
 // Migrate runs all pending migrations.

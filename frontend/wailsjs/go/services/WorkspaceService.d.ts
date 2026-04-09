@@ -9,6 +9,8 @@ export function ApplyPRTitle(arg1:string,arg2:string,arg3:number,arg4:string):Pr
 
 export function CancelAIReview():Promise<void>;
 
+export function CancelCodeTour():Promise<void>;
+
 export function CancelGenerateDescription():Promise<void>;
 
 export function CancelGenerateTitle():Promise<void>;
@@ -19,7 +21,11 @@ export function CheckoutPR(arg1:string,arg2:string,arg3:number):Promise<void>;
 
 export function DeleteAIReview(arg1:string):Promise<void>;
 
+export function DeleteCodeTour(arg1:string):Promise<void>;
+
 export function GetAIReview(arg1:string):Promise<services.AIReviewResult>;
+
+export function GetCodeTour(arg1:string):Promise<services.CodeTourResult>;
 
 export function GetCurrentBranch(arg1:string,arg2:string):Promise<string>;
 
@@ -34,6 +40,8 @@ export function OpenTerminal(arg1:string,arg2:string):Promise<void>;
 export function SetContext(arg1:context.Context):Promise<void>;
 
 export function StartAIReview(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+
+export function StartCodeTour(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function StartGenerateDescription(arg1:string,arg2:string,arg3:number):Promise<void>;
 

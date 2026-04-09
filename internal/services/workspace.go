@@ -51,6 +51,40 @@ A clear 1-3 sentence summary of what this PR does and why.
 
 Be concise but thorough. Focus on the "what" and "why", not line-by-line details. Output ONLY the markdown description — no preamble, no wrapping code fences.`
 
+// defaultTourPrompt is the system prompt for generating code tours.
+const defaultTourPrompt = `You are a senior software engineer creating a guided code tour of a pull request. Analyze the diff and produce a structured walkthrough that helps reviewers understand the changes.
+
+Output ONLY a JSON object (no markdown fences, no preamble) with this exact structure:
+{
+  "title": "A short descriptive title for the tour",
+  "steps": [
+    {
+      "title": "Step title",
+      "description": "Markdown narrative explaining this part of the change",
+      "file": "path/to/file.go",
+      "startLine": 10,
+      "endLine": 25,
+      "changeType": "added"
+    }
+  ]
+}
+
+Rules:
+- The first step MUST be an overview with file="" and no line numbers — summarize what the PR does and why.
+- Each step should have a conversational, helpful tone — like a colleague walking you through the code.
+- Keep each step description under 200 words. Use markdown formatting (bold, code spans, lists) for clarity.
+- changeType must be one of: "added", "modified", "removed", "context".
+- Focus on the most important/interesting changes — skip trivial modifications.
+- Order steps logically (not necessarily file order) to tell a coherent story.
+- Output ONLY valid JSON — no trailing commas, no comments.
+
+Code snippet sizing:
+- Keep each step's line range SMALL — ideally 10-30 lines. This makes the inline code snippets easy to read alongside the narrative.
+- If a file has a large change (50+ lines), split it into MULTIPLE steps — one per logical section (e.g. struct definition, constructor, main logic, error handling). Each step should cover a focused, self-contained piece.
+- It is perfectly fine (and encouraged) to have multiple steps referencing the same file with different line ranges.
+- Aim for 6-15 steps total (including the overview) — more steps with smaller snippets is better than fewer steps with huge code blocks.
+- A step with no file reference (file="") is fine for narrative-only transitions between sections.`
+
 // defaultTitlePrompt is the system prompt for generating PR titles.
 const defaultTitlePrompt = `You are a senior software engineer writing a pull request title. Based on the diff provided, generate a single concise PR title that summarizes the changes.
 
@@ -91,6 +125,14 @@ type ToolAvailability struct {
 // AIReviewResult is the JSON-friendly result returned to the frontend.
 type AIReviewResult struct {
 	Review    string  `json:"review"`
+	Cost      float64 `json:"cost"`
+	Duration  float64 `json:"duration"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// CodeTourResult is the JSON-friendly result returned to the frontend.
+type CodeTourResult struct {
+	Tour      string  `json:"tour"`
 	Cost      float64 `json:"cost"`
 	Duration  float64 `json:"duration"`
 	CreatedAt string  `json:"created_at"`
@@ -142,6 +184,10 @@ type WorkspaceService struct {
 	// Guards the running title generation goroutine.
 	muTitle     sync.Mutex
 	cancelTitle context.CancelFunc
+
+	// Guards the running code tour goroutine.
+	muTour     sync.Mutex
+	cancelTour context.CancelFunc
 }
 
 // NewWorkspaceService creates a new WorkspaceService.
@@ -738,4 +784,146 @@ func (s *WorkspaceService) ApplyPRTitle(repoOwner, repoName string, prNumber int
 	}
 
 	return nil
+}
+
+// ---------- AI Code Tour ----------
+
+// GetCodeTour returns a cached code tour for a PR (if it exists and is <7 days old).
+func (s *WorkspaceService) GetCodeTour(prNodeID string) (*CodeTourResult, error) {
+	ct, err := s.db.GetCodeTour(prNodeID)
+	if err != nil {
+		return nil, err
+	}
+	if ct == nil {
+		return nil, nil
+	}
+	return &CodeTourResult{
+		Tour:      ct.Tour,
+		Cost:      ct.Cost,
+		Duration:  float64(ct.DurationMs) / 1000.0,
+		CreatedAt: ct.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+// DeleteCodeTour removes a cached code tour for a PR.
+func (s *WorkspaceService) DeleteCodeTour(prNodeID string) error {
+	return s.db.DeleteCodeTour(prNodeID)
+}
+
+// StartCodeTour kicks off an async Claude code tour generation for a PR.
+// It emits Wails events: "tour:started", "tour:result", "tour:error".
+func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber int, prNodeID string) error {
+	if s.ctx == nil {
+		return errors.New("app context not set")
+	}
+
+	if !gitutil.IsGhInstalled() {
+		return errors.New("the GitHub CLI (gh) is not installed — install it from https://cli.github.com")
+	}
+
+	if !gitutil.IsClaudeInstalled() {
+		return errors.New("the Claude CLI is not installed — install it from https://docs.anthropic.com/en/docs/claude-code/overview")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	maxCost := s.getMaxCost()
+
+	// Cancel any existing tour.
+	s.muTour.Lock()
+	if s.cancelTour != nil {
+		s.cancelTour()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	s.cancelTour = cancel
+	s.muTour.Unlock()
+
+	appCtx := s.ctx
+	db := s.db
+
+	go func() {
+		defer cancel()
+		wailsRuntime.EventsEmit(appCtx, "tour:started", prNumber)
+
+		// 1. Get the PR diff via `gh pr diff`.
+		ghRepo := repoOwner + "/" + repoName
+		ghTokenEnv := s.ghEnv()
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber), "--repo", ghRepo)
+		diffCmd.Dir = repo.LocalPath
+		diffCmd.Env = ghTokenEnv
+		diff, err := diffCmd.Output()
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
+			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			}
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": errMsg})
+			return
+		}
+
+		if len(bytes.TrimSpace(diff)) == 0 {
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "PR diff is empty"})
+			return
+		}
+
+		// 2. Run Claude with the tour prompt.
+		tourText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultTourPrompt, maxCost, "Generate a guided code tour for this pull request diff:")
+
+		if ctx.Err() == context.DeadlineExceeded {
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude code tour timed out (5 minute limit)"})
+			return
+		}
+		if err != nil {
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": err.Error()})
+			return
+		}
+
+		// 3. Strip markdown code fences if present and validate JSON.
+		tourText = strings.TrimSpace(tourText)
+		if strings.HasPrefix(tourText, "```") {
+			// Remove opening fence (```json or ```)
+			if idx := strings.Index(tourText, "\n"); idx >= 0 {
+				tourText = tourText[idx+1:]
+			}
+			// Remove closing fence
+			if idx := strings.LastIndex(tourText, "```"); idx >= 0 {
+				tourText = tourText[:idx]
+			}
+			tourText = strings.TrimSpace(tourText)
+		}
+
+		// Validate that it's valid JSON.
+		if !json.Valid([]byte(tourText)) {
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude returned invalid JSON for the code tour"})
+			return
+		}
+
+		// Save result to DB for caching.
+		if prNodeID != "" {
+			_ = db.SaveCodeTour(prNodeID, repoOwner, repoName, prNumber, tourText, cost, durationMs)
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		wailsRuntime.EventsEmit(appCtx, "tour:result", map[string]any{
+			"tour":       tourText,
+			"cost":       cost,
+			"duration":   durationMs,
+			"created_at": now,
+		})
+	}()
+
+	return nil
+}
+
+// CancelCodeTour cancels a running code tour generation.
+func (s *WorkspaceService) CancelCodeTour() {
+	s.muTour.Lock()
+	defer s.muTour.Unlock()
+	if s.cancelTour != nil {
+		s.cancelTour()
+		s.cancelTour = nil
+	}
 }

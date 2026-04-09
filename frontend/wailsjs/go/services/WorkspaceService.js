@@ -14,6 +14,10 @@ export function CancelAIReview() {
   return window['go']['services']['WorkspaceService']['CancelAIReview']();
 }
 
+export function CancelCodeTour() {
+  return window['go']['services']['WorkspaceService']['CancelCodeTour']();
+}
+
 export function CancelGenerateDescription() {
   return window['go']['services']['WorkspaceService']['CancelGenerateDescription']();
 }
@@ -34,8 +38,16 @@ export function DeleteAIReview(arg1) {
   return window['go']['services']['WorkspaceService']['DeleteAIReview'](arg1);
 }
 
+export function DeleteCodeTour(arg1) {
+  return window['go']['services']['WorkspaceService']['DeleteCodeTour'](arg1);
+}
+
 export function GetAIReview(arg1) {
   return window['go']['services']['WorkspaceService']['GetAIReview'](arg1);
+}
+
+export function GetCodeTour(arg1) {
+  return window['go']['services']['WorkspaceService']['GetCodeTour'](arg1);
 }
 
 export function GetCurrentBranch(arg1, arg2) {
@@ -64,6 +76,10 @@ export function SetContext(arg1) {
 
 export function StartAIReview(arg1, arg2, arg3, arg4) {
   return window['go']['services']['WorkspaceService']['StartAIReview'](arg1, arg2, arg3, arg4);
+}
+
+export function StartCodeTour(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['WorkspaceService']['StartCodeTour'](arg1, arg2, arg3, arg4);
 }
 
 export function StartGenerateDescription(arg1, arg2, arg3) {

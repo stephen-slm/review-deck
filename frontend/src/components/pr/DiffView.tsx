@@ -16,6 +16,8 @@ import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { parsePatch } from "@/lib/diffUtils";
+import { langFromFilename, highlightLine } from "@/lib/highlighter";
 
 interface DiffViewProps {
   files: github.PRFile[] | null;
@@ -29,49 +31,6 @@ interface DiffViewProps {
   /** Controlled expanded files state — lifted to parent to persist across tab switches. */
   expandedFiles: Set<string>;
   onExpandedFilesChange: (files: Set<string>) => void;
-}
-
-/** Parse a unified diff patch string into individual diff lines. */
-interface DiffLine {
-  type: "add" | "del" | "context" | "hunk";
-  content: string;
-  oldLine?: number;
-  newLine?: number;
-}
-
-function parsePatch(patch: string): DiffLine[] {
-  if (!patch) return [];
-
-  const lines = patch.split("\n");
-  const result: DiffLine[] = [];
-  let oldLine = 0;
-  let newLine = 0;
-
-  for (const line of lines) {
-    if (line.startsWith("@@")) {
-      // Parse hunk header: @@ -oldStart,oldCount +newStart,newCount @@
-      const match = line.match(/@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
-      if (match) {
-        oldLine = parseInt(match[1], 10);
-        newLine = parseInt(match[2], 10);
-      }
-      result.push({ type: "hunk", content: line });
-    } else if (line.startsWith("+")) {
-      result.push({ type: "add", content: line.slice(1), newLine });
-      newLine++;
-    } else if (line.startsWith("-")) {
-      result.push({ type: "del", content: line.slice(1), oldLine });
-      oldLine++;
-    } else {
-      // Context line (starts with space or is empty)
-      const content = line.startsWith(" ") ? line.slice(1) : line;
-      result.push({ type: "context", content, oldLine, newLine });
-      oldLine++;
-      newLine++;
-    }
-  }
-
-  return result;
 }
 
 function FileStatusIcon({ status }: { status: string }) {
@@ -109,6 +68,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
   onOpenInGoLand?: (filePath: string) => void;
 }) {
   const diffLines = useMemo(() => parsePatch(file.patch), [file.patch]);
+  const lang = useMemo(() => langFromFilename(file.filename), [file.filename]);
 
   return (
     <div
@@ -208,7 +168,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
                         <span className="mr-1 select-none opacity-50">
                           {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
                         </span>
-                        {line.content}
+                        <span dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }} />
                       </td>
                     </tr>
                   );

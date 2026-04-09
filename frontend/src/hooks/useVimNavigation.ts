@@ -82,6 +82,7 @@ export function useVimNavigation() {
       "4": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(3); }),
       "5": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(4); }),
       "6": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(5); }),
+      "7": vim(() => { const { onTabDirect } = getActions(); if (onTabDirect) onTabDirect(6); }),
 
       // ---- Global: Escape — exit visual/pick mode > close dropdown > blur input > go back ----
       "Escape": (event: KeyboardEvent) => {

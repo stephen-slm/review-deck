@@ -589,6 +589,24 @@ export namespace services {
 	        this.created_at = source["created_at"];
 	    }
 	}
+	export class CodeTourResult {
+	    tour: string;
+	    cost: number;
+	    duration: number;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CodeTourResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tour = source["tour"];
+	        this.cost = source["cost"];
+	        this.duration = source["duration"];
+	        this.created_at = source["created_at"];
+	    }
+	}
 	export class ToolAvailability {
 	    gh: boolean;
 	    claude: boolean;

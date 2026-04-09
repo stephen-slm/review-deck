@@ -23,13 +23,14 @@ import {
   Sparkles,
   Pencil,
   Eye,
+  Map,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
 import { dlog } from "@/lib/debugLog";
@@ -42,7 +43,7 @@ import { useToast } from "@/components/ui/Toast";
 import { github, services } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
-type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review";
+type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review" | "code-tour";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
@@ -53,6 +54,9 @@ import { useFindPR } from "@/hooks/useFindPR";
 import { ChecksTab } from "@/components/pr/detail/ChecksTab";
 import { CommentsTab } from "@/components/pr/detail/CommentsTab";
 import { AIReviewPanel } from "@/components/pr/detail/AIReviewPanel";
+import { CodeTourPanel } from "@/components/pr/detail/CodeTourPanel";
+import { CodeTourSidebar } from "@/components/pr/detail/CodeTourSidebar";
+import type { CodeTourData } from "@/types/codeTour";
 import { ReviewersSidebar } from "@/components/pr/detail/ReviewersSidebar";
 import { SidebarSection, StatItem, TimestampRow } from "@/components/pr/detail/SidebarSection";
 import { ReviewStateBadge } from "@/components/pr/ReviewStateBadge";
@@ -162,6 +166,12 @@ export function PRDetailPage() {
   const [titleError, setTitleError] = useState<string | null>(null);
   const [applyingTitle, setApplyingTitle] = useState(false);
 
+  // Code tour state
+  const [tourGenerating, setTourGenerating] = useState(false);
+  const [tourData, setTourData] = useState<CodeTourData | null>(null);
+  const [tourMeta, setTourMeta] = useState<{ cost: number; duration: number }>({ cost: 0, duration: 0 });
+  const [tourError, setTourError] = useState<string | null>(null);
+
   // Vim-navigable action index for AI-generated title/description buttons.
   // -1 = no action focused; 0+ indexes into the flat list of visible action buttons.
   const [focusedAction, setFocusedAction] = useState(-1);
@@ -200,6 +210,20 @@ export function PRDetailPage() {
           duration: cached.duration ?? 0,
           createdAt: cached.created_at ?? "",
         });
+      }
+    }).catch(() => {});
+  }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Load cached code tour on mount
+  useEffect(() => {
+    if (!pr?.nodeId) return;
+    GetCodeTour(pr.nodeId).then((cached) => {
+      if (cached && cached.tour) {
+        try {
+          const parsed = JSON.parse(cached.tour) as CodeTourData;
+          setTourData(parsed);
+          setTourMeta({ cost: cached.cost ?? 0, duration: (cached.duration ?? 0) });
+        } catch {}
       }
     }).catch(() => {});
   }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,6 +293,34 @@ export function PRDetailPage() {
     const offError = EventsOn("title:error", (data: { error: string }) => {
       setTitleGenerating(false);
       setTitleError(data.error);
+    });
+    return () => {
+      offStarted();
+      offResult();
+      offError();
+    };
+  }, []);
+
+  // Listen for code tour events
+  useEffect(() => {
+    const offStarted = EventsOn("tour:started", () => {
+      setTourGenerating(true);
+      setTourData(null);
+      setTourError(null);
+    });
+    const offResult = EventsOn("tour:result", (data: { tour: string; cost: number; duration: number }) => {
+      setTourGenerating(false);
+      try {
+        const parsed = JSON.parse(data.tour) as CodeTourData;
+        setTourData(parsed);
+        setTourMeta({ cost: data.cost ?? 0, duration: (data.duration ?? 0) / 1000 });
+      } catch {
+        setTourError("Failed to parse tour response");
+      }
+    });
+    const offError = EventsOn("tour:error", (data: { error: string }) => {
+      setTourGenerating(false);
+      setTourError(data.error);
     });
     return () => {
       offStarted();
@@ -432,6 +484,26 @@ export function PRDetailPage() {
     }
   }, [pr, generatedTitle, applyingTitle, addToast]);
 
+  const handleStartTour = useCallback(async () => {
+    if (!pr || tourGenerating) return;
+    try {
+      await DeleteCodeTour(pr.nodeId);
+      setTourData(null);
+      await StartCodeTour(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, tourGenerating, addToast]);
+
+  const handleCancelTour = useCallback(async () => {
+    try {
+      await CancelCodeTour();
+      setTourGenerating(false);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [addToast]);
+
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
   const mergeToggleRef = useRef<(() => void) | null>(null);
@@ -470,7 +542,7 @@ export function PRDetailPage() {
   const prRepo = pr?.repoName;
   const prNumber = pr?.number;
   useEffect(() => {
-    if (activeTab !== "files" || prFiles !== null || filesLoading || !prOwner || !prRepo || !prNumber) return;
+    if ((activeTab !== "files" && activeTab !== "code-tour") || prFiles !== null || filesLoading || !prOwner || !prRepo || !prNumber) return;
     setFilesLoading(true);
     GetPRFiles(prOwner, prRepo, prNumber)
       .then(setPRFiles)
@@ -552,14 +624,16 @@ export function PRDetailPage() {
   // Auto-refresh at the configured interval.
   const prRefreshIntervalSeconds = useSettingsStore((s) => s.prRefreshIntervalSeconds);
   useEffect(() => {
-    const ms = prRefreshIntervalSeconds * 1000;
+    // Slow down auto-refresh on the code tour tab to avoid interrupting reading.
+    const seconds = activeTab === "code-tour" ? Math.max(prRefreshIntervalSeconds, 600) : prRefreshIntervalSeconds;
+    const ms = seconds * 1000;
     const interval = setInterval(() => {
       if (prRef.current && !refreshingRef.current) {
         handleRefresh();
       }
     }, ms);
     return () => clearInterval(interval);
-  }, [prRefreshIntervalSeconds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prRefreshIntervalSeconds, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Synchronise vimStore list length + selected index with the active tab
   // and its loaded data. Wrapped in setTimeout(0) to defer Zustand mutations
@@ -582,6 +656,9 @@ export function PRDetailPage() {
     } else if (activeTab === "ai-review" || activeTab === "description") {
       len = 1;
       idx = 0;
+    } else if (activeTab === "code-tour") {
+      len = 1;
+      idx = 0;
     }
     dlog("PRDetail:effect", `vimSync tab=${activeTab} len=${len} idx=${idx} (deferred)`);
     const id = setTimeout(() => {
@@ -591,7 +668,7 @@ export function PRDetailPage() {
       if (vs.selectedIndex !== idx) vs.setSelectedIndex(idx);
     }, 0);
     return () => clearTimeout(id);
-  }, [activeTab, checkRuns, comments, commits, prFiles]);
+  }, [activeTab, checkRuns, comments, commits, prFiles, tourData]);
 
   // Auto-scroll the selected commit into view.
   useEffect(() => {
@@ -607,7 +684,7 @@ export function PRDetailPage() {
   // effect cleanup/setup cycle on every render, which contributed to React's
   // nested-update count and caused error #185 on rapid re-render sequences.
   {
-    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review"];
+    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review", "code-tour"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -716,6 +793,12 @@ export function PRDetailPage() {
       // Enter starts a review (idle), re-runs (result shown), or retries (error).
       actions.onOpen = () => { if (!aiReviewing) handleStartAIReview(); };
       actions.onGenerateReview = () => { if (!aiReviewing) handleStartAIReview(); };
+    } else if (activeTab === "code-tour") {
+      const scrollEl = document.getElementById("scroll-region");
+      actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
+      actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
+      actions.onOpen = () => { if (!tourGenerating) handleStartTour(); };
     }
 
     registerActions(actions);
@@ -753,6 +836,7 @@ export function PRDetailPage() {
     { key: "files", label: "Files", icon: <FileCode className="h-4 w-4" /> },
     { key: "commits", label: "Commits", icon: <GitCommit className="h-4 w-4" /> },
     { key: "ai-review", label: "AI Review", icon: <Sparkles className="h-4 w-4" /> },
+    { key: "code-tour", label: "Code Tour", icon: <Map className="h-4 w-4" /> },
   ];
 
   return (
@@ -1353,10 +1437,35 @@ export function PRDetailPage() {
               onCancel={handleCancelAIReview}
             />
           )}
+
+          {activeTab === "code-tour" && (
+            <CodeTourPanel
+              generating={tourGenerating}
+              tour={tourData}
+              error={tourError}
+              cost={tourMeta.cost}
+              duration={tourMeta.duration}
+              hasLocalPath={hasLocalPath}
+              hasTools={!!toolAvailability?.gh && !!toolAvailability?.claude}
+              prFiles={prFiles}
+              onStart={handleStartTour}
+              onCancel={handleCancelTour}
+            />
+          )}
         </div>
 
         {/* Sidebar — sticky so it stays visible while scrolling main content */}
-        <div className="sticky top-0 self-start space-y-3">
+        <div className="sticky top-0 self-start space-y-3 max-h-[calc(100vh-120px)] overflow-y-auto">
+          {/* Code Tour sidebar — replaces normal sidebar when tour tab is active and a tour exists */}
+          {activeTab === "code-tour" && tourData && (
+            <CodeTourSidebar
+              tour={tourData}
+              cost={tourMeta.cost}
+              duration={tourMeta.duration}
+              onRegenerate={handleStartTour}
+            />
+          )}
+
           {/* Actions */}
           <SidebarSection title="Actions">
             <div className="space-y-2">
