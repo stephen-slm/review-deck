@@ -521,12 +521,28 @@ export function PRTable({
       return { orderedRows: tableRows, teamSeparators: new Map<number, string>() };
     }
 
-    // Order: single-team buckets first (in viewerTeams order), then multi-team combos, then "Other".
+    // Order: priority teams first, then remaining single-team buckets (in viewerTeams order),
+    // then multi-team combos, then "Other".
     const result: typeof tableRows = [];
     const separators = new Map<number, string>();
     const usedKeys = new Set<string>();
 
+    // Priority teams first.
+    if (priorityNames && priorityNames.size > 0) {
+      for (const team of viewerTeams) {
+        if (!priorityNames.has(team.slug) && !priorityNames.has(team.name)) continue;
+        const bucket = buckets.get(team.slug);
+        if (bucket && bucket.length > 0) {
+          separators.set(result.length, team.name);
+          result.push(...bucket);
+          usedKeys.add(team.slug);
+        }
+      }
+    }
+
+    // Remaining single-team buckets.
     for (const team of viewerTeams) {
+      if (usedKeys.has(team.slug)) continue;
       const bucket = buckets.get(team.slug);
       if (bucket && bucket.length > 0) {
         separators.set(result.length, team.name);
@@ -535,6 +551,7 @@ export function PRTable({
       }
     }
 
+    // Multi-team combos.
     for (const [key, bucket] of buckets) {
       if (usedKeys.has(key) || bucket.length === 0) continue;
       separators.set(result.length, bucketLabels.get(key) || key);
@@ -547,7 +564,7 @@ export function PRTable({
     }
 
     return { orderedRows: result, teamSeparators: separators };
-  }, [tableRows, viewerTeams, viewerLogin]);
+  }, [tableRows, viewerTeams, viewerLogin, priorityNames]);
 
   const visiblePRs = useMemo(() => orderedRows.map((r) => r.original), [orderedRows]);
   tableRowsRef.current = visiblePRs;
