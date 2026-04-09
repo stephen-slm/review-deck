@@ -6,20 +6,31 @@ import {
   XCircle,
   CheckCircle2,
   Circle,
+  ChevronDown,
+  ChevronRight,
+  Reply,
+  ExternalLink,
 } from "lucide-react";
 import type { github } from "../../../wailsjs/go/models";
+import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 import { AddPRReviewComment } from "../../../wailsjs/go/services/PullRequestService";
-import { ResolveThread, UnresolveThread } from "../../../wailsjs/go/services/PullRequestService";
+import { ResolveThread, UnresolveThread, ReplyToThread } from "../../../wailsjs/go/services/PullRequestService";
 
 /** Renders existing review thread comments inline beneath a diff line. */
 export function InlineThreadDisplay({
   thread,
   onToggleResolved,
+  onReplied,
 }: {
   thread: github.ReviewThread;
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
+  onReplied?: () => void;
 }) {
   const [resolving, setResolving] = useState(false);
+  const [collapsed, setCollapsed] = useState(thread.isResolved);
+  const [showReply, setShowReply] = useState(false);
+  const [replyBody, setReplyBody] = useState("");
+  const [submittingReply, setSubmittingReply] = useState(false);
 
   const handleToggleResolved = useCallback(async () => {
     if (!onToggleResolved) return;
@@ -39,12 +50,44 @@ export function InlineThreadDisplay({
     }
   }, [thread.id, thread.isResolved, onToggleResolved]);
 
+  const handleReply = useCallback(async () => {
+    if (!replyBody.trim()) return;
+    setSubmittingReply(true);
+    try {
+      await ReplyToThread(thread.id, replyBody.trim());
+      setReplyBody("");
+      setShowReply(false);
+      onReplied?.();
+    } catch {
+      // User can retry
+    } finally {
+      setSubmittingReply(false);
+    }
+  }, [thread.id, replyBody, onReplied]);
+
+  const commentCount = thread.comments?.length ?? 0;
+
   return (
     <div className={`mx-2 my-1 rounded-md border ${thread.isResolved ? "border-border/50 opacity-60" : "border-blue-300 dark:border-blue-700"}`}>
-      {thread.comments.map((comment, ci) => (
+      {/* Collapse toggle for resolved threads */}
+      {thread.isResolved && (
+        <button
+          onClick={() => setCollapsed((c) => !c)}
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent/50 transition-colors"
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3 w-3" />
+          ) : (
+            <ChevronDown className="h-3 w-3" />
+          )}
+          <CheckCircle2 className="h-3 w-3" />
+          <span>Resolved thread ({commentCount} comment{commentCount !== 1 ? "s" : ""})</span>
+        </button>
+      )}
+      {!collapsed && thread.comments.map((comment, ci) => (
         <div
           key={comment.id || ci}
-          className={`px-3 py-2 ${ci > 0 ? "border-t border-border/30" : ""}`}
+          className={`px-3 py-2 ${ci > 0 || thread.isResolved ? "border-t border-border/30" : ""}`}
         >
           <div className="flex items-center gap-2 mb-1">
             {comment.authorAvatar ? (
@@ -68,22 +111,82 @@ export function InlineThreadDisplay({
           <p className="text-xs text-muted-foreground whitespace-pre-wrap">{comment.body}</p>
         </div>
       ))}
-      {onToggleResolved && (
-        <div className="flex items-center justify-end border-t border-border/30 px-2 py-1">
-          <button
-            onClick={handleToggleResolved}
-            disabled={resolving}
-            className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
-          >
-            {resolving ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : thread.isResolved ? (
-              <Circle className="h-3 w-3" />
-            ) : (
-              <CheckCircle2 className="h-3 w-3" />
+      {/* Reply form */}
+      {!collapsed && showReply && (
+        <div className="border-t border-border/30 px-3 py-2">
+          <div className="flex gap-2">
+            <textarea
+              autoFocus
+              value={replyBody}
+              onChange={(e) => setReplyBody(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setShowReply(false);
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleReply();
+              }}
+              placeholder="Reply... (⌘+Enter to submit)"
+              className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              rows={2}
+            />
+            <div className="flex flex-col gap-1">
+              <button
+                onClick={handleReply}
+                disabled={!replyBody.trim() || submittingReply}
+                className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
+              >
+                {submittingReply ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Send className="h-3 w-3" />
+                )}
+              </button>
+              <button
+                onClick={() => { setShowReply(false); setReplyBody(""); }}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+              >
+                <XCircle className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Actions bar: reply + open + resolve */}
+      {!collapsed && (
+        <div className="flex items-center justify-between border-t border-border/30 px-2 py-1">
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowReply((s) => !s)}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            >
+              <Reply className="h-3 w-3" />
+              Reply
+            </button>
+            {thread.url && (
+              <button
+                onClick={() => BrowserOpenURL(thread.url)}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                title="Open in GitHub (o)"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Open
+              </button>
             )}
-            {thread.isResolved ? "Unresolve" : "Resolve"}
-          </button>
+          </div>
+          {onToggleResolved && (
+            <button
+              onClick={handleToggleResolved}
+              disabled={resolving}
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              {resolving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : thread.isResolved ? (
+                <Circle className="h-3 w-3" />
+              ) : (
+                <CheckCircle2 className="h-3 w-3" />
+              )}
+              {thread.isResolved ? "Unresolve" : "Resolve"}
+            </button>
+          )}
         </div>
       )}
     </div>

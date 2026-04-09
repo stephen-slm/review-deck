@@ -142,6 +142,10 @@ export function RemoveLabels(arg1, arg2) {
   return window['go']['services']['PullRequestService']['RemoveLabels'](arg1, arg2);
 }
 
+export function ReplyToThread(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['ReplyToThread'](arg1, arg2);
+}
+
 export function RequestChangesPR(arg1, arg2) {
   return window['go']['services']['PullRequestService']['RequestChangesPR'](arg1, arg2);
 }

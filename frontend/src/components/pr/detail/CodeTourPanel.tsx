@@ -39,6 +39,7 @@ function StepDiffSnippet({
   prNodeId,
   reviewThreads,
   onToggleResolved,
+  onCommentAdded,
 }: {
   file: string;
   startLine: number;
@@ -50,6 +51,7 @@ function StepDiffSnippet({
   prNodeId?: string;
   reviewThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
+  onCommentAdded?: () => void;
 }) {
   const matchedFile = prFiles.find(
     (f) => f.filename === file || f.filename.endsWith("/" + file),
@@ -246,7 +248,7 @@ function StepDiffSnippet({
                       <td className="w-10 border-r border-border/30" />
                       <td className="w-[1px] border-r border-border/30" />
                       <td>
-                        <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} />
+                        <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} onReplied={onCommentAdded} />
                       </td>
                     </tr>
                   ))}
@@ -322,6 +324,7 @@ export function CodeTourPanel({
   prNodeId,
   reviewThreads,
   onToggleResolved,
+  onCommentAdded,
   onStart,
   onCancel,
 }: {
@@ -339,6 +342,7 @@ export function CodeTourPanel({
   prNodeId?: string;
   reviewThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
+  onCommentAdded?: () => void;
   onStart: () => void;
   onCancel: () => void;
 }) {
@@ -524,6 +528,7 @@ export function CodeTourPanel({
               prNodeId={prNodeId}
               reviewThreads={reviewThreads}
               onToggleResolved={onToggleResolved}
+              onCommentAdded={onCommentAdded}
             />
           )}
 

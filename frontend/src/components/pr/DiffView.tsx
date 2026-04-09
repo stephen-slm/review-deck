@@ -44,6 +44,8 @@ interface DiffViewProps {
   /** Controlled expanded files state — lifted to parent to persist across tab switches. */
   expandedFiles: Set<string>;
   onExpandedFilesChange: (files: Set<string>) => void;
+  /** Called after a reply is posted to a thread — parent should refresh comments. */
+  onCommentAdded?: () => void;
 }
 
 function FileStatusIcon({ status }: { status: string }) {
@@ -133,7 +135,7 @@ function ExpandRow({ gap, onExpand }: {
 }
 
 /** Renders a single file's diff with expandable context. */
-function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owner, repo, headRef, prNodeId, fileThreads, onToggleResolved }: {
+function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owner, repo, headRef, prNodeId, fileThreads, onToggleResolved, onCommentAdded }: {
   file: github.PRFile;
   isExpanded: boolean;
   onToggle: () => void;
@@ -145,6 +147,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
   prNodeId?: string;
   fileThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
+  onCommentAdded?: () => void;
 }) {
   const initialLines = useMemo(() => parsePatch(file.patch), [file.patch]);
   const [lines, setLines] = useState<DiffLine[]>(initialLines);
@@ -333,7 +336,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
                           <td className="w-10 border-r border-border/30" />
                           <td className="w-10 border-r border-border/30" />
                           <td>
-                            <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} />
+                            <InlineThreadDisplay thread={thread} onToggleResolved={onToggleResolved} onReplied={onCommentAdded} />
                           </td>
                         </tr>
                       ))}
@@ -390,7 +393,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
   );
 }
 
-export function DiffView({ files, loading, error, owner, repo, headRef, prNodeId, reviewThreads, onToggleResolved, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
+export function DiffView({ files, loading, error, owner, repo, headRef, prNodeId, reviewThreads, onToggleResolved, toggleSelectedRef, expandedFiles, onExpandedFilesChange, onCommentAdded }: DiffViewProps) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -571,6 +574,7 @@ export function DiffView({ files, loading, error, owner, repo, headRef, prNodeId
                 prNodeId={prNodeId}
                 fileThreads={reviewThreads?.filter((t) => t.path === file.filename)}
                 onToggleResolved={onToggleResolved}
+                onCommentAdded={onCommentAdded}
               />
             </div>
           ))}

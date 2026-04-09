@@ -261,6 +261,28 @@ func (c *Client) AddPRReviewThread(ctx context.Context, prNodeID string, body st
 	return mutation.AddPullRequestReviewThread.Thread.ID, nil
 }
 
+// ReplyToThread adds a reply comment to an existing review thread.
+func (c *Client) ReplyToThread(ctx context.Context, threadID string, body string) (string, error) {
+	var mutation struct {
+		AddPullRequestReviewThreadReply struct {
+			Comment struct {
+				ID string `graphql:"id"`
+			} `graphql:"comment"`
+		} `graphql:"addPullRequestReviewThreadReply(input: $input)"`
+	}
+
+	input := githubv4.AddPullRequestReviewThreadReplyInput{
+		PullRequestReviewThreadID: githubv4.ID(threadID),
+		Body:                      githubv4.String(body),
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return "", fmt.Errorf("reply to review thread: %w", err)
+	}
+	return mutation.AddPullRequestReviewThreadReply.Comment.ID, nil
+}
+
 // MarkReadyForReview marks a draft pull request as ready for review.
 func (c *Client) MarkReadyForReview(ctx context.Context, prNodeID string) error {
 	var mutation struct {

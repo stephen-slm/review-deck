@@ -586,6 +586,14 @@ export function PRDetailPage() {
     call.catch(() => update(!resolved));
   }, []);
 
+  /** Re-fetch comments after a reply is posted to a thread. */
+  const refreshComments = useCallback(() => {
+    if (!nodeId) return;
+    GetPRComments(nodeId)
+      .then(setComments)
+      .catch(() => {});
+  }, [nodeId]);
+
   // Ref to track whether a refresh is in progress (avoids stale closure issues).
   const refreshingRef = useRef(false);
 
@@ -1339,6 +1347,7 @@ export function PRDetailPage() {
               toggleSelectedRef={fileToggleRef}
               expandedFiles={expandedFiles}
               onExpandedFilesChange={setExpandedFiles}
+              onCommentAdded={refreshComments}
             />
           )}
 
@@ -1459,6 +1468,7 @@ export function PRDetailPage() {
               prNodeId={pr.nodeId}
               reviewThreads={comments?.reviewThreads}
               onToggleResolved={handleToggleResolved}
+              onCommentAdded={refreshComments}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
             />

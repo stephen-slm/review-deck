@@ -49,9 +49,10 @@ function AppContent() {
     useRepoStore.getState().loadRepos().then(() => {
       useRepoStore.getState().loadSelectedRepo();
     });
-    // Load orgs then teams so PR grouping works on initial load.
+    // Load orgs then teams + priorities so PR grouping and priority sorting work on initial load.
     useSettingsStore.getState().loadOrgs().then(() => {
       useSettingsStore.getState().loadAllTeams();
+      useSettingsStore.getState().loadAllPriorities();
     });
   }, []);
 

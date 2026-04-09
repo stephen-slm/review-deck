@@ -446,6 +446,21 @@ func (s *PullRequestService) AddPRReviewComment(prNodeID string, body string, pa
 	return threadID, nil
 }
 
+// ReplyToThread adds a reply comment to an existing review thread.
+func (s *PullRequestService) ReplyToThread(threadID string, body string) (string, error) {
+	if s.client == nil {
+		return "", ErrNotAuthenticated
+	}
+	if body == "" {
+		return "", fmt.Errorf("reply body is required")
+	}
+	commentID, err := s.client.ReplyToThread(context.Background(), threadID, body)
+	if err != nil {
+		return "", fmt.Errorf("reply to thread: %w", err)
+	}
+	return commentID, nil
+}
+
 // ResolveThread resolves a review thread.
 func (s *PullRequestService) ResolveThread(threadID string) error {
 	if s.client == nil {
