@@ -6,9 +6,13 @@ import {time} from '../models';
 
 export function AddLabels(arg1:string,arg2:Array<string>):Promise<void>;
 
+export function AddPRReviewComment(arg1:string,arg2:string,arg3:string,arg4:number):Promise<string>;
+
 export function ApprovePR(arg1:string,arg2:string):Promise<void>;
 
 export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullRequest>>;
+
+export function GetFileContent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function GetMetricsHistory(arg1:number):Promise<Array<storage.MetricsSnapshot>>;
 

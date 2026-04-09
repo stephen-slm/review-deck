@@ -6,12 +6,20 @@ export function AddLabels(arg1, arg2) {
   return window['go']['services']['PullRequestService']['AddLabels'](arg1, arg2);
 }
 
+export function AddPRReviewComment(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['AddPRReviewComment'](arg1, arg2, arg3, arg4);
+}
+
 export function ApprovePR(arg1, arg2) {
   return window['go']['services']['PullRequestService']['ApprovePR'](arg1, arg2);
 }
 
 export function GetCachedPRs(arg1, arg2) {
   return window['go']['services']['PullRequestService']['GetCachedPRs'](arg1, arg2);
+}
+
+export function GetFileContent(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['GetFileContent'](arg1, arg2, arg3, arg4);
 }
 
 export function GetMetricsHistory(arg1) {

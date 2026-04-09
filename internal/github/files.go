@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // restPRFile is the JSON shape returned by the GitHub REST API for a single
@@ -87,4 +88,37 @@ func (c *Client) GetPRFiles(ctx context.Context, owner, repo string, number int)
 	}
 
 	return allFiles, nil
+}
+
+// GetFileContent fetches the raw content of a file at a specific git ref
+// using the GitHub Contents API. Returns the decoded file content as a string.
+func (c *Client) GetFileContent(ctx context.Context, owner, repo, path, ref string) (string, error) {
+	httpClient := c.HTTPClient()
+
+	apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/%s?ref=%s",
+		owner, repo, path, url.QueryEscape(ref))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	// Request raw content directly (no base64 JSON wrapper).
+	req.Header.Set("Accept", "application/vnd.github.v3.raw")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch file content: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	return string(body), nil
 }

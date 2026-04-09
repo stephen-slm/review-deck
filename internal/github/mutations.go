@@ -232,6 +232,35 @@ func (c *Client) RequestReviews(ctx context.Context, prNodeID string, userIDs []
 	return nil
 }
 
+// AddPRReviewThread creates a new review thread (inline comment) on a pull request.
+func (c *Client) AddPRReviewThread(ctx context.Context, prNodeID string, body string, path string, line int) (string, error) {
+	var mutation struct {
+		AddPullRequestReviewThread struct {
+			Thread struct {
+				ID string `graphql:"id"`
+			} `graphql:"thread"`
+		} `graphql:"addPullRequestReviewThread(input: $input)"`
+	}
+
+	prID := githubv4.ID(prNodeID)
+	p := githubv4.String(path)
+	l := githubv4.Int(line)
+	side := githubv4.DiffSideRight
+	input := githubv4.AddPullRequestReviewThreadInput{
+		PullRequestID: &prID,
+		Body:          githubv4.String(body),
+		Path:          &p,
+		Line:          &l,
+		Side:          &side,
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return "", fmt.Errorf("add review thread: %w", err)
+	}
+	return mutation.AddPullRequestReviewThread.Thread.ID, nil
+}
+
 // MarkReadyForReview marks a draft pull request as ready for review.
 func (c *Client) MarkReadyForReview(ctx context.Context, prNodeID string) error {
 	var mutation struct {

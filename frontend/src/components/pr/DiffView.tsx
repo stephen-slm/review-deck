@@ -1,22 +1,26 @@
-import { useMemo, useRef, useEffect } from "react";
+import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import {
   FileCode,
   Plus,
   Minus,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   Loader2,
   AlertTriangle,
   File,
   FilePlus,
   FileX,
   ArrowRight,
+  UnfoldVertical,
 } from "lucide-react";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
+import { GetFileContent } from "../../../wailsjs/go/services/PullRequestService";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { parsePatch } from "@/lib/diffUtils";
+import { parsePatch, computeGap, expandDiffLines, trailingLineCount, expandTrailingLines } from "@/lib/diffUtils";
+import type { DiffLine } from "@/lib/diffUtils";
 import { langFromFilename, highlightLine } from "@/lib/highlighter";
 
 interface DiffViewProps {
@@ -26,6 +30,8 @@ interface DiffViewProps {
   /** Owner and repo for "Open in GoLand" per-file buttons */
   owner?: string;
   repo?: string;
+  /** PR head branch name — used to fetch file content for diff expansion. */
+  headRef?: string;
   /** Ref populated with a function to toggle expand/collapse of the currently selected file. */
   toggleSelectedRef?: React.MutableRefObject<(() => void) | null>;
   /** Controlled expanded files state — lifted to parent to persist across tab switches. */
@@ -59,16 +65,121 @@ function FileStatsBadge({ additions, deletions }: { additions: number; deletions
   );
 }
 
-/** Renders a single file's diff. */
-function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
+const EXPAND_COUNT = 20;
+
+/** Row that allows expanding hidden lines at a hunk boundary. */
+function ExpandRow({ gap, onExpand }: {
+  gap: { hiddenCount: number };
+  onExpand: (direction: "up" | "down" | "all") => void;
+}) {
+  const { hiddenCount } = gap;
+
+  if (hiddenCount <= EXPAND_COUNT * 2) {
+    return (
+      <tr className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+        <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+        <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+        <td className="px-3 py-1">
+          <button
+            onClick={() => onExpand("all")}
+            className="flex w-full items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+          >
+            <UnfoldVertical className="h-3 w-3" />
+            Show {hiddenCount} hidden line{hiddenCount !== 1 ? "s" : ""}
+          </button>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="bg-blue-500/5">
+      <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+      <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+      <td className="px-3 py-1">
+        <div className="flex items-center justify-center gap-4 text-xs">
+          <button
+            onClick={() => onExpand("up")}
+            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          >
+            <ChevronDown className="h-3 w-3" />
+            Expand {EXPAND_COUNT} lines
+          </button>
+          <button
+            onClick={() => onExpand("all")}
+            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          >
+            <UnfoldVertical className="h-3 w-3" />
+            Show all {hiddenCount}
+          </button>
+          <button
+            onClick={() => onExpand("down")}
+            className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+          >
+            <ChevronUp className="h-3 w-3" />
+            Expand {EXPAND_COUNT} lines
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/** Renders a single file's diff with expandable context. */
+function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owner, repo, headRef }: {
   file: github.PRFile;
   isExpanded: boolean;
   onToggle: () => void;
   isSelected: boolean;
   onOpenInGoLand?: (filePath: string) => void;
+  owner?: string;
+  repo?: string;
+  headRef?: string;
 }) {
-  const diffLines = useMemo(() => parsePatch(file.patch), [file.patch]);
+  const initialLines = useMemo(() => parsePatch(file.patch), [file.patch]);
+  const [lines, setLines] = useState<DiffLine[]>(initialLines);
+  const [fileContent, setFileContent] = useState<string[] | null>(null);
+  const [loadingContent, setLoadingContent] = useState(false);
   const lang = useMemo(() => langFromFilename(file.filename), [file.filename]);
+
+  // Reset lines when the patch changes (e.g. PR refresh).
+  useEffect(() => {
+    setLines(initialLines);
+    setFileContent(null);
+  }, [initialLines]);
+
+  const canExpand = !!owner && !!repo && !!headRef && file.status !== "removed";
+
+  const fetchContent = useCallback(async (): Promise<string[] | null> => {
+    if (fileContent) return fileContent;
+    if (!owner || !repo || !headRef) return null;
+    setLoadingContent(true);
+    try {
+      const raw = await GetFileContent(owner, repo, file.filename, headRef);
+      const contentLines = raw.split("\n");
+      setFileContent(contentLines);
+      return contentLines;
+    } catch {
+      return null;
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [fileContent, owner, repo, headRef, file.filename]);
+
+  const handleExpand = useCallback(async (hunkIdx: number, direction: "up" | "down" | "all") => {
+    const content = await fetchContent();
+    if (!content) return;
+    setLines((prev) => expandDiffLines(prev, hunkIdx, content, direction, EXPAND_COUNT));
+  }, [fetchContent]);
+
+  const handleExpandTrailing = useCallback(async () => {
+    const content = await fetchContent();
+    if (!content) return;
+    setLines((prev) => expandTrailingLines(prev, content, EXPAND_COUNT));
+  }, [fetchContent]);
+
+  // Compute trailing line count (for "expand to end of file" button).
+  const trailing = fileContent ? trailingLineCount(lines, fileContent.length) : 0;
 
   return (
     <div
@@ -117,15 +228,26 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
       {/* Diff content */}
       {isExpanded && (
         <div className="border-t border-border">
-          {diffLines.length === 0 ? (
+          {lines.length === 0 ? (
             <div className="px-3 py-4 text-center text-xs text-muted-foreground italic">
               {file.status === "renamed" ? "File renamed without changes" : "Binary file or no diff available"}
             </div>
           ) : (
             <table className="w-full table-fixed border-collapse font-mono text-xs">
               <tbody>
-                {diffLines.map((line, i) => {
+                {lines.map((line, i) => {
                   if (line.type === "hunk") {
+                    const gap = computeGap(lines, i);
+                    if (gap && canExpand) {
+                      return (
+                        <ExpandRow
+                          key={i}
+                          gap={gap}
+                          onExpand={(dir) => handleExpand(i, dir)}
+                        />
+                      );
+                    }
+                    // Fallback: non-expandable hunk header
                     return (
                       <tr key={i} className="bg-blue-500/10">
                         <td className="w-10 select-none px-2 py-0.5 text-right text-blue-500/70 dark:text-blue-400/70">...</td>
@@ -173,6 +295,32 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
                     </tr>
                   );
                 })}
+                {/* Expand to end of file */}
+                {canExpand && trailing > 0 && (
+                  <tr className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="px-3 py-1">
+                      <button
+                        onClick={handleExpandTrailing}
+                        className="flex w-full items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                      >
+                        <ChevronDown className="h-3 w-3" />
+                        Show {Math.min(trailing, EXPAND_COUNT)} more line{Math.min(trailing, EXPAND_COUNT) !== 1 ? "s" : ""}
+                        {trailing > EXPAND_COUNT && ` of ${trailing}`}
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {loadingContent && (
+                  <tr>
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="px-3 py-2 text-center">
+                      <Loader2 className="inline h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           )}
@@ -182,7 +330,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand }: {
   );
 }
 
-export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
+export function DiffView({ files, loading, error, owner, repo, headRef, toggleSelectedRef, expandedFiles, onExpandedFilesChange }: DiffViewProps) {
   const selectedIndex = useVimStore((s) => s.selectedIndex);
   const sourceBasePath = useSettingsStore((s) => s.sourceBasePath);
   const itemRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -323,6 +471,9 @@ export function DiffView({ files, loading, error, owner, repo, toggleSelectedRef
               onToggle={() => toggleFile(file.filename)}
               isSelected={i === selectedIndex}
               onOpenInGoLand={handleOpenInGoLand}
+              owner={owner}
+              repo={repo}
+              headRef={headRef}
             />
           </div>
         ))}

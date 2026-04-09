@@ -431,6 +431,21 @@ func (s *PullRequestService) RequestChangesPR(prNodeID string, body string) erro
 	return s.client.RequestChangesPR(context.Background(), prNodeID, body)
 }
 
+// AddPRReviewComment creates a new inline review comment on a pull request.
+func (s *PullRequestService) AddPRReviewComment(prNodeID string, body string, path string, line int) (string, error) {
+	if s.client == nil {
+		return "", ErrNotAuthenticated
+	}
+	if body == "" {
+		return "", fmt.Errorf("comment body is required")
+	}
+	threadID, err := s.client.AddPRReviewThread(context.Background(), prNodeID, body, path, line)
+	if err != nil {
+		return "", fmt.Errorf("add review comment: %w", err)
+	}
+	return threadID, nil
+}
+
 // ResolveThread resolves a review thread.
 func (s *PullRequestService) ResolveThread(threadID string) error {
 	if s.client == nil {
@@ -619,6 +634,18 @@ func (s *PullRequestService) GetPRComments(nodeID string) (*gh.PRComments, error
 		return nil, fmt.Errorf("fetch pr comments: %w", err)
 	}
 	return comments, nil
+}
+
+// GetFileContent fetches the raw content of a file at a specific git ref.
+func (s *PullRequestService) GetFileContent(owner, repo, path, ref string) (string, error) {
+	if s.client == nil {
+		return "", ErrNotAuthenticated
+	}
+	content, err := s.client.GetFileContent(context.Background(), owner, repo, path, ref)
+	if err != nil {
+		return "", fmt.Errorf("fetch file content: %w", err)
+	}
+	return content, nil
 }
 
 // GetPRFiles fetches the list of changed files with diff patches for a PR.

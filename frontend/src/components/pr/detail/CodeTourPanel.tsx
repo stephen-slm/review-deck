@@ -1,32 +1,146 @@
+import { useState, useCallback } from "react";
 import {
   Map,
   Loader2,
   XCircle,
+  ChevronDown,
+  ChevronUp,
+  UnfoldVertical,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { mdComponents } from "@/lib/markdownComponents";
-import { parsePatch, extractDiffRange } from "@/lib/diffUtils";
+import {
+  parsePatch,
+  extractDiffRange,
+  computeGap,
+  expandDiffLines,
+  trailingLineCount,
+  expandTrailingLines,
+} from "@/lib/diffUtils";
+import type { DiffLine } from "@/lib/diffUtils";
 import { langFromFilename, highlightLine } from "@/lib/highlighter";
 import type { CodeTourData } from "@/types/codeTour";
 import type { github } from "../../../../wailsjs/go/models";
+import { GetFileContent } from "../../../../wailsjs/go/services/PullRequestService";
+import { AddPRReviewComment } from "../../../../wailsjs/go/services/PullRequestService";
 
-function StepDiffSnippet({ file, startLine, endLine, prFiles }: {
+const EXPAND_COUNT = 20;
+
+function StepDiffSnippet({
+  file,
+  startLine,
+  endLine,
+  prFiles,
+  owner,
+  repo,
+  headRef,
+  prNodeId,
+}: {
   file: string;
   startLine: number;
   endLine: number;
   prFiles: github.PRFile[];
+  owner?: string;
+  repo?: string;
+  headRef?: string;
+  prNodeId?: string;
 }) {
   const matchedFile = prFiles.find(
     (f) => f.filename === file || f.filename.endsWith("/" + file),
   );
   if (!matchedFile?.patch) return null;
+
   const allLines = parsePatch(matchedFile.patch);
-  const snippet = extractDiffRange(allLines, startLine, endLine);
-  if (snippet.length === 0) return null;
+  const initialSnippet = extractDiffRange(allLines, startLine, endLine);
+  if (initialSnippet.length === 0) return null;
+
+  const [lines, setLines] = useState<DiffLine[]>(() => {
+    // Build a proper line array with a leading hunk header so expansion works.
+    // Find the hunk that contains our range and include it.
+    const result: DiffLine[] = [];
+    let inRange = false;
+    let lastHunk: DiffLine | null = null;
+
+    for (const line of allLines) {
+      if (line.type === "hunk") {
+        lastHunk = line;
+        continue;
+      }
+      const lineNum = line.newLine ?? line.oldLine ?? 0;
+      if (lineNum >= startLine && lineNum <= endLine) {
+        if (!inRange && lastHunk) {
+          result.push(lastHunk);
+          inRange = true;
+        }
+        result.push(line);
+      } else if (inRange && lineNum > endLine) {
+        break;
+      }
+    }
+    return result;
+  });
+
+  const [fileContent, setFileContent] = useState<string[] | null>(null);
+  const [loadingContent, setLoadingContent] = useState(false);
+  const [commentLine, setCommentLine] = useState<number | null>(null);
+  const [commentBody, setCommentBody] = useState("");
+  const [submittingComment, setSubmittingComment] = useState(false);
+
+  const canExpand = !!owner && !!repo && !!headRef && matchedFile.status !== "removed";
+  const canComment = !!prNodeId;
 
   const lang = langFromFilename(file);
+
+  const fetchContent = useCallback(async (): Promise<string[] | null> => {
+    if (fileContent) return fileContent;
+    if (!owner || !repo || !headRef) return null;
+    setLoadingContent(true);
+    try {
+      const raw = await GetFileContent(owner, repo, matchedFile!.filename, headRef);
+      const contentLines = raw.split("\n");
+      setFileContent(contentLines);
+      return contentLines;
+    } catch {
+      return null;
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [fileContent, owner, repo, headRef, matchedFile]);
+
+  const handleExpand = useCallback(
+    async (hunkIdx: number, direction: "up" | "down" | "all") => {
+      const content = await fetchContent();
+      if (!content) return;
+      setLines((prev) => expandDiffLines(prev, hunkIdx, content, direction, EXPAND_COUNT));
+    },
+    [fetchContent],
+  );
+
+  const handleExpandTrailing = useCallback(async () => {
+    const content = await fetchContent();
+    if (!content) return;
+    setLines((prev) => expandTrailingLines(prev, content, EXPAND_COUNT));
+  }, [fetchContent]);
+
+  const trailing = fileContent ? trailingLineCount(lines, fileContent.length) : 0;
+
+  const handleSubmitComment = useCallback(async () => {
+    if (!prNodeId || !commentLine || !commentBody.trim()) return;
+    setSubmittingComment(true);
+    try {
+      await AddPRReviewComment(prNodeId, commentBody.trim(), matchedFile!.filename, commentLine);
+      setCommentLine(null);
+      setCommentBody("");
+    } catch {
+      // Silently fail — user can retry
+    } finally {
+      setSubmittingComment(false);
+    }
+  }, [prNodeId, commentLine, commentBody, matchedFile]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-border">
@@ -34,34 +148,192 @@ function StepDiffSnippet({ file, startLine, endLine, prFiles }: {
         {file}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse font-mono text-xs">
+        <table className="w-full table-fixed border-collapse font-mono text-xs">
           <tbody>
-            {snippet.map((line, i) => (
-              <tr
-                key={i}
-                className={
-                  line.type === "add"
-                    ? "bg-green-50 dark:bg-green-950/30"
-                    : line.type === "del"
-                      ? "bg-red-50 dark:bg-red-950/30"
-                      : ""
+            {lines.map((line, i) => {
+              if (line.type === "hunk") {
+                const gap = computeGap(lines, i);
+                if (!gap || !canExpand) return null;
+
+                if (gap.hiddenCount <= EXPAND_COUNT * 2) {
+                  return (
+                    <tr key={i} className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+                      <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                      <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                      <td className="w-[1px] select-none border-r border-border/30 px-1 py-0.5" />
+                      <td className="px-3 py-1">
+                        <button
+                          onClick={() => handleExpand(i, "all")}
+                          className="flex w-full items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                        >
+                          <UnfoldVertical className="h-3 w-3" />
+                          Show {gap.hiddenCount} hidden line{gap.hiddenCount !== 1 ? "s" : ""}
+                        </button>
+                      </td>
+                    </tr>
+                  );
                 }
-              >
-                <td className="w-[1px] select-none whitespace-nowrap border-r border-border px-2 py-0 text-right text-muted-foreground/50">
-                  {line.oldLine ?? ""}
+
+                return (
+                  <tr key={i} className="bg-blue-500/5">
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                    <td className="w-[1px] select-none border-r border-border/30 px-1 py-0.5" />
+                    <td className="px-3 py-1">
+                      <div className="flex items-center justify-center gap-4 text-xs">
+                        <button
+                          onClick={() => handleExpand(i, "up")}
+                          className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                        >
+                          <ChevronDown className="h-3 w-3" />
+                          Expand {EXPAND_COUNT} lines
+                        </button>
+                        <button
+                          onClick={() => handleExpand(i, "all")}
+                          className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                        >
+                          <UnfoldVertical className="h-3 w-3" />
+                          Show all {gap.hiddenCount}
+                        </button>
+                        <button
+                          onClick={() => handleExpand(i, "down")}
+                          className="flex items-center gap-1 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
+                        >
+                          <ChevronUp className="h-3 w-3" />
+                          Expand {EXPAND_COUNT} lines
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              }
+
+              const newLineNum = line.newLine;
+              const isCommentTarget = commentLine === newLineNum && newLineNum != null;
+
+              return (
+                <>
+                  <tr
+                    key={i}
+                    className={`group ${
+                      line.type === "add"
+                        ? "bg-green-50 dark:bg-green-950/30"
+                        : line.type === "del"
+                          ? "bg-red-50 dark:bg-red-950/30"
+                          : ""
+                    }`}
+                  >
+                    <td className="w-10 select-none whitespace-nowrap border-r border-border/30 px-2 py-0 text-right text-muted-foreground/50">
+                      {line.oldLine ?? ""}
+                    </td>
+                    <td className="w-10 select-none whitespace-nowrap border-r border-border/30 px-2 py-0 text-right text-muted-foreground/50">
+                      {line.newLine ?? ""}
+                    </td>
+                    <td className="w-[1px] select-none border-r border-border/30 px-1 py-0 text-center text-muted-foreground/50">
+                      {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
+                    </td>
+                    <td className="whitespace-pre px-2 py-0 relative">
+                      <span dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }} />
+                      {/* Comment button on hover */}
+                      {canComment && line.type !== "del" && newLineNum != null && (
+                        <button
+                          onClick={() => {
+                            setCommentLine(isCommentTarget ? null : newLineNum);
+                            setCommentBody("");
+                          }}
+                          className="absolute right-1 top-0 hidden group-hover:inline-flex items-center justify-center h-full text-blue-500 hover:text-blue-600"
+                          title="Add comment"
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {/* Inline comment form */}
+                  {isCommentTarget && (
+                    <tr key={`comment-${i}`}>
+                      <td className="w-10 border-r border-border/30" />
+                      <td className="w-10 border-r border-border/30" />
+                      <td className="w-[1px] border-r border-border/30" />
+                      <td className="p-2">
+                        <div className="flex gap-2">
+                          <textarea
+                            autoFocus
+                            value={commentBody}
+                            onChange={(e) => setCommentBody(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                setCommentLine(null);
+                                setCommentBody("");
+                              }
+                              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                                handleSubmitComment();
+                              }
+                            }}
+                            placeholder="Leave a comment... (Cmd+Enter to submit)"
+                            className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                            rows={2}
+                          />
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={handleSubmitComment}
+                              disabled={!commentBody.trim() || submittingComment}
+                              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
+                            >
+                              {submittingComment ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Send className="h-3 w-3" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setCommentLine(null);
+                                setCommentBody("");
+                              }}
+                              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                            >
+                              <XCircle className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
+
+            {/* Expand to end of file */}
+            {canExpand && trailing > 0 && (
+              <tr className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
+                <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                <td className="w-[1px] select-none border-r border-border/30 px-1 py-0.5" />
+                <td className="px-3 py-1">
+                  <button
+                    onClick={handleExpandTrailing}
+                    className="flex w-full items-center justify-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                  >
+                    <ChevronDown className="h-3 w-3" />
+                    Show {Math.min(trailing, EXPAND_COUNT)} more line
+                    {Math.min(trailing, EXPAND_COUNT) !== 1 ? "s" : ""}
+                    {trailing > EXPAND_COUNT && ` of ${trailing}`}
+                  </button>
                 </td>
-                <td className="w-[1px] select-none whitespace-nowrap border-r border-border px-2 py-0 text-right text-muted-foreground/50">
-                  {line.newLine ?? ""}
-                </td>
-                <td className="w-[1px] select-none border-r border-border px-1 py-0 text-center text-muted-foreground/50">
-                  {line.type === "add" ? "+" : line.type === "del" ? "-" : " "}
-                </td>
-                <td
-                  className="whitespace-pre px-2 py-0"
-                  dangerouslySetInnerHTML={{ __html: highlightLine(line.content, lang) }}
-                />
               </tr>
-            ))}
+            )}
+
+            {loadingContent && (
+              <tr>
+                <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                <td className="w-10 select-none px-2 py-0.5 border-r border-border/30" />
+                <td className="w-[1px] select-none border-r border-border/30 px-1 py-0.5" />
+                <td className="px-3 py-2 text-center">
+                  <Loader2 className="inline h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -78,6 +350,10 @@ export function CodeTourPanel({
   hasLocalPath,
   hasTools,
   prFiles,
+  owner,
+  repo,
+  headRef,
+  prNodeId,
   onStart,
   onCancel,
 }: {
@@ -89,6 +365,10 @@ export function CodeTourPanel({
   hasLocalPath: boolean;
   hasTools: boolean;
   prFiles: github.PRFile[] | null;
+  owner?: string;
+  repo?: string;
+  headRef?: string;
+  prNodeId?: string;
   onStart: () => void;
   onCancel: () => void;
 }) {
@@ -268,6 +548,10 @@ export function CodeTourPanel({
               startLine={step.startLine}
               endLine={step.endLine}
               prFiles={prFiles}
+              owner={owner}
+              repo={repo}
+              headRef={headRef}
+              prNodeId={prNodeId}
             />
           )}
 

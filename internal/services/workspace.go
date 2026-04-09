@@ -83,7 +83,8 @@ Code snippet sizing:
 - If a file has a large change (50+ lines), split it into MULTIPLE steps — one per logical section (e.g. struct definition, constructor, main logic, error handling). Each step should cover a focused, self-contained piece.
 - It is perfectly fine (and encouraged) to have multiple steps referencing the same file with different line ranges.
 - Aim for 6-15 steps total (including the overview) — more steps with smaller snippets is better than fewer steps with huge code blocks.
-- A step with no file reference (file="") is fine for narrative-only transitions between sections.`
+- A step with no file reference (file="") is fine for narrative-only transitions between sections.
+- If an AI review is provided alongside the diff, incorporate its findings into the relevant tour steps. When a step covers code that the review flagged as having a bug, security issue, performance concern, or other problem, include a "⚠️ Review Finding" callout within that step's description summarizing the issue. This helps reviewers see potential problems in context as they walk through the code.`
 
 // defaultTitlePrompt is the system prompt for generating PR titles.
 const defaultTitlePrompt = `You are a senior software engineer writing a pull request title. Based on the diff provided, generate a single concise PR title that summarizes the changes.
@@ -837,12 +838,13 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 	if s.cancelTour != nil {
 		s.cancelTour()
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 	s.cancelTour = cancel
 	s.muTour.Unlock()
 
 	appCtx := s.ctx
 	db := s.db
+	reviewPrompt := s.getReviewPrompt()
 
 	go func() {
 		defer cancel()
@@ -869,11 +871,42 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 			return
 		}
 
-		// 2. Run Claude with the tour prompt.
-		tourText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultTourPrompt, maxCost, "Generate a guided code tour for this pull request diff:")
+		// 2. Get or generate AI review to incorporate into the tour.
+		var reviewText string
+		if prNodeID != "" {
+			cached, _ := db.GetAIReview(prNodeID)
+			if cached != nil && cached.Review != "" {
+				reviewText = cached.Review
+			}
+		}
+		if reviewText == "" {
+			// No cached review — run one now and cache it.
+			rv, rvCost, rvDur, rvErr := s.runClaude(ctx, repo.LocalPath, diff, reviewPrompt, maxCost, "Review this pull request diff:")
+			if rvErr == nil && rv != "" {
+				reviewText = rv
+				if prNodeID != "" {
+					_ = db.SaveAIReview(prNodeID, repoOwner, repoName, prNumber, reviewText, rvCost, rvDur)
+					now := time.Now().UTC().Format(time.RFC3339)
+					wailsRuntime.EventsEmit(appCtx, "ai:result", map[string]any{
+						"review":     reviewText,
+						"cost":       rvCost,
+						"duration":   rvDur,
+						"created_at": now,
+					})
+				}
+			}
+			// If the review fails, continue without it — the tour can still be generated.
+		}
+
+		// 3. Run Claude with the tour prompt, including the review findings.
+		userMessage := "Generate a guided code tour for this pull request diff:"
+		if reviewText != "" {
+			userMessage += "\n\n---\n\nThe following AI review has been performed on this diff. Incorporate any issues or suggestions it flagged into the relevant tour steps:\n\n" + reviewText
+		}
+		tourText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultTourPrompt, maxCost, userMessage)
 
 		if ctx.Err() == context.DeadlineExceeded {
-			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude code tour timed out (5 minute limit)"})
+			wailsRuntime.EventsEmit(appCtx, "tour:error", map[string]any{"error": "Claude code tour timed out (8 minute limit)"})
 			return
 		}
 		if err != nil {

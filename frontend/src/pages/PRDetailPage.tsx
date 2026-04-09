@@ -1331,6 +1331,7 @@ export function PRDetailPage() {
               error={filesError}
               owner={pr.repoOwner}
               repo={pr.repoName}
+              headRef={pr.headRef}
               toggleSelectedRef={fileToggleRef}
               expandedFiles={expandedFiles}
               onExpandedFilesChange={setExpandedFiles}
@@ -1448,6 +1449,10 @@ export function PRDetailPage() {
               hasLocalPath={hasLocalPath}
               hasTools={!!toolAvailability?.gh && !!toolAvailability?.claude}
               prFiles={prFiles}
+              owner={pr.repoOwner}
+              repo={pr.repoName}
+              headRef={pr.headRef}
+              prNodeId={pr.nodeId}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
             />
