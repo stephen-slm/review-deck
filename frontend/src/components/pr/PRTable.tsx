@@ -26,6 +26,25 @@ import type { PageDirection, PaginationState } from "@/stores/prStore";
 /** Common default branch names — PRs targeting these are NOT considered stacked. */
 const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "development"]);
 
+/** Estimate review time based on PR complexity (lines changed + file count). */
+function estimateReviewTime(pr: github.PullRequest): string {
+  const score = pr.additions + pr.deletions + (pr.changedFiles || 0) * 20;
+  if (score < 50) return "~2m";
+  if (score < 200) return "~10m";
+  if (score < 500) return "~20m";
+  if (score < 1000) return "~30m";
+  return "~1h+";
+}
+
+/** Return a Tailwind color class based on how stale the timestamp is. */
+function stalenessColor(date: string | Date | number): string {
+  const days = (Date.now() - new Date(date).getTime()) / 86_400_000;
+  if (days > 14) return "text-red-500 dark:text-red-400";
+  if (days > 7) return "text-orange-500 dark:text-orange-400";
+  if (days > 3) return "text-yellow-600 dark:text-yellow-400";
+  return "text-muted-foreground";
+}
+
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25] as const;
 
 interface PRTableProps {
@@ -138,6 +157,17 @@ export function PRTable({
     }
     return result;
   }, [data, hideStacked, hideDrafts, hiddenPRs, hideApproved, viewerLogin]);
+
+  // Detect stacked PRs (baseRef is not a default branch).
+  const stackedPRs = useMemo(() => {
+    const stacked = new Map<string, string>();
+    for (const pr of filteredData) {
+      if (!DEFAULT_BRANCHES.has(pr.baseRef)) {
+        stacked.set(pr.nodeId, pr.baseRef);
+      }
+    }
+    return stacked;
+  }, [filteredData]);
 
   // Auto-fill: when filtering reduces visible rows below page size and the
   // server has more pages, request additional items to fill the table.
@@ -281,12 +311,20 @@ export function PRTable({
     return [
       columnHelper.accessor("number", {
         header: "#",
-        cell: (info) => (
-          <span className="font-mono text-xs text-muted-foreground">
-            #{info.getValue()}
-          </span>
-        ),
-        size: 60,
+        cell: (info) => {
+          const baseRef = stackedPRs.get(info.row.original.nodeId);
+          return (
+            <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+              #{info.getValue()}
+              {baseRef && (
+                <span title={`Stacked on ${baseRef}`}>
+                  <Layers className="h-3 w-3 shrink-0 text-purple-500" />
+                </span>
+              )}
+            </span>
+          );
+        },
+        size: 70,
       }),
       columnHelper.accessor("title", {
         header: "Title",
@@ -311,12 +349,17 @@ export function PRTable({
           id: "size",
           header: "Size",
           cell: (info) => (
-            <PRSizeBadge
-              additions={info.row.original.additions}
-              deletions={info.row.original.deletions}
-            />
+            <div className="flex items-center gap-1.5">
+              <PRSizeBadge
+                additions={info.row.original.additions}
+                deletions={info.row.original.deletions}
+              />
+              <span className="text-[10px] text-muted-foreground" title="Estimated review time">
+                {estimateReviewTime(info.row.original)}
+              </span>
+            </div>
           ),
-          size: 60,
+          size: 90,
         }
       ),
       columnHelper.display({
@@ -346,11 +389,15 @@ export function PRTable({
       }),
       columnHelper.accessor(timestampField === "mergedAt" ? "mergedAt" : "updatedAt", {
         header: timestampField === "mergedAt" ? "Merged" : "Updated",
-        cell: (info) => (
-          <span className="text-xs text-muted-foreground">
-            {timeAgo(info.getValue())}
-          </span>
-        ),
+        cell: (info) => {
+          const val = info.getValue();
+          const color = timestampField === "updatedAt" && val ? stalenessColor(val) : "text-muted-foreground";
+          return (
+            <span className={`text-xs ${color}`} title={val ? new Date(val).toLocaleString() : undefined}>
+              {timeAgo(val)}
+            </span>
+          );
+        },
         size: 80,
       }),
       ...(flagReasons ? [columnHelper.display({
@@ -406,7 +453,7 @@ export function PRTable({
         size: (onHide ? 30 : 0) + 40,
       }),
     ];
-  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons, timestampField]);
+  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons, timestampField, stackedPRs]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({
@@ -424,56 +471,83 @@ export function PRTable({
   const tableRows = table.getRowModel().rows;
 
   // Group rows by the viewer's teams (based on team review requests on each PR).
+  // A PR matching multiple teams gets a comma-separated header (e.g. "Team A, Team B").
+  // Also checks reviews — if a PR has a review from the viewer but no team in
+  // reviewRequests (fulfilled request), it's placed under the first viewer team.
   const { orderedRows, teamSeparators } = useMemo(() => {
     if (!viewerTeams || viewerTeams.length === 0) {
       return { orderedRows: tableRows, teamSeparators: new Map<number, string>() };
     }
 
     const teamSlugs = new Set(viewerTeams.map((t) => t.slug));
+    const slugToName = new Map(viewerTeams.map((t) => [t.slug, t.name]));
 
-    // Bucket rows by the first matching viewer team in their reviewRequests.
+    // Bucket key is a sorted comma-separated list of team slugs.
     const buckets = new Map<string, typeof tableRows>();
+    const bucketLabels = new Map<string, string>();
     const ungrouped: typeof tableRows = [];
 
     for (const row of tableRows) {
       const pr = row.original;
-      const match = (pr.reviewRequests || []).find(
+      // Find ALL matching team review requests.
+      const matches = (pr.reviewRequests || []).filter(
         (rr) => rr.reviewerType === "team" && teamSlugs.has(rr.reviewer),
       );
-      if (match) {
-        let bucket = buckets.get(match.reviewer);
-        if (!bucket) {
-          bucket = [];
-          buckets.set(match.reviewer, bucket);
-        }
-        bucket.push(row);
+
+      let teamKey: string;
+      let teamLabel: string;
+
+      if (matches.length > 0) {
+        const slugs = matches.map((m) => m.reviewer).sort();
+        teamKey = slugs.join(",");
+        teamLabel = slugs.map((s) => slugToName.get(s) || s).join(", ");
+      } else if (viewerLogin && (pr.reviews || []).some((r) => r.author === viewerLogin)) {
+        // Fallback: viewer reviewed this PR but team request was fulfilled.
+        teamKey = viewerTeams[0].slug;
+        teamLabel = viewerTeams[0].name;
       } else {
         ungrouped.push(row);
+        continue;
       }
+
+      if (!buckets.has(teamKey)) {
+        buckets.set(teamKey, []);
+        bucketLabels.set(teamKey, teamLabel);
+      }
+      buckets.get(teamKey)!.push(row);
     }
 
-    // Only show separators when at least one team has matching PRs.
     if (buckets.size === 0) {
       return { orderedRows: tableRows, teamSeparators: new Map<number, string>() };
     }
 
+    // Order: single-team buckets first (in viewerTeams order), then multi-team combos, then "Other".
     const result: typeof tableRows = [];
     const separators = new Map<number, string>();
+    const usedKeys = new Set<string>();
 
     for (const team of viewerTeams) {
       const bucket = buckets.get(team.slug);
       if (bucket && bucket.length > 0) {
         separators.set(result.length, team.name);
         result.push(...bucket);
+        usedKeys.add(team.slug);
       }
     }
+
+    for (const [key, bucket] of buckets) {
+      if (usedKeys.has(key) || bucket.length === 0) continue;
+      separators.set(result.length, bucketLabels.get(key) || key);
+      result.push(...bucket);
+    }
+
     if (ungrouped.length > 0) {
       separators.set(result.length, "Other");
       result.push(...ungrouped);
     }
 
     return { orderedRows: result, teamSeparators: separators };
-  }, [tableRows, viewerTeams]);
+  }, [tableRows, viewerTeams, viewerLogin]);
 
   const visiblePRs = useMemo(() => orderedRows.map((r) => r.original), [orderedRows]);
   tableRowsRef.current = visiblePRs;

@@ -518,28 +518,63 @@ export function DiffView({ files, loading, error, owner, repo, headRef, prNodeId
         </div>
       </div>
 
-      {/* File diffs */}
-      <div className="space-y-2">
-        {files.map((file, i) => (
-          <div
-            key={file.filename}
-            ref={(el) => { itemRefs.current[i] = el; }}
-          >
-            <FileDiff
-              file={file}
-              isExpanded={expandedFiles.has(file.filename)}
-              onToggle={() => toggleFile(file.filename)}
-              isSelected={i === selectedIndex}
-              onOpenInGoLand={handleOpenInGoLand}
-              owner={owner}
-              repo={repo}
-              headRef={headRef}
-              prNodeId={prNodeId}
-              fileThreads={reviewThreads?.filter((t) => t.path === file.filename)}
-              onToggleResolved={onToggleResolved}
-            />
+      {/* File tree sidebar + diffs */}
+      <div className="flex gap-3">
+        {/* Sticky file tree */}
+        <div className="hidden lg:block w-56 shrink-0">
+          <div className="sticky top-0 max-h-screen overflow-y-auto rounded-lg border border-border bg-card">
+            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground border-b border-border">
+              Files ({files.length})
+            </div>
+            <nav className="p-1 space-y-0.5">
+              {files.map((file, i) => (
+                <button
+                  key={file.filename}
+                  onClick={() => {
+                    itemRefs.current[i]?.scrollIntoView({ block: "start", behavior: "smooth" });
+                    useVimStore.getState().setSelectedIndex(i);
+                  }}
+                  className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs transition-colors ${
+                    i === selectedIndex
+                      ? "bg-accent text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  }`}
+                  title={file.filename}
+                >
+                  <FileStatusIcon status={file.status} />
+                  <span className="min-w-0 flex-1 truncate font-mono">
+                    {file.filename.split("/").pop()}
+                  </span>
+                  <FileStatsBadge additions={file.additions} deletions={file.deletions} />
+                </button>
+              ))}
+            </nav>
           </div>
-        ))}
+        </div>
+
+        {/* File diffs */}
+        <div className="min-w-0 flex-1 space-y-2">
+          {files.map((file, i) => (
+            <div
+              key={file.filename}
+              ref={(el) => { itemRefs.current[i] = el; }}
+            >
+              <FileDiff
+                file={file}
+                isExpanded={expandedFiles.has(file.filename)}
+                onToggle={() => toggleFile(file.filename)}
+                isSelected={i === selectedIndex}
+                onOpenInGoLand={handleOpenInGoLand}
+                owner={owner}
+                repo={repo}
+                headRef={headRef}
+                prNodeId={prNodeId}
+                fileThreads={reviewThreads?.filter((t) => t.path === file.filename)}
+                onToggleResolved={onToggleResolved}
+              />
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
