@@ -65,8 +65,6 @@ function tourToMarkdown(tour: CodeTourData, repoOwner?: string, repoName?: strin
     if (i < tour.steps.length - 1) lines.push("");
   }
 
-  lines.push("---");
-  lines.push("*Generated with [review-deck](https://github.com/stephen-slm/review-deck)*");
   return lines.join("\n");
 }
 
