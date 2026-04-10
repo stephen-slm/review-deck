@@ -16,6 +16,8 @@ export function GetCachedPRs(arg1:string,arg2:string):Promise<Array<github.PullR
 
 export function GetFileContent(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
+export function GetFilesSinceCommit(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<github.PRFile>>;
+
 export function GetMetricsHistory(arg1:number):Promise<Array<storage.MetricsSnapshot>>;
 
 export function GetMyPRs(arg1:string):Promise<Array<github.PullRequest>>;
@@ -87,6 +89,8 @@ export function ResolveThread(arg1:string):Promise<void>;
 export function SearchOrgMembers(arg1:string,arg2:string):Promise<Array<github.User>>;
 
 export function SetClient(arg1:github.Client):Promise<void>;
+
+export function SubmitBatchReview(arg1:string,arg2:string,arg3:string,arg4:Array<github.DraftThread>):Promise<void>;
 
 export function SyncOrgMembers(arg1:string):Promise<void>;
 

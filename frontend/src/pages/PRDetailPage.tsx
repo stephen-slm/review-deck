@@ -29,13 +29,14 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
-import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
+import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread, GetFilesSinceCommit } from "../../wailsjs/go/services/PullRequestService";
 import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
 import { dlog } from "@/lib/debugLog";
 
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
+import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useFlagStore } from "@/stores/flagStore";
 import { useRepoStore } from "@/stores/repoStore";
@@ -132,6 +133,20 @@ export function PRDetailPage() {
   const [filesError, setFilesError] = useState<string | null>(null);
   // Expanded files state — lifted here so it persists across tab switches and auto-refreshes.
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  // "Diff since last review" feature
+  const [sinceLastReview, setSinceLastReview] = useState(false);
+  const [sinceFiles, setSinceFiles] = useState<github.PRFile[] | null>(null);
+  const [sinceLoading, setSinceLoading] = useState(false);
+  const viewerLogin = useAuthStore((s) => s.user?.login);
+
+  // Find the viewer's most recent review that has a commit OID.
+  const lastReviewCommitOid = useMemo(() => {
+    if (!pr?.reviews || !viewerLogin) return null;
+    const myReviews = pr.reviews
+      .filter((r) => r.author?.toLowerCase() === viewerLogin.toLowerCase() && r.commitOid)
+      .sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+    return myReviews.length > 0 ? myReviews[0].commitOid : null;
+  }, [pr?.reviews, viewerLogin]);
 
   // Lazy-loaded commits
   const [commits, setCommits] = useState<github.PRCommit[] | null>(null);
@@ -599,6 +614,21 @@ export function PRDetailPage() {
       .catch((err) => setFilesError(String(err)))
       .finally(() => setFilesLoading(false));
   }, [activeTab, prFiles, filesLoading, prOwner, prRepo, prNumber]);
+
+  // Fetch "since last review" diff when toggled on
+  useEffect(() => {
+    if (!sinceLastReview || sinceFiles !== null || sinceLoading || !lastReviewCommitOid || !pr) return;
+    setSinceLoading(true);
+    GetFilesSinceCommit(pr.repoOwner, pr.repoName, lastReviewCommitOid, pr.headRefOid)
+      .then(setSinceFiles)
+      .catch(() => setSinceFiles(null))
+      .finally(() => setSinceLoading(false));
+  }, [sinceLastReview, sinceFiles, sinceLoading, lastReviewCommitOid, pr]);
+
+  // Reset since-files when toggle is turned off
+  useEffect(() => {
+    if (!sinceLastReview) setSinceFiles(null);
+  }, [sinceLastReview]);
 
   // Fetch commits when the commits or activity tab is first selected
   useEffect(() => {
@@ -1447,10 +1477,26 @@ export function PRDetailPage() {
 
           {activeTab === "files" && (
             <>
-            <PendingReviewBar prNodeId={pr.nodeId} onSubmitted={refreshComments} />
+            <div className="flex items-center gap-2">
+              <PendingReviewBar prNodeId={pr.nodeId} onSubmitted={refreshComments} />
+              {lastReviewCommitOid && (
+                <button
+                  onClick={() => setSinceLastReview((v) => !v)}
+                  className={`ml-auto inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+                    sinceLastReview
+                      ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                      : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  }`}
+                  title="Show only files changed since your last review"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  {sinceLastReview ? "Since last review" : "All changes"}
+                </button>
+              )}
+            </div>
             <DiffView
-              files={prFiles}
-              loading={filesLoading}
+              files={sinceLastReview && sinceFiles ? sinceFiles : prFiles}
+              loading={sinceLastReview ? sinceLoading : filesLoading}
               error={filesError}
               owner={pr.repoOwner}
               repo={pr.repoName}

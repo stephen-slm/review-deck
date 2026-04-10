@@ -50,8 +50,8 @@ func (db *DB) UpsertPullRequest(pr gh.PullRequest) error {
 	}
 	for _, r := range pr.Reviews {
 		_, err := tx.Exec(
-			"INSERT INTO reviews (id, pr_node_id, author_login, author_avatar, state, body, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			r.ID, pr.NodeID, r.Author, r.AuthorAvatar, r.State, r.Body, r.SubmittedAt,
+			"INSERT INTO reviews (id, pr_node_id, author_login, author_avatar, state, body, submitted_at, commit_oid) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			r.ID, pr.NodeID, r.Author, r.AuthorAvatar, r.State, r.Body, r.SubmittedAt, r.CommitOID,
 		)
 		if err != nil {
 			return fmt.Errorf("insert review: %w", err)

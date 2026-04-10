@@ -458,6 +458,15 @@ func (s *PullRequestService) SubmitBatchReview(prNodeID string, body string, eve
 	return s.client.SubmitBatchReview(context.Background(), prNodeID, body, event, threads)
 }
 
+// GetFilesSinceCommit returns files changed between a base commit and the PR head using
+// the GitHub compare API. Used for "diff since last review".
+func (s *PullRequestService) GetFilesSinceCommit(owner, repo, base, head string) ([]gh.PRFile, error) {
+	if s.client == nil {
+		return nil, ErrNotAuthenticated
+	}
+	return s.client.CompareCommits(context.Background(), owner, repo, base, head)
+}
+
 // AddPRComment adds a top-level comment to a pull request.
 func (s *PullRequestService) AddPRComment(prNodeID string, body string) (string, error) {
 	if s.client == nil {

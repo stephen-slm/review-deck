@@ -122,3 +122,68 @@ func (c *Client) GetFileContent(ctx context.Context, owner, repo, path, ref stri
 
 	return string(body), nil
 }
+
+// CompareCommits returns the list of files changed between two commits using
+// the GitHub compare API. Used for "diff since last review" filtering.
+func (c *Client) CompareCommits(ctx context.Context, owner, repo, base, head string) ([]PRFile, error) {
+	httpClient := c.HTTPClient()
+
+	var allFiles []PRFile
+	page := 1
+
+	for {
+		apiURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/compare/%s...%s?per_page=100&page=%d",
+			owner, repo, base, head, page)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+		if err != nil {
+			return nil, fmt.Errorf("create request: %w", err)
+		}
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("compare commits: %w", err)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("GitHub API returned %d: %s", resp.StatusCode, string(body))
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("read response body: %w", err)
+		}
+
+		var result struct {
+			Files []restPRFile `json:"files"`
+		}
+		if err := json.Unmarshal(body, &result); err != nil {
+			return nil, fmt.Errorf("decode compare: %w", err)
+		}
+
+		for _, rf := range result.Files {
+			allFiles = append(allFiles, PRFile{
+				Filename:         rf.Filename,
+				Status:           rf.Status,
+				Additions:        rf.Additions,
+				Deletions:        rf.Deletions,
+				Changes:          rf.Changes,
+				Patch:            rf.Patch,
+				PreviousFilename: rf.PreviousFilename,
+			})
+		}
+
+		if len(result.Files) < 100 {
+			break
+		}
+		page++
+		if page > 30 {
+			break
+		}
+	}
+
+	return allFiles, nil
+}

@@ -255,6 +255,9 @@ var migrations = []string{
 	);
 
 	CREATE INDEX IF NOT EXISTS idx_ai_summaries_pr ON ai_summaries(pr_node_id);`,
+
+	// Migration 16: Add commit_oid to reviews for "diff since last review" feature.
+	`ALTER TABLE reviews ADD COLUMN commit_oid TEXT NOT NULL DEFAULT '';`,
 }
 
 // Migrate runs all pending migrations.

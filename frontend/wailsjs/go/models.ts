@@ -30,6 +30,22 @@ export namespace github {
 	
 	    }
 	}
+	export class DraftThread {
+	    path: string;
+	    line: number;
+	    body: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DraftThread(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.path = source["path"];
+	        this.line = source["line"];
+	        this.body = source["body"];
+	    }
+	}
 	export class IssueComment {
 	    id: string;
 	    url: string;
@@ -299,6 +315,7 @@ export namespace github {
 	    body: string;
 	    // Go type: time
 	    submittedAt: any;
+	    commitOid: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Review(source);
@@ -312,6 +329,7 @@ export namespace github {
 	        this.state = source["state"];
 	        this.body = source["body"];
 	        this.submittedAt = this.convertValues(source["submittedAt"], null);
+	        this.commitOid = source["commitOid"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

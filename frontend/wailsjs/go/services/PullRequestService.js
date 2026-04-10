@@ -26,6 +26,10 @@ export function GetFileContent(arg1, arg2, arg3, arg4) {
   return window['go']['services']['PullRequestService']['GetFileContent'](arg1, arg2, arg3, arg4);
 }
 
+export function GetFilesSinceCommit(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['GetFilesSinceCommit'](arg1, arg2, arg3, arg4);
+}
+
 export function GetMetricsHistory(arg1) {
   return window['go']['services']['PullRequestService']['GetMetricsHistory'](arg1);
 }
@@ -168,6 +172,10 @@ export function SearchOrgMembers(arg1, arg2) {
 
 export function SetClient(arg1) {
   return window['go']['services']['PullRequestService']['SetClient'](arg1);
+}
+
+export function SubmitBatchReview(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['PullRequestService']['SubmitBatchReview'](arg1, arg2, arg3, arg4);
 }
 
 export function SyncOrgMembers(arg1) {

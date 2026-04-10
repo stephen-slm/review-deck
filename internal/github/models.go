@@ -77,6 +77,7 @@ type Review struct {
 	State        string    `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED, PENDING
 	Body         string    `json:"body"`
 	SubmittedAt  time.Time `json:"submittedAt"`
+	CommitOID    string    `json:"commitOid"`
 }
 
 // PullRequest represents a GitHub pull request with all relevant details.

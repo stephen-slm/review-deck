@@ -104,6 +104,9 @@ type prFields struct {
 			State       githubv4.PullRequestReviewState
 			Body        string
 			SubmittedAt time.Time
+			Commit      struct {
+				Oid string
+			}
 		}
 	} `graphql:"reviews(first: 50)"`
 }
@@ -189,6 +192,7 @@ func convertPRFields(pr prFields) PullRequest {
 			State:        string(r.State),
 			Body:         r.Body,
 			SubmittedAt:  r.SubmittedAt,
+			CommitOID:    r.Commit.Oid,
 		})
 	}
 
