@@ -12,13 +12,15 @@ import {
 import { useDraftReviewStore, type DraftComment } from "@/stores/draftReviewStore";
 import { SubmitBatchReview } from "../../../../wailsjs/go/services/PullRequestService";
 
+const EMPTY_DRAFTS: DraftComment[] = [];
+
 interface PendingReviewBarProps {
   prNodeId: string;
   onSubmitted?: () => void;
 }
 
 export function PendingReviewBar({ prNodeId, onSubmitted }: PendingReviewBarProps) {
-  const drafts = useDraftReviewStore((s) => s.drafts[prNodeId] || []);
+  const drafts = useDraftReviewStore((s) => s.drafts[prNodeId] ?? EMPTY_DRAFTS);
   const clearDrafts = useDraftReviewStore((s) => s.clearDrafts);
   const removeDraft = useDraftReviewStore((s) => s.removeDraft);
 
