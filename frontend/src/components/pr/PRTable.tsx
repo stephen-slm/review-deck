@@ -21,7 +21,7 @@ import { ChecksStatusIcon } from "./ChecksStatusIcon";
 import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
-import type { PageDirection, PaginationState } from "@/stores/prStore";
+import { usePRStore, type PageDirection, type PaginationState } from "@/stores/prStore";
 
 /** Common default branch names — PRs targeting these are NOT considered stacked. */
 const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "development"]);
@@ -125,7 +125,8 @@ export function PRTable({
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
   const globalHideDrafts = useSettingsStore((s) => s.hideDraftPRs);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [globalFilter, setGlobalFilter] = useState("");
+  const globalFilter = usePRStore((s) => s.searchFilter);
+  const setGlobalFilter = usePRStore((s) => s.setSearchFilter);
   const [localHideStacked, setLocalHideStacked] = useState<boolean | null>(null);
   const [localHideDrafts, setLocalHideDrafts] = useState<boolean | null>(null);
   const [hideApproved, setHideApproved] = useState(false);

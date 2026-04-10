@@ -145,6 +145,10 @@ interface PRState {
   unhidePR: (nodeId: string) => void;
   clearAllHiddenPRs: () => void;
   loadHiddenPRs: () => Promise<void>;
+
+  // ---- Cross-tab search filter ----
+  searchFilter: string;
+  setSearchFilter: (value: string) => void;
 }
 
 function isFresh(lastFetchedAt: number, ttl: number): boolean {
@@ -273,6 +277,8 @@ export const usePRStore = create<PRState>((set, get) => ({
   cacheTTLMs: DEFAULT_CACHE_TTL_MS,
   hiddenPRs: new Set<string>(),
   error: null,
+  searchFilter: "",
+  setSearchFilter: (value: string) => set({ searchFilter: value }),
 
   // ---- First-page fetches (reset pagination to page 1) ----
 
