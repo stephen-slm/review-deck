@@ -43,7 +43,7 @@ import { useToast } from "@/components/ui/Toast";
 import { github, services } from "../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 
-type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review" | "code-tour";
+type DetailTab = "description" | "checks" | "comments" | "files" | "commits" | "ai-review" | "code-tour" | "activity";
 import { StateBadge } from "@/components/pr/StateBadge";
 import { PRSizeBadge } from "@/components/pr/PRSizeBadge";
 import { ReviewStatusBadge } from "@/components/pr/ReviewStatusBadge";
@@ -65,6 +65,7 @@ import { DetailMergeButton } from "@/components/pr/detail/DetailMergeButton";
 import { DetailApproveButton } from "@/components/pr/detail/DetailApproveButton";
 import { DetailRequestChangesButton } from "@/components/pr/detail/DetailRequestChangesButton";
 import { DetailReadyForReviewButton } from "@/components/pr/detail/DetailReadyForReviewButton";
+import { ActivityTimeline } from "@/components/pr/detail/ActivityTimeline";
 
 let _renderSeq = 0;
 let _mountSeq = 0;
@@ -573,9 +574,9 @@ export function PRDetailPage() {
       .finally(() => setChecksLoading(false));
   }, [activeTab, checkRuns, checksLoading, nodeId]);
 
-  // Fetch comments when the comments, files, or code-tour tab is first selected
+  // Fetch comments when the comments, files, code-tour, or activity tab is first selected
   useEffect(() => {
-    if ((activeTab !== "comments" && activeTab !== "files" && activeTab !== "code-tour") || comments !== null || commentsLoading || !nodeId) return;
+    if ((activeTab !== "comments" && activeTab !== "files" && activeTab !== "code-tour" && activeTab !== "activity") || comments !== null || commentsLoading || !nodeId) return;
     setCommentsLoading(true);
     GetPRComments(nodeId)
       .then(setComments)
@@ -598,9 +599,9 @@ export function PRDetailPage() {
       .finally(() => setFilesLoading(false));
   }, [activeTab, prFiles, filesLoading, prOwner, prRepo, prNumber]);
 
-  // Fetch commits when the commits tab is first selected
+  // Fetch commits when the commits or activity tab is first selected
   useEffect(() => {
-    if (activeTab !== "commits" || commits !== null || commitsLoading || !nodeId) return;
+    if ((activeTab !== "commits" && activeTab !== "activity") || commits !== null || commitsLoading || !nodeId) return;
     setCommitsLoading(true);
     GetPRCommits(nodeId)
       .then((c) => setCommits(c ? [...c].reverse() : c))
@@ -734,6 +735,9 @@ export function PRDetailPage() {
     } else if (activeTab === "code-tour") {
       len = 1;
       idx = 0;
+    } else if (activeTab === "activity") {
+      len = 1;
+      idx = 0;
     }
     dlog("PRDetail:effect", `vimSync tab=${activeTab} len=${len} idx=${idx} (deferred)`);
     const id = setTimeout(() => {
@@ -759,7 +763,7 @@ export function PRDetailPage() {
   // effect cleanup/setup cycle on every render, which contributed to React's
   // nested-update count and caused error #185 on rapid re-render sequences.
   {
-    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review", "code-tour"];
+    const tabKeys: DetailTab[] = ["description", "checks", "comments", "files", "commits", "ai-review", "code-tour", "activity"];
     const currentIdx = tabKeys.indexOf(activeTab);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -874,6 +878,11 @@ export function PRDetailPage() {
       actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
       actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
       actions.onOpen = () => { if (!tourGenerating) handleStartTour(); };
+    } else if (activeTab === "activity") {
+      const scrollEl = document.getElementById("scroll-region");
+      actions.onMoveDown = () => scrollEl?.scrollBy(0, 150);
+      actions.onMoveUp = () => scrollEl?.scrollBy(0, -150);
+      actions.onOpenExternal = () => { if (pr) BrowserOpenURL(pr.url); };
     }
 
     registerActions(actions);
@@ -912,6 +921,7 @@ export function PRDetailPage() {
     { key: "commits", label: "Commits", icon: <GitCommit className="h-4 w-4" /> },
     { key: "ai-review", label: "AI Review", icon: <Sparkles className="h-4 w-4" /> },
     { key: "code-tour", label: "Code Tour", icon: <Map className="h-4 w-4" /> },
+    { key: "activity", label: "Activity", icon: <Clock className="h-4 w-4" /> },
   ];
 
   return (
@@ -1573,6 +1583,15 @@ export function PRDetailPage() {
               onCommentAdded={refreshComments}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
+            />
+          )}
+
+          {activeTab === "activity" && (
+            <ActivityTimeline
+              commits={commits}
+              comments={comments}
+              reviews={pr.reviews}
+              loading={commitsLoading || commentsLoading}
             />
           )}
         </div>
