@@ -16,6 +16,7 @@ import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 import { AddPRReviewComment } from "../../../wailsjs/go/services/PullRequestService";
 import { ResolveThread, UnresolveThread, ReplyToThread } from "../../../wailsjs/go/services/PullRequestService";
 import { TemplateDropdown } from "./TemplateDropdown";
+import { useDraftReviewStore } from "@/stores/draftReviewStore";
 
 /** Renders existing review thread comments inline beneath a diff line. */
 export function InlineThreadDisplay({
@@ -228,6 +229,7 @@ export function CommentForm({
 }) {
   const [body, setBody] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const addDraft = useDraftReviewStore((s) => s.addDraft);
 
   const handleSubmit = useCallback(async () => {
     if (!body.trim()) return;
@@ -243,6 +245,12 @@ export function CommentForm({
     }
   }, [prNodeId, filePath, line, body, onClose, onSubmitted]);
 
+  const handleStage = useCallback(() => {
+    if (!body.trim()) return;
+    addDraft(prNodeId, filePath, line, body.trim());
+    onClose();
+  }, [prNodeId, filePath, line, body, addDraft, onClose]);
+
   return (
     <div className="p-2">
       <div className="flex gap-2">
@@ -253,8 +261,9 @@ export function CommentForm({
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose();
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+            if (e.key === "Enter" && e.shiftKey && !e.metaKey && !e.ctrlKey) { e.preventDefault(); handleStage(); }
           }}
-          placeholder="Leave a comment... (⌘+Enter to submit)"
+          placeholder="Leave a comment... (⌘+Enter to post, ⇧+Enter to stage)"
           className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
           rows={2}
         />
@@ -263,12 +272,21 @@ export function CommentForm({
             onClick={handleSubmit}
             disabled={!body.trim() || submitting}
             className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
+            title="Post now (⌘+Enter)"
           >
             {submitting ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
               <Send className="h-3 w-3" />
             )}
+          </button>
+          <button
+            onClick={handleStage}
+            disabled={!body.trim()}
+            className="inline-flex items-center gap-1 rounded-md border border-primary/50 bg-primary/10 px-2 py-1 text-xs font-medium text-primary disabled:opacity-50 hover:bg-primary/20"
+            title="Stage for batch review (⇧+Enter)"
+          >
+            <MessageSquare className="h-3 w-3" />
           </button>
           <TemplateDropdown onSelect={(tmpl) => setBody((prev) => prev ? prev + "\n" + tmpl : tmpl)} />
           <button

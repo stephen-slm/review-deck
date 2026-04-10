@@ -446,6 +446,18 @@ func (s *PullRequestService) AddPRReviewComment(prNodeID string, body string, pa
 	return threadID, nil
 }
 
+// SubmitBatchReview submits a review with inline comments as a single operation.
+// event should be "APPROVE", "REQUEST_CHANGES", or "COMMENT".
+func (s *PullRequestService) SubmitBatchReview(prNodeID string, body string, event string, threads []gh.DraftThread) error {
+	if s.client == nil {
+		return ErrNotAuthenticated
+	}
+	if event == "REQUEST_CHANGES" && body == "" && len(threads) == 0 {
+		return fmt.Errorf("a review body or comments are required when requesting changes")
+	}
+	return s.client.SubmitBatchReview(context.Background(), prNodeID, body, event, threads)
+}
+
 // AddPRComment adds a top-level comment to a pull request.
 func (s *PullRequestService) AddPRComment(prNodeID string, body string) (string, error) {
 	if s.client == nil {

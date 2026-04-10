@@ -66,6 +66,7 @@ import { DetailApproveButton } from "@/components/pr/detail/DetailApproveButton"
 import { DetailRequestChangesButton } from "@/components/pr/detail/DetailRequestChangesButton";
 import { DetailReadyForReviewButton } from "@/components/pr/detail/DetailReadyForReviewButton";
 import { ActivityTimeline } from "@/components/pr/detail/ActivityTimeline";
+import { PendingReviewBar } from "@/components/pr/detail/PendingReviewBar";
 
 let _renderSeq = 0;
 let _mountSeq = 0;
@@ -1445,6 +1446,8 @@ export function PRDetailPage() {
           )}
 
           {activeTab === "files" && (
+            <>
+            <PendingReviewBar prNodeId={pr.nodeId} onSubmitted={refreshComments} />
             <DiffView
               files={prFiles}
               loading={filesLoading}
@@ -1460,6 +1463,7 @@ export function PRDetailPage() {
               onExpandedFilesChange={setExpandedFiles}
               onCommentAdded={refreshComments}
             />
+            </>
           )}
 
           {activeTab === "commits" && (

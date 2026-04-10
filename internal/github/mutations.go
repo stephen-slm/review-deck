@@ -148,6 +148,66 @@ func (c *Client) RequestChangesPR(ctx context.Context, prNodeID string, body str
 	return nil
 }
 
+// DraftThread represents a single inline comment to include in a batch review.
+type DraftThread struct {
+	Path string `json:"path"`
+	Line int    `json:"line"`
+	Body string `json:"body"`
+}
+
+// SubmitBatchReview submits a review with inline comment threads in a single API call.
+// The event should be one of "APPROVE", "REQUEST_CHANGES", or "COMMENT".
+func (c *Client) SubmitBatchReview(ctx context.Context, prNodeID string, body string, event string, threads []DraftThread) error {
+	var mutation struct {
+		AddPullRequestReview struct {
+			PullRequestReview struct {
+				ID string `graphql:"id"`
+			}
+		} `graphql:"addPullRequestReview(input: $input)"`
+	}
+
+	var ev githubv4.PullRequestReviewEvent
+	switch event {
+	case "APPROVE":
+		ev = githubv4.PullRequestReviewEventApprove
+	case "REQUEST_CHANGES":
+		ev = githubv4.PullRequestReviewEventRequestChanges
+	default:
+		ev = githubv4.PullRequestReviewEventComment
+	}
+
+	input := githubv4.AddPullRequestReviewInput{
+		PullRequestID: githubv4.ID(prNodeID),
+		Event:         &ev,
+	}
+	if body != "" {
+		b := githubv4.String(body)
+		input.Body = &b
+	}
+
+	if len(threads) > 0 {
+		draftThreads := make([]*githubv4.DraftPullRequestReviewThread, len(threads))
+		for i, t := range threads {
+			path := githubv4.String(t.Path)
+			line := githubv4.Int(t.Line)
+			side := githubv4.DiffSideRight
+			draftThreads[i] = &githubv4.DraftPullRequestReviewThread{
+				Body: githubv4.String(t.Body),
+				Path: &path,
+				Line: &line,
+				Side: &side,
+			}
+		}
+		input.Threads = &draftThreads
+	}
+
+	err := c.graphql.Mutate(ctx, &mutation, input, nil)
+	if err != nil {
+		return fmt.Errorf("submit batch review: %w", err)
+	}
+	return nil
+}
+
 // AddLabels adds labels to a pull request (or any labelable).
 func (c *Client) AddLabels(ctx context.Context, labelableID string, labelIDs []string) error {
 	var mutation struct {
