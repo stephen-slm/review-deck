@@ -253,6 +253,7 @@ export function ReviewRequestsPage() {
         onFetchMore={handleFetchMore}
         flaggedNodeIds={flaggedNodeIds}
         viewerTeams={viewerTeams}
+        onMerge={async (nodeId) => { await usePRStore.getState().mergePR(nodeId, "SQUASH"); forceRefresh(); }}
       />
     </div>
   );

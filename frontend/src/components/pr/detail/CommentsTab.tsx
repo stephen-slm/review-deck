@@ -63,8 +63,8 @@ export function CommentCard({
   compact?: boolean;
 }) {
   return (
-    <div className={compact ? "px-4 py-3" : "rounded-lg border border-border bg-card px-4 py-3"}>
-      <div className="flex items-center gap-2">
+    <div className={compact ? "" : "rounded-lg border border-border bg-card overflow-hidden"}>
+      <div className={`flex items-center gap-2 px-4 py-1.5 ${compact ? "" : "bg-muted/50"}`}>
         {authorAvatar ? (
           <img
             src={authorAvatar}
@@ -76,7 +76,7 @@ export function CommentCard({
             {author?.[0]?.toUpperCase()}
           </div>
         )}
-        <span className="text-sm font-medium text-foreground">{author}</span>
+        <span className="text-sm font-semibold text-foreground">{author}</span>
         {createdAt && (
           <span className="text-xs text-muted-foreground">
             {timeAgo(createdAt)}
@@ -84,7 +84,7 @@ export function CommentCard({
         )}
       </div>
       {body && (
-        <div className="prose dark:prose-invert prose-sm mt-1.5 max-w-none font-sans text-[14px] prose-headings:text-foreground prose-p:text-muted-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-muted-foreground prose-th:text-foreground prose-td:text-muted-foreground prose-thead:border-border prose-tr:border-border">
+        <div className="prose dark:prose-invert prose-sm max-w-none px-4 py-2 font-sans text-[14px] prose-headings:text-foreground prose-p:text-foreground prose-a:text-primary prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground prose-pre:bg-muted prose-li:text-foreground prose-th:text-foreground prose-td:text-foreground prose-thead:border-border prose-tr:border-border">
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
             {body}
           </ReactMarkdown>
@@ -476,9 +476,9 @@ export function CommentsTab({
                     )}
                     {/* Threaded replies — indented with left border */}
                     {thread.comments && thread.comments.length > 1 && (
-                      <div className="ml-6 border-l-2 border-border/50">
+                      <div className="ml-6 border-l-2 border-border">
                         {thread.comments.slice(1).map((comment) => (
-                          <div key={comment.id} className="border-t border-border/30">
+                          <div key={comment.id} className="border-t border-border">
                             <CommentCard
                               author={comment.author}
                               authorAvatar={comment.authorAvatar}

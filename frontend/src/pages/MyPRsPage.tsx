@@ -387,6 +387,7 @@ export function MyPRsPage() {
           onFetchMore={handleFetchMoreOpen}
           onTabDirect={handleTabDirect}
           viewerTeams={viewerTeams}
+          onMerge={async (nodeId) => { await usePRStore.getState().mergePR(nodeId, "SQUASH"); forceRefresh(); }}
         />
       ) : (
         <PRTable

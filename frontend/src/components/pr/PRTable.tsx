@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2, Users } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2, Users, GitMerge } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -79,6 +79,8 @@ interface PRTableProps {
   timestampField?: "updatedAt" | "mergedAt";
   /** Authenticated user's teams — when provided, rows are grouped by team with separator headers. */
   viewerTeams?: { slug: string; name: string }[];
+  /** Called when the user clicks the quick-merge button on a PR row. */
+  onMerge?: (prNodeId: string) => Promise<void>;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -117,6 +119,7 @@ export function PRTable({
   flagReasons,
   timestampField = "updatedAt",
   viewerTeams,
+  onMerge,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -129,6 +132,7 @@ export function PRTable({
   const hideStacked = localHideStacked ?? globalHideStacked;
   const hideDrafts = localHideDrafts ?? globalHideDrafts;
   const { copiedKey, flash } = useCopyFeedback();
+  const [mergingKey, setMergingKey] = useState<string | null>(null);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const copyMenuRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -425,8 +429,29 @@ export function PRTable({
         cell: (info) => {
           const pr = info.row.original;
           const justCopied = copiedKey === pr.nodeId;
+          const canMerge = onMerge && !pr.isDraft && pr.state === "OPEN" && pr.mergeable === "MERGEABLE"
+            && (pr.reviewDecision === "APPROVED" || pr.reviewDecision === "");
+          const isMerging = mergingKey === pr.nodeId;
           return (
             <div className="flex items-center gap-0.5">
+              {canMerge && (
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setMergingKey(pr.nodeId);
+                    try { await onMerge(pr.nodeId); } finally { setMergingKey(null); }
+                  }}
+                  disabled={isMerging}
+                  className="rounded p-1 text-muted-foreground transition-colors hover:text-purple-600 dark:hover:text-purple-400 disabled:opacity-50"
+                  title="Squash and merge"
+                >
+                  {isMerging ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <GitMerge className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              )}
               {onHide && (
                 <button
                   onClick={() => onHide(pr.nodeId)}
@@ -450,10 +475,10 @@ export function PRTable({
             </div>
           );
         },
-        size: (onHide ? 30 : 0) + 40,
+        size: (onHide ? 30 : 0) + (onMerge ? 30 : 0) + 40,
       }),
     ];
-  }, [showAuthor, onHide, copiedKey, handleCopyRow, flagReasons, timestampField, stackedPRs]);
+  }, [showAuthor, onHide, onMerge, copiedKey, mergingKey, handleCopyRow, flagReasons, timestampField, stackedPRs]);
 
   // No client-side pagination — the table displays exactly what the server sent.
   const table = useReactTable({

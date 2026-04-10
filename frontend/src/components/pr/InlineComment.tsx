@@ -68,7 +68,7 @@ export function InlineThreadDisplay({
   const commentCount = thread.comments?.length ?? 0;
 
   return (
-    <div className={`mx-2 my-1 rounded-md border border-blue-300 dark:border-blue-700`}>
+    <div className={`mx-2 my-1 rounded-md border border-border`}>
       {/* Collapse toggle for resolved threads */}
       {thread.isResolved && (
         <button
@@ -87,9 +87,9 @@ export function InlineThreadDisplay({
       {!collapsed && thread.comments.map((comment, ci) => (
         <div
           key={comment.id || ci}
-          className={`px-3 py-2 ${ci > 0 || thread.isResolved ? "border-t border-border/30" : ""}`}
+          className={`${ci > 0 || thread.isResolved ? "border-t border-border" : ""}`}
         >
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50">
             {comment.authorAvatar ? (
               <img
                 src={comment.authorAvatar}
@@ -101,19 +101,19 @@ export function InlineThreadDisplay({
                 {(comment.author || "?")[0]?.toUpperCase()}
               </div>
             )}
-            <span className="text-xs font-medium text-foreground">{comment.author}</span>
+            <span className="text-xs font-semibold text-foreground">{comment.author}</span>
             {comment.createdAt && (
               <span className="text-[10px] text-muted-foreground">
                 {new Date(comment.createdAt).toLocaleDateString()}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground whitespace-pre-wrap">{comment.body}</p>
+          <p className="text-xs text-foreground whitespace-pre-wrap px-3 py-2">{comment.body}</p>
         </div>
       ))}
       {/* Reply form */}
       {!collapsed && showReply && (
-        <div className="border-t border-border/30 px-3 py-2">
+        <div className="border-t border-border px-3 py-2">
           <div className="flex gap-2">
             <textarea
               autoFocus
@@ -151,7 +151,7 @@ export function InlineThreadDisplay({
       )}
       {/* Actions bar: reply + open + resolve */}
       {!collapsed && (
-        <div className="flex items-center justify-between border-t border-border/30 px-2 py-1">
+        <div className="flex items-center justify-between border-t border-border px-2 py-1 bg-muted/50">
           <div className="flex items-center gap-1">
             <button
               onClick={() => setShowReply((s) => !s)}
