@@ -14,6 +14,10 @@ export function CancelAIReview() {
   return window['go']['services']['WorkspaceService']['CancelAIReview']();
 }
 
+export function CancelAISummary() {
+  return window['go']['services']['WorkspaceService']['CancelAISummary']();
+}
+
 export function CancelCodeTour() {
   return window['go']['services']['WorkspaceService']['CancelCodeTour']();
 }
@@ -38,12 +42,20 @@ export function DeleteAIReview(arg1) {
   return window['go']['services']['WorkspaceService']['DeleteAIReview'](arg1);
 }
 
+export function DeleteAISummary(arg1) {
+  return window['go']['services']['WorkspaceService']['DeleteAISummary'](arg1);
+}
+
 export function DeleteCodeTour(arg1) {
   return window['go']['services']['WorkspaceService']['DeleteCodeTour'](arg1);
 }
 
 export function GetAIReview(arg1) {
   return window['go']['services']['WorkspaceService']['GetAIReview'](arg1);
+}
+
+export function GetAISummary(arg1) {
+  return window['go']['services']['WorkspaceService']['GetAISummary'](arg1);
 }
 
 export function GetCodeTour(arg1) {
@@ -76,6 +88,10 @@ export function SetContext(arg1) {
 
 export function StartAIReview(arg1, arg2, arg3, arg4) {
   return window['go']['services']['WorkspaceService']['StartAIReview'](arg1, arg2, arg3, arg4);
+}
+
+export function StartAISummary(arg1, arg2, arg3, arg4) {
+  return window['go']['services']['WorkspaceService']['StartAISummary'](arg1, arg2, arg3, arg4);
 }
 
 export function StartCodeTour(arg1, arg2, arg3, arg4) {

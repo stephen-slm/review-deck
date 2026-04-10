@@ -30,7 +30,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
 import { dlog } from "@/lib/debugLog";
@@ -171,6 +171,11 @@ export function PRDetailPage() {
   const [tourData, setTourData] = useState<CodeTourData | null>(null);
   const [tourMeta, setTourMeta] = useState<{ cost: number; duration: number }>({ cost: 0, duration: 0 });
   const [tourError, setTourError] = useState<string | null>(null);
+
+  // AI summary state
+  const [summaryGenerating, setSummaryGenerating] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
   // Vim-navigable action index for AI-generated title/description buttons.
   // -1 = no action focused; 0+ indexes into the flat list of visible action buttons.
@@ -321,6 +326,38 @@ export function PRDetailPage() {
     const offError = EventsOn("tour:error", (data: { error: string }) => {
       setTourGenerating(false);
       setTourError(data.error);
+    });
+    return () => {
+      offStarted();
+      offResult();
+      offError();
+    };
+  }, []);
+
+  // Load cached AI summary on mount
+  useEffect(() => {
+    if (!pr?.nodeId) return;
+    GetAISummary(pr.nodeId).then((cached) => {
+      if (cached && cached.summary) {
+        setSummaryText(cached.summary);
+      }
+    }).catch(() => {});
+  }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listen for AI summary events
+  useEffect(() => {
+    const offStarted = EventsOn("summary:started", () => {
+      setSummaryGenerating(true);
+      setSummaryText(null);
+      setSummaryError(null);
+    });
+    const offResult = EventsOn("summary:result", (data: { summary: string }) => {
+      setSummaryGenerating(false);
+      setSummaryText(data.summary);
+    });
+    const offError = EventsOn("summary:error", (data: { error: string }) => {
+      setSummaryGenerating(false);
+      setSummaryError(data.error);
     });
     return () => {
       offStarted();
@@ -503,6 +540,17 @@ export function PRDetailPage() {
       addToast(err instanceof Error ? err.message : String(err), "error");
     }
   }, [addToast]);
+
+  const handleGenerateSummary = useCallback(async () => {
+    if (!pr || summaryGenerating) return;
+    try {
+      setSummaryText(null);
+      setSummaryError(null);
+      await StartAISummary(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : String(err), "error");
+    }
+  }, [pr, summaryGenerating, addToast]);
 
   // Refs for triggering keybinding actions on child components.
   const reviewerToggleRef = useRef<(() => void) | null>(null);
@@ -996,6 +1044,25 @@ export function PRDetailPage() {
                   </h3>
                   {hasLocalPath && toolAvailability?.gh && toolAvailability?.claude && (
                     <div className="flex items-center gap-1.5">
+                      {summaryGenerating ? (
+                        <button
+                          onClick={() => { CancelAISummary(); setSummaryGenerating(false); }}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Cancel Summary
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleGenerateSummary}
+                          disabled={summaryGenerating}
+                          title="Generate a brief AI summary"
+                          className="inline-flex items-center gap-1 rounded-md border border-purple-500/50 px-2 py-1 text-xs font-medium text-purple-700 transition-colors hover:bg-purple-500/10 disabled:cursor-not-allowed disabled:opacity-40 dark:text-purple-300"
+                        >
+                          <Sparkles className="h-3 w-3" />
+                          Summary
+                        </button>
+                      )}
                       {titleGenerating ? (
                         <button
                           onClick={handleCancelTitle}
@@ -1039,6 +1106,39 @@ export function PRDetailPage() {
                     </div>
                   )}
                 </div>
+
+                {/* AI Summary */}
+                {summaryGenerating && (
+                  <div className="flex items-center gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-3 text-sm text-purple-700 dark:text-purple-300">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Generating summary...
+                  </div>
+                )}
+                {summaryError && !summaryGenerating && (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+                    <div className="flex items-center justify-between">
+                      <span>{summaryError}</span>
+                      <button
+                        onClick={handleGenerateSummary}
+                        className="ml-2 inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium hover:bg-destructive/10"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Retry
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {summaryText && !summaryGenerating && (
+                  <div className="rounded-lg border border-purple-500/30 bg-purple-500/5 px-4 py-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Sparkles className="h-3 w-3 text-purple-500" />
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                        AI Summary
+                      </span>
+                    </div>
+                    <p className="text-sm text-foreground">{summaryText}</p>
+                  </div>
+                )}
 
                 {/* AI title generation in progress */}
                 {titleGenerating && (

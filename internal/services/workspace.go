@@ -85,6 +85,9 @@ Code snippet sizing:
 - Aim for 6-15 steps total (including the overview) — more steps with smaller snippets is better than fewer steps with huge code blocks.
 - A step with no file reference (file="") is fine for narrative-only transitions between sections.`
 
+// defaultSummaryPrompt is the system prompt for generating PR summaries.
+const defaultSummaryPrompt = `You are a senior software engineer. Based on the pull request diff, write a brief TL;DR summary in 2-3 sentences. Focus on WHAT changed and WHY. Be specific — mention key files, functions, or features affected. Output ONLY the summary text, no headings or formatting.`
+
 // defaultTitlePrompt is the system prompt for generating PR titles.
 const defaultTitlePrompt = `You are a senior software engineer writing a pull request title. Based on the diff provided, generate a single concise PR title that summarizes the changes.
 
@@ -125,6 +128,14 @@ type ToolAvailability struct {
 // AIReviewResult is the JSON-friendly result returned to the frontend.
 type AIReviewResult struct {
 	Review    string  `json:"review"`
+	Cost      float64 `json:"cost"`
+	Duration  float64 `json:"duration"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// AISummaryResult is the JSON-friendly result returned to the frontend.
+type AISummaryResult struct {
+	Summary   string  `json:"summary"`
 	Cost      float64 `json:"cost"`
 	Duration  float64 `json:"duration"`
 	CreatedAt string  `json:"created_at"`
@@ -188,6 +199,10 @@ type WorkspaceService struct {
 	// Guards the running code tour goroutine.
 	muTour     sync.Mutex
 	cancelTour context.CancelFunc
+
+	// Guards the running summary goroutine.
+	muSummary     sync.Mutex
+	cancelSummary context.CancelFunc
 }
 
 // NewWorkspaceService creates a new WorkspaceService.
@@ -1043,5 +1058,124 @@ func (s *WorkspaceService) CancelCodeTour() {
 	if s.cancelTour != nil {
 		s.cancelTour()
 		s.cancelTour = nil
+	}
+}
+
+// ---------- AI PR Summary ----------
+
+// GetAISummary returns a cached AI summary for the given PR, or nil.
+func (s *WorkspaceService) GetAISummary(prNodeID string) (*AISummaryResult, error) {
+	cached, err := s.db.GetAISummary(prNodeID)
+	if err != nil {
+		return nil, err
+	}
+	if cached == nil {
+		return nil, nil
+	}
+	return &AISummaryResult{
+		Summary:   cached.Summary,
+		Cost:      cached.Cost,
+		Duration:  float64(cached.DurationMs) / 1000,
+		CreatedAt: cached.CreatedAt.Format(time.RFC3339),
+	}, nil
+}
+
+// DeleteAISummary removes a cached AI summary for a PR.
+func (s *WorkspaceService) DeleteAISummary(prNodeID string) error {
+	return s.db.DeleteAISummary(prNodeID)
+}
+
+// StartAISummary kicks off an async Claude summary generation for a PR.
+// It emits Wails events: "summary:started", "summary:result", "summary:error".
+func (s *WorkspaceService) StartAISummary(repoOwner, repoName string, prNumber int, prNodeID string) error {
+	if s.ctx == nil {
+		return errors.New("app context not set")
+	}
+
+	if !gitutil.IsGhInstalled() {
+		return errors.New("the GitHub CLI (gh) is not installed")
+	}
+
+	if !gitutil.IsClaudeInstalled() {
+		return errors.New("the Claude CLI is not installed")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	maxCost := s.getDescriptionMaxCost()
+
+	// Cancel any existing summary generation.
+	s.muSummary.Lock()
+	if s.cancelSummary != nil {
+		s.cancelSummary()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	s.cancelSummary = cancel
+	s.muSummary.Unlock()
+
+	appCtx := s.ctx
+	db := s.db
+
+	go func() {
+		defer cancel()
+		wailsRuntime.EventsEmit(appCtx, "summary:started", prNumber)
+
+		ghRepo := repoOwner + "/" + repoName
+		ghTokenEnv := s.ghEnv()
+		diffCmd := exec.CommandContext(ctx, "gh", "pr", "diff", strconv.Itoa(prNumber), "--repo", ghRepo)
+		diffCmd.Dir = repo.LocalPath
+		diffCmd.Env = ghTokenEnv
+		diff, err := diffCmd.Output()
+		if err != nil {
+			errMsg := fmt.Sprintf("failed to get PR diff: %v", err)
+			if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+				errMsg = fmt.Sprintf("failed to get PR diff: %s", strings.TrimSpace(string(exitErr.Stderr)))
+			}
+			wailsRuntime.EventsEmit(appCtx, "summary:error", map[string]any{"error": errMsg})
+			return
+		}
+
+		if len(bytes.TrimSpace(diff)) == 0 {
+			wailsRuntime.EventsEmit(appCtx, "summary:error", map[string]any{"error": "PR diff is empty"})
+			return
+		}
+
+		summaryText, cost, durationMs, err := s.runClaude(ctx, repo.LocalPath, diff, defaultSummaryPrompt, maxCost, "Write a brief TL;DR summary of this pull request diff:")
+
+		if ctx.Err() == context.DeadlineExceeded {
+			wailsRuntime.EventsEmit(appCtx, "summary:error", map[string]any{"error": "Claude summary timed out (2 minute limit)"})
+			return
+		}
+		if err != nil {
+			wailsRuntime.EventsEmit(appCtx, "summary:error", map[string]any{"error": err.Error()})
+			return
+		}
+
+		if prNodeID != "" {
+			_ = db.SaveAISummary(prNodeID, repoOwner, repoName, prNumber, summaryText, cost, durationMs)
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339)
+		wailsRuntime.EventsEmit(appCtx, "summary:result", map[string]any{
+			"summary":    summaryText,
+			"cost":       cost,
+			"duration":   durationMs,
+			"created_at": now,
+		})
+	}()
+
+	return nil
+}
+
+// CancelAISummary cancels a running AI summary generation.
+func (s *WorkspaceService) CancelAISummary() {
+	s.muSummary.Lock()
+	defer s.muSummary.Unlock()
+	if s.cancelSummary != nil {
+		s.cancelSummary()
+		s.cancelSummary = nil
 	}
 }

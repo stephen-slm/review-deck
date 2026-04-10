@@ -239,6 +239,22 @@ var migrations = []string{
 
 	// Migration 14: Add head_ref_oid (commit SHA) to pull_requests.
 	`ALTER TABLE pull_requests ADD COLUMN head_ref_oid TEXT NOT NULL DEFAULT '';`,
+
+	// Migration 15: AI summary cache (brief PR summaries, TTL 7 days).
+	`CREATE TABLE IF NOT EXISTS ai_summaries (
+		id           INTEGER PRIMARY KEY AUTOINCREMENT,
+		pr_node_id   TEXT NOT NULL,
+		repo_owner   TEXT NOT NULL,
+		repo_name    TEXT NOT NULL,
+		pr_number    INTEGER NOT NULL,
+		summary      TEXT NOT NULL,
+		cost         REAL NOT NULL DEFAULT 0,
+		duration_ms  INTEGER NOT NULL DEFAULT 0,
+		created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(pr_node_id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_ai_summaries_pr ON ai_summaries(pr_node_id);`,
 }
 
 // Migrate runs all pending migrations.

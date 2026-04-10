@@ -591,6 +591,24 @@ export namespace services {
 	        this.created_at = source["created_at"];
 	    }
 	}
+	export class AISummaryResult {
+	    summary: string;
+	    cost: number;
+	    duration: number;
+	    created_at: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AISummaryResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.summary = source["summary"];
+	        this.cost = source["cost"];
+	        this.duration = source["duration"];
+	        this.created_at = source["created_at"];
+	    }
+	}
 	export class CodeTourResult {
 	    tour: string;
 	    cost: number;
