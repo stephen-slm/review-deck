@@ -16,6 +16,7 @@ import { BrowserOpenURL } from "../../../../wailsjs/runtime/runtime";
 import { ReplyToThread } from "../../../../wailsjs/go/services/PullRequestService";
 import { useVimStore } from "@/stores/vimStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { TemplateDropdown } from "@/components/pr/TemplateDropdown";
 import { github } from "../../../../wailsjs/go/models";
 import { timeAgo } from "@/lib/utils";
 import { mdComponents } from "@/lib/markdownComponents";
@@ -150,6 +151,7 @@ function ThreadReplyForm({ threadId, onReplied }: { threadId: string; onReplied?
           >
             {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </button>
+          <TemplateDropdown onSelect={(tmpl) => setBody((prev) => prev ? prev + "\n" + tmpl : tmpl)} />
           <button
             onClick={() => { setOpen(false); setBody(""); }}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-accent"

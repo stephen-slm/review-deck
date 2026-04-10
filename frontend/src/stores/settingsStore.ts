@@ -142,6 +142,11 @@ interface SettingsState {
   prSizeThresholds: PRSizeThresholds;
   loadPRSizeThresholds: () => Promise<void>;
   setPRSizeThresholds: (thresholds: PRSizeThresholds) => Promise<void>;
+
+  /** Review comment templates (name → body pairs). */
+  reviewTemplates: { name: string; body: string }[];
+  loadReviewTemplates: () => Promise<void>;
+  setReviewTemplates: (templates: { name: string; body: string }[]) => Promise<void>;
 }
 
 /** Return the repo-scoped setting key, e.g. `repo:acme/my-app:filter_bots`. */
@@ -188,6 +193,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   excludedReposByOrg: {},
   sourceBasePath: "",
   prSizeThresholds: DEFAULT_PR_SIZE_THRESHOLDS,
+  reviewTemplates: [],
   isLoading: false,
 
   loadOrgs: async () => {
@@ -693,5 +699,24 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setPRSizeThresholds: async (thresholds: PRSizeThresholds) => {
     await SetSetting("pr_size_thresholds", JSON.stringify(thresholds));
     set({ prSizeThresholds: thresholds });
+  },
+
+  loadReviewTemplates: async () => {
+    try {
+      const raw = await GetSetting("review_templates");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          set({ reviewTemplates: parsed });
+          return;
+        }
+      }
+    } catch { /* use default */ }
+    set({ reviewTemplates: [] });
+  },
+
+  setReviewTemplates: async (templates: { name: string; body: string }[]) => {
+    await SetSetting("review_templates", JSON.stringify(templates));
+    set({ reviewTemplates: templates });
   },
 }));

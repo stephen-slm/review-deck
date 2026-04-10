@@ -15,6 +15,7 @@ import type { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
 import { AddPRReviewComment } from "../../../wailsjs/go/services/PullRequestService";
 import { ResolveThread, UnresolveThread, ReplyToThread } from "../../../wailsjs/go/services/PullRequestService";
+import { TemplateDropdown } from "./TemplateDropdown";
 
 /** Renders existing review thread comments inline beneath a diff line. */
 export function InlineThreadDisplay({
@@ -139,6 +140,7 @@ export function InlineThreadDisplay({
                   <Send className="h-3 w-3" />
                 )}
               </button>
+              <TemplateDropdown onSelect={(body) => setReplyBody((prev) => prev ? prev + "\n" + body : body)} />
               <button
                 onClick={() => { setShowReply(false); setReplyBody(""); }}
                 className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
@@ -268,6 +270,7 @@ export function CommentForm({
               <Send className="h-3 w-3" />
             )}
           </button>
+          <TemplateDropdown onSelect={(tmpl) => setBody((prev) => prev ? prev + "\n" + tmpl : tmpl)} />
           <button
             onClick={onClose}
             className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
