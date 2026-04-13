@@ -277,6 +277,18 @@ function buildCommands(
       });
     }
 
+    if (actions.onToggleAllRepos) {
+      const handler = actions.onToggleAllRepos;
+      cmds.push({
+        id: "filter:all-repos",
+        label: "Toggle All Repositories",
+        shortcut: "g",
+        category: "Filters",
+        icon: FolderGit2,
+        action: () => { close(); handler(); },
+      });
+    }
+
     if (actions.onHide) {
       const handler = actions.onHide;
       cmds.push({

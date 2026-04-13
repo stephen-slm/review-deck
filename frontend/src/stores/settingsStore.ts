@@ -147,6 +147,11 @@ interface SettingsState {
   reviewTemplates: { name: string; body: string }[];
   loadReviewTemplates: () => Promise<void>;
   setReviewTemplates: (templates: { name: string; body: string }[]) => Promise<void>;
+
+  /** When true, My PRs page shows PRs from all tracked repos instead of the selected repo. */
+  showAllRepos: boolean;
+  loadShowAllRepos: () => Promise<void>;
+  setShowAllRepos: (enabled: boolean) => Promise<void>;
 }
 
 /** Return the repo-scoped setting key, e.g. `repo:acme/my-app:filter_bots`. */
@@ -194,6 +199,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   sourceBasePath: "",
   prSizeThresholds: DEFAULT_PR_SIZE_THRESHOLDS,
   reviewTemplates: [],
+  showAllRepos: false,
   isLoading: false,
 
   loadOrgs: async () => {
@@ -718,5 +724,29 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setReviewTemplates: async (templates: { name: string; body: string }[]) => {
     await SetSetting("review_templates", JSON.stringify(templates));
     set({ reviewTemplates: templates });
+  },
+
+  loadShowAllRepos: async () => {
+    try {
+      const val = await GetSetting("show_all_repos");
+      set({ showAllRepos: val === "true" });
+    } catch {
+      set({ showAllRepos: false });
+    }
+  },
+
+  setShowAllRepos: async (enabled: boolean) => {
+    await SetSetting("show_all_repos", enabled ? "true" : "false");
+    set({ showAllRepos: enabled });
+    // Invalidate cache timestamps so the next fetchIfStale triggers a re-fetch
+    // with the correct scope.  Don't clear page items or call resetPages() —
+    // that changes the useFindPR fingerprint which causes React error #185
+    // (maximum update depth exceeded) on the PR detail page.
+    usePRStore.setState((s) => ({
+      lastFetchedAt: {
+        ...s.lastFetchedAt,
+        myPRs: 0, myRecentMerged: 0, reviewRequests: 0, reviewedByMe: 0,
+      },
+    }));
   },
 }));

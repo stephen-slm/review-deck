@@ -30,6 +30,7 @@ type ActionCallbacks = {
   onToggleDrafts: (() => void) | null;
   onToggleStacked: (() => void) | null;
   onToggleApproved: (() => void) | null;
+  onToggleAllRepos: (() => void) | null;
   onResolve: (() => void) | null;
   onUnresolve: (() => void) | null;
   onRequestChanges: (() => void) | null;
@@ -62,6 +63,7 @@ const emptyActions: ActionCallbacks = {
   onToggleDrafts: null,
   onToggleStacked: null,
   onToggleApproved: null,
+  onToggleAllRepos: null,
   onResolve: null,
   onUnresolve: null,
   onRequestChanges: null,

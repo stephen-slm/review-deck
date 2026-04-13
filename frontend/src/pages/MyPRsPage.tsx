@@ -9,6 +9,8 @@ import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import {
   GetMyPRsForRepoPage,
   GetMyRecentMergedForRepoPage,
+  GetMyPRsAllReposPage,
+  GetMyRecentMergedAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 type Tab = "open" | "merged";
@@ -16,7 +18,7 @@ type Tab = "open" | "merged";
 export function MyPRsPage() {
   const { isAuthenticated } = useAuthStore();
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
-  const { teamsByOrg, loadAllTeams } = useSettingsStore();
+  const { teamsByOrg, loadAllTeams, showAllRepos } = useSettingsStore();
 
   const {
     pages,
@@ -39,20 +41,22 @@ export function MyPRsPage() {
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
 
-  const canFetch = !!owner && !!repo;
+  const canFetch = showAllRepos || (!!owner && !!repo);
 
   const fetchOpenRaw = useCallback(
     async (pageSize: number, cursor: string) => {
+      if (showAllRepos) return GetMyPRsAllReposPage(pageSize, cursor);
       return GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
     },
-    [owner, repo],
+    [owner, repo, showAllRepos],
   );
 
   const fetchMergedRaw = useCallback(
     async (pageSize: number, cursor: string) => {
+      if (showAllRepos) return GetMyRecentMergedAllReposPage(14, pageSize, cursor);
       return GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
     },
-    [owner, repo],
+    [owner, repo, showAllRepos],
   );
 
   const fetchOpenPage = useCallback(
@@ -269,7 +273,7 @@ export function MyPRsPage() {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
       );
     }
-  }, [isAuthenticated, canFetch, owner, repo, activeTab, fetchOpenPage, fetchMergedPage]);
+  }, [isAuthenticated, canFetch, owner, repo, activeTab, fetchOpenPage, fetchMergedPage, showAllRepos]);
 
   if (!isAuthenticated) {
     return (
@@ -284,7 +288,7 @@ export function MyPRsPage() {
     );
   }
 
-  if (!selectedRepo) {
+  if (!showAllRepos && !selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -303,10 +307,12 @@ export function MyPRsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">My Pull Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pull requests you have authored in{" "}
-            <span className="font-medium text-foreground">
-              {`${owner}/${repo}`}
-            </span>.
+            Pull requests you have authored
+            {showAllRepos ? (
+              <> across <span className="font-medium text-foreground">all repositories</span></>
+            ) : (
+              <> in <span className="font-medium text-foreground">{`${owner}/${repo}`}</span></>
+            )}.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -388,6 +394,7 @@ export function MyPRsPage() {
           onTabDirect={handleTabDirect}
           viewerTeams={viewerTeams}
           onMerge={async (nodeId) => { await usePRStore.getState().mergePR(nodeId, "SQUASH"); forceRefresh(); }}
+          groupByRepo={showAllRepos}
         />
       ) : (
         <PRTable
@@ -401,6 +408,7 @@ export function MyPRsPage() {
           onFetchMore={handleFetchMoreMerged}
           onTabDirect={handleTabDirect}
           timestampField="mergedAt"
+          groupByRepo={showAllRepos}
         />
       )}
     </div>

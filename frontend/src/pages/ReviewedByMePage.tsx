@@ -9,6 +9,7 @@ import { RefreshCw, AlertCircle, FolderGit2 } from "lucide-react";
 import { useFlagStore } from "@/stores/flagStore";
 import {
   GetReviewedByMeForRepoPage,
+  GetReviewedByMeAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewedByMePage() {
@@ -16,7 +17,7 @@ export function ReviewedByMePage() {
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
-  const { teamsByOrg, loadAllTeams } = useSettingsStore();
+  const { teamsByOrg, loadAllTeams, showAllRepos } = useSettingsStore();
   const {
     pages,
     isLoading,
@@ -32,13 +33,14 @@ export function ReviewedByMePage() {
 
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
-  const canFetch = !!owner && !!repo;
+  const canFetch = showAllRepos || (!!owner && !!repo);
 
   const fetchRaw = useCallback(
     async (pageSize: number, cursor: string) => {
+      if (showAllRepos) return GetReviewedByMeAllReposPage(pageSize, cursor);
       return GetReviewedByMeForRepoPage(owner, repo, pageSize, cursor);
     },
-    [owner, repo],
+    [owner, repo, showAllRepos],
   );
 
   const fetchPage = useCallback(
@@ -162,7 +164,7 @@ export function ReviewedByMePage() {
     }).catch(() =>
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewedByMe: false } })),
     );
-  }, [isAuthenticated, canFetch, owner, repo, fetchPage]);
+  }, [isAuthenticated, canFetch, owner, repo, fetchPage, showAllRepos]);
 
   if (!isAuthenticated) {
     return (
@@ -177,7 +179,7 @@ export function ReviewedByMePage() {
     );
   }
 
-  if (!selectedRepo) {
+  if (!showAllRepos && !selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -196,10 +198,12 @@ export function ReviewedByMePage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Reviewed by Me</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Open pull requests you have reviewed in{" "}
-            <span className="font-medium text-foreground">
-              {`${owner}/${repo}`}
-            </span>.
+            Open pull requests you have reviewed
+            {showAllRepos ? (
+              <> across <span className="font-medium text-foreground">all repositories</span></>
+            ) : (
+              <> in <span className="font-medium text-foreground">{`${owner}/${repo}`}</span></>
+            )}.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -236,6 +240,7 @@ export function ReviewedByMePage() {
         flaggedNodeIds={flaggedNodeIds}
         viewerTeams={viewerTeams}
         onMerge={async (nodeId) => { await usePRStore.getState().mergePR(nodeId, "SQUASH"); forceRefresh(); }}
+        groupByRepo={showAllRepos}
       />
     </div>
   );

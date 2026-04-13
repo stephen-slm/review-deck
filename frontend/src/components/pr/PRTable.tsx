@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-table";
 import { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2, Users, GitMerge } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, ChevronsLeft, Loader2, Star, Copy, Check, ChevronDown, Layers, X, PenLine, CheckCircle2, Users, GitMerge, FolderGit2 } from "lucide-react";
 import { timeAgo } from "@/lib/utils";
 import { StateBadge } from "./StateBadge";
 import { PRSizeBadge } from "./PRSizeBadge";
@@ -81,6 +81,8 @@ interface PRTableProps {
   viewerTeams?: { slug: string; name: string }[];
   /** Called when the user clicks the quick-merge button on a PR row. */
   onMerge?: (prNodeId: string) => Promise<void>;
+  /** When true, rows are grouped by repository with separator headers. */
+  groupByRepo?: boolean;
 }
 
 const columnHelper = createColumnHelper<github.PullRequest>();
@@ -120,6 +122,7 @@ export function PRTable({
   timestampField = "updatedAt",
   viewerTeams,
   onMerge,
+  groupByRepo,
 }: PRTableProps) {
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
@@ -233,6 +236,7 @@ export function PRTable({
       onToggleDrafts: () => setLocalHideDrafts((prev) => !(prev ?? globalHideDrafts)),
       onToggleStacked: () => setLocalHideStacked((prev) => !(prev ?? globalHideStacked)),
       onToggleApproved: viewerLogin ? () => setHideApproved((prev) => !prev) : null,
+      onToggleAllRepos: groupByRepo !== undefined ? () => useSettingsStore.getState().setShowAllRepos(!useSettingsStore.getState().showAllRepos) : null,
       onTabDirect: onTabDirect || null,
     });
 
@@ -592,7 +596,31 @@ export function PRTable({
     return { orderedRows: result, teamSeparators: separators };
   }, [tableRows, viewerTeams, viewerLogin, priorityNames]);
 
-  const visiblePRs = useMemo(() => orderedRows.map((r) => r.original), [orderedRows]);
+  // Group rows by repository when showing all repos.
+  const { finalRows, separators: rowSeparators } = useMemo(() => {
+    if (!groupByRepo) {
+      return { finalRows: orderedRows, separators: teamSeparators };
+    }
+
+    const buckets = new Map<string, typeof orderedRows>();
+    for (const row of orderedRows) {
+      const pr = row.original;
+      const key = `${pr.repoOwner}/${pr.repoName}`;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(row);
+    }
+
+    const result: typeof orderedRows = [];
+    const separators = new Map<number, string>();
+    for (const [repoKey, rows] of buckets) {
+      separators.set(result.length, repoKey);
+      result.push(...rows);
+    }
+
+    return { finalRows: result, separators };
+  }, [orderedRows, teamSeparators, groupByRepo]);
+
+  const visiblePRs = useMemo(() => finalRows.map((r) => r.original), [finalRows]);
   tableRowsRef.current = visiblePRs;
 
   useEffect(() => {
@@ -659,6 +687,20 @@ export function PRTable({
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             {hideApproved ? "Approved hidden" : "Approved"}
+          </button>
+        )}
+        {groupByRepo !== undefined && (
+          <button
+            onClick={() => useSettingsStore.getState().setShowAllRepos(!groupByRepo)}
+            className={`inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs transition-colors ${
+              groupByRepo
+                ? "border-primary/50 bg-primary/10 text-primary hover:bg-primary/20"
+                : "border-input bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            }`}
+            title={groupByRepo ? "Showing all repos (click to show selected repo only)" : "Showing selected repo (click to show all repos)"}
+          >
+            <FolderGit2 className="h-3.5 w-3.5" />
+            {groupByRepo ? "All repos" : "All repos"}
           </button>
         )}
         {data.length > 0 && (
@@ -774,7 +816,7 @@ export function PRTable({
                   Loading...
                 </td>
               </tr>
-            ) : orderedRows.length === 0 ? (
+            ) : finalRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={columns.length}
@@ -784,7 +826,7 @@ export function PRTable({
                 </td>
               </tr>
             ) : (
-              orderedRows.map((row, rowIndex) => {
+              finalRows.map((row, rowIndex) => {
                 const pr = row.original;
                 const isPriority = priorityNames && priorityNames.size > 0 && (
                   priorityNames.has(pr.author) ||
@@ -797,18 +839,19 @@ export function PRTable({
                 const isPicked = pickedIndices.has(rowIndex);
                 const isHighlighted = isInVisualRange || isPicked;
                 const isFlagged = flaggedNodeIds?.has(pr.nodeId) ?? false;
-                const teamLabel = teamSeparators.get(rowIndex);
+                const separatorLabel = rowSeparators.get(rowIndex);
+                const SeparatorIcon = groupByRepo ? FolderGit2 : Users;
                 return (
                   <Fragment key={row.id}>
-                    {teamLabel && (
+                    {separatorLabel && (
                       <tr className="border-b border-border bg-muted/40">
                         <td
                           colSpan={columns.length}
                           className="px-3 py-1.5"
                         >
                           <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                            <Users className="h-3.5 w-3.5" />
-                            {teamLabel}
+                            <SeparatorIcon className="h-3.5 w-3.5" />
+                            {separatorLabel}
                           </div>
                         </td>
                       </tr>

@@ -286,6 +286,12 @@ export function useVimNavigation() {
         if (onToggleApproved) onToggleApproved();
       }),
 
+      // ---- Toggle "all repos" visibility (g) ----
+      "g": vim(() => {
+        const { onToggleAllRepos } = getActions();
+        if (onToggleAllRepos) onToggleAllRepos();
+      }),
+
       // ---- Smooth scroll: Shift+J (down) / Shift+K (up) ----
       "Shift+j": vim(() => {
         document.getElementById("scroll-region")?.scrollBy({ top: 150, behavior: "smooth" });

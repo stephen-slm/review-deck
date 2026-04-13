@@ -10,6 +10,7 @@ import { github } from "../../wailsjs/go/models";
 import { useFlagStore } from "@/stores/flagStore";
 import {
   GetReviewRequestsForRepoPage,
+  GetReviewRequestsAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
 
 export function ReviewRequestsPage() {
@@ -17,7 +18,7 @@ export function ReviewRequestsPage() {
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
-  const { loadAllPriorities, getPriorityNames, teamsByOrg, loadAllTeams } = useSettingsStore();
+  const { loadAllPriorities, getPriorityNames, teamsByOrg, loadAllTeams, showAllRepos } = useSettingsStore();
   const {
     pages,
     isLoading,
@@ -35,13 +36,14 @@ export function ReviewRequestsPage() {
 
   const owner = selectedRepo?.repoOwner ?? "";
   const repo = selectedRepo?.repoName ?? "";
-  const canFetch = !!owner && !!repo;
+  const canFetch = showAllRepos || (!!owner && !!repo);
 
   const fetchRaw = useCallback(
     async (pageSize: number, cursor: string) => {
+      if (showAllRepos) return GetReviewRequestsAllReposPage(pageSize, cursor);
       return GetReviewRequestsForRepoPage(owner, repo, pageSize, cursor);
     },
-    [owner, repo],
+    [owner, repo, showAllRepos],
   );
 
   const fetchPage = useCallback(
@@ -178,7 +180,7 @@ export function ReviewRequestsPage() {
     }).catch(() =>
       usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, reviewRequests: false } })),
     );
-  }, [isAuthenticated, canFetch, owner, repo, fetchPage]);
+  }, [isAuthenticated, canFetch, owner, repo, fetchPage, showAllRepos]);
 
   if (!isAuthenticated) {
     return (
@@ -193,7 +195,7 @@ export function ReviewRequestsPage() {
     );
   }
 
-  if (!selectedRepo) {
+  if (!showAllRepos && !selectedRepo) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -212,10 +214,12 @@ export function ReviewRequestsPage() {
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Review Requests</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pull requests awaiting your review in{" "}
-            <span className="font-medium text-foreground">
-              {`${owner}/${repo}`}
-            </span>.
+            Pull requests awaiting your review
+            {showAllRepos ? (
+              <> across <span className="font-medium text-foreground">all repositories</span></>
+            ) : (
+              <> in <span className="font-medium text-foreground">{`${owner}/${repo}`}</span></>
+            )}.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -254,6 +258,7 @@ export function ReviewRequestsPage() {
         flaggedNodeIds={flaggedNodeIds}
         viewerTeams={viewerTeams}
         onMerge={async (nodeId) => { await usePRStore.getState().mergePR(nodeId, "SQUASH"); forceRefresh(); }}
+        groupByRepo={showAllRepos}
       />
     </div>
   );

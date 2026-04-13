@@ -3,7 +3,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { registerActions, clearActions } from "@/stores/vimStore";
 
-import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2, Ruler, Bell } from "lucide-react";
+import { KeyRound, LogOut, CheckCircle, XCircle, Loader2, Timer, RefreshCw, Palette, Settings2, Sparkles, FileText, Type, Plus, Trash2, FolderGit2, Ruler, Bell, Globe } from "lucide-react";
 import { DEFAULT_PR_SIZE_THRESHOLDS, PR_SIZE_BADGE_STYLES } from "@/lib/prSizes";
 import { cn } from "@/lib/utils";
 import { BrowserOpenURL } from "../../wailsjs/runtime/runtime";
@@ -23,7 +23,7 @@ const globalTabs: TabDef[] = [
 
 export function GlobalSettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, aiMaxTurns, loadAiMaxTurns, setAiMaxTurns, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds } = useSettingsStore();
+  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, aiMaxTurns, loadAiMaxTurns, setAiMaxTurns, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds, showAllRepos, loadShowAllRepos, setShowAllRepos } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   const [activeTab, setActiveTab] = useState<GlobalTab>("general");
@@ -43,8 +43,9 @@ export function GlobalSettingsPage() {
     loadAiTitlePrompt();
     loadAiMaxTurns();
     loadPRSizeThresholds();
+    loadShowAllRepos();
     loadRepos();
-  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadAiMaxTurns, loadPRSizeThresholds, loadRepos]);
+  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadAiMaxTurns, loadPRSizeThresholds, loadShowAllRepos, loadRepos]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-3 switch tabs.
   useEffect(() => {
@@ -282,6 +283,42 @@ export function GlobalSettingsPage() {
                   >
                     <Bell className="h-3.5 w-3.5" />
                     Send test
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* Pull Requests Section */}
+            <section className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Pull Requests</h3>
+              </div>
+
+              <div className="rounded-lg border border-border bg-card p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Show all repositories
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      When enabled, the My PRs page shows pull requests from all tracked
+                      repositories instead of only the selected one.
+                    </p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={showAllRepos}
+                    onClick={() => setShowAllRepos(!showAllRepos)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors ${
+                      showAllRepos ? "bg-primary" : "bg-input"
+                    }`}
+                  >
+                    <span
+                      className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-sm ring-0 transition-transform ${
+                        showAllRepos ? "translate-x-4" : "translate-x-0.5"
+                      }`}
+                    />
                   </button>
                 </div>
               </div>
