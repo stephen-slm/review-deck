@@ -84,7 +84,7 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
   if (pathname === "/my-prs") {
     return [
       { title: "List Navigation", hints: LIST_HINTS },
-      { title: "My PRs", hints: [{ keys: "1/2", label: "Open / Recently Merged tab" }, { keys: "g", label: "toggle all repos" }] },
+      { title: "My PRs", hints: [{ keys: "1/2", label: "Open / Recently Merged tab" }, { keys: "w", label: "toggle all repos" }] },
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }

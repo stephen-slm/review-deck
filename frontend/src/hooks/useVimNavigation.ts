@@ -286,8 +286,8 @@ export function useVimNavigation() {
         if (onToggleApproved) onToggleApproved();
       }),
 
-      // ---- Toggle "all repos" visibility (g) ----
-      "g": vim(() => {
+      // ---- Toggle "all repos" visibility (w for "wide" view) ----
+      "w": vim(() => {
         const { onToggleAllRepos } = getActions();
         if (onToggleAllRepos) onToggleAllRepos();
       }),

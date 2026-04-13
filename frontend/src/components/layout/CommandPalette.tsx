@@ -282,7 +282,7 @@ function buildCommands(
       cmds.push({
         id: "filter:all-repos",
         label: "Toggle All Repositories",
-        shortcut: "g",
+        shortcut: "w",
         category: "Filters",
         icon: FolderGit2,
         action: () => { close(); handler(); },
