@@ -6,6 +6,10 @@ import { setEscapeAction } from "@/stores/vimStore";
 import { github } from "../../../wailsjs/go/models";
 import { hexLuminance } from "@/lib/utils";
 
+/** Stable empty array for the label selector fallback — avoids creating a new
+ *  reference on every call which would cause useSyncExternalStore to loop. */
+const EMPTY_LABELS: github.Label[] = [];
+
 interface LabelAssignProps {
   prNodeId: string;
   currentLabels: github.Label[];
@@ -32,7 +36,10 @@ export function LabelAssign({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const repoKey = `${repoOwner}/${repoName}`;
-  const allLabels = useSettingsStore((s) => s.labelsByRepo[repoKey] || []);
+  // IMPORTANT: Do NOT use `|| []` here — it creates a new array reference on
+  // every selector call when the key is missing, which causes useSyncExternalStore
+  // to detect an infinite "tearing" loop and exceed React's 50-update limit (#185).
+  const allLabels = useSettingsStore((s) => s.labelsByRepo[repoKey]) ?? EMPTY_LABELS;
   const syncLabels = useSettingsStore((s) => s.syncLabels);
 
   // Set of currently applied label IDs for quick lookup.

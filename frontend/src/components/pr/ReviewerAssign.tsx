@@ -34,7 +34,7 @@ export function ReviewerAssign({
   const [error, setError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { orgs } = useSettingsStore();
+  const orgs = useSettingsStore((s) => s.orgs);
   const syncTriggered = useRef(false);
 
   // Close on outside click.

@@ -43,9 +43,17 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   // Narrow selectors — only re-render when the specific value changes.
+  // IMPORTANT: Do NOT subscribe to the entire `pages` object — it changes
+  // reference on every poller update, causing this always-mounted component
+  // to re-render every poll cycle. During route transitions the extra
+  // re-renders cascade through useSyncExternalStore tearing checks and
+  // exceed React's 50-nested-update limit (error #185).
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
-  const pages = usePRStore((s) => s.pages);
+  const myPRsCount = usePRStore((s) => s.pages.myPRs.totalCount || s.pages.myPRs.items.length);
+  const reviewRequestsCount = usePRStore((s) => s.pages.reviewRequests.totalCount || s.pages.reviewRequests.items.length);
+  const reviewRequestItems = usePRStore((s) => s.pages.reviewRequests.items);
+  const reviewedByMeItems = usePRStore((s) => s.pages.reviewedByMe.items);
   const repos = useRepoStore((s) => s.repos);
   const selectedRepoId = useRepoStore((s) => s.selectedRepoId);
   const selectedRepo = useRepoStore((s) => s.selectedRepo);
@@ -60,7 +68,7 @@ export function Sidebar() {
 
   const flaggedCount = useMemo(() => {
     const seen = new Set<string>();
-    const merged = [...pages.reviewRequests.items, ...(pages.reviewedByMe?.items || [])];
+    const merged = [...reviewRequestItems, ...(reviewedByMeItems || [])];
     let count = 0;
     for (const pr of merged) {
       if (seen.has(pr.nodeId)) continue;
@@ -68,17 +76,17 @@ export function Sidebar() {
       if (isFlagged(pr)) count++;
     }
     return count;
-  }, [pages.reviewRequests.items, pages.reviewedByMe?.items, isFlagged, flagRules]);
+  }, [reviewRequestItems, reviewedByMeItems, isFlagged, flagRules]);
 
   const reviewedByMeCount = useMemo(() => {
-    const items = pages.reviewedByMe?.items || [];
+    const items = reviewedByMeItems || [];
     if (!user?.login) return items.length;
     return items.filter((pr) => pr.author !== user.login).length;
-  }, [pages.reviewedByMe?.items, user?.login]);
+  }, [reviewedByMeItems, user?.login]);
 
   const badgeCounts: Record<string, number> = {
-    myPRs: pages.myPRs.totalCount || pages.myPRs.items.length,
-    reviewRequests: pages.reviewRequests.totalCount || pages.reviewRequests.items.length,
+    myPRs: myPRsCount,
+    reviewRequests: reviewRequestsCount,
     reviewedByMe: reviewedByMeCount,
     flagged: flaggedCount,
     inbox: inboxUnread,

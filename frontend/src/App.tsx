@@ -21,12 +21,8 @@ import { usePRStore } from "./stores/prStore";
 import { useSettingsStore } from "./stores/settingsStore";
 import { useFlagStore } from "./stores/flagStore";
 import { useRepoStore } from "./stores/repoStore";
-import { dlog } from "./lib/debugLog";
-
-let _appRenderSeq = 0;
 
 function AppContent() {
-  dlog("AppContent:render", `#${++_appRenderSeq}`);
   // Listen for backend poller events and push data into stores.
   usePollerEvents();
   // Global VIM-style keyboard navigation.
@@ -63,7 +59,6 @@ function AppContent() {
     const repoId = selectedRepo
       ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
       : "";
-    dlog("AppContent:effect", `loadRepoSettings("${repoId}")`);
     useSettingsStore.getState().loadRepoSettings(repoId);
     useFlagStore.getState().loadRules(repoId);
   }, [selectedRepo?.repoOwner, selectedRepo?.repoName]);
@@ -121,7 +116,14 @@ function AppContent() {
 export default function App() {
   return (
     <ToastProvider>
-      <BrowserRouter>
+      {/* Disable React Router v7's default startTransition wrapping for route
+          changes.  With transitions enabled, deferred Zustand store writes
+          (setTimeout(0) from poller/vim hooks) are treated as "urgent" updates
+          that interrupt the in-progress transition.  Each interruption forces a
+          synchronous re-render via useSyncExternalStore tearing detection,
+          cascading past React's 50-nested-update limit (error #185) when
+          navigating to a PR from a different repo than the selected one. */}
+      <BrowserRouter unstable_useTransitions={false}>
         <AppContent />
       </BrowserRouter>
     </ToastProvider>

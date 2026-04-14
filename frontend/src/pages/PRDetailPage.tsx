@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { memo, useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
@@ -33,8 +33,6 @@ import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, G
 import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
-import { dlog } from "@/lib/debugLog";
-
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
 import { useAuthStore } from "@/stores/authStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -69,20 +67,9 @@ import { DetailReadyForReviewButton } from "@/components/pr/detail/DetailReadyFo
 import { ActivityTimeline } from "@/components/pr/detail/ActivityTimeline";
 import { PendingReviewBar } from "@/components/pr/detail/PendingReviewBar";
 
-let _renderSeq = 0;
-let _mountSeq = 0;
-
-export function PRDetailPage() {
-  const renderNum = ++_renderSeq;
+export const PRDetailPage = memo(function PRDetailPage() {
   const { nodeId } = useParams<{ nodeId: string }>();
   const navigate = useNavigate();
-
-  // Track mount/unmount to detect unexpected remounts.
-  const mountId = useRef(++_mountSeq);
-  useEffect(() => {
-    dlog("PRDetail:mount", `mountId=${mountId.current}`);
-    return () => { dlog("PRDetail:unmount", `mountId=${mountId.current}`); };
-  }, []);
 
   const storePR = useFindPR(nodeId);
 
@@ -94,8 +81,6 @@ export function PRDetailPage() {
   // The PR to display: prefer the independently fetched version (from manual refresh)
   // over the store copy, since the store only updates on background poll cycles.
   const pr = fetchedPR ?? storePR ?? undefined;
-
-  dlog("PRDetail:render", `#${renderNum} nodeId=${nodeId?.slice(0,10)} pr=${pr ? `${pr.repoOwner}/${pr.repoName}#${pr.number}` : "nil"} fetched=${!!fetchedPR} store=${!!storePR}`);
 
   const getFlagReasons = useFlagStore((s) => s.getFlagReasons);
   const flagRules = useFlagStore((s) => s.rules);
@@ -199,7 +184,7 @@ export function PRDetailPage() {
   const [focusedAction, setFocusedAction] = useState(-1);
 
   // Reset focused action when tab changes or generated content disappears.
-  useEffect(() => { dlog("PRDetail:effect", `focusedAction reset (tab=${activeTab})`); setFocusedAction(-1); }, [activeTab, generatedTitle, generatedDesc]);
+  useEffect(() => { setFocusedAction(-1); }, [activeTab, generatedTitle, generatedDesc]);
 
   // Check if this PR's repo is tracked locally
   const trackedRepo = useMemo(() => {
@@ -679,7 +664,6 @@ export function PRDetailPage() {
 
   /** Refresh the PR by re-fetching from GitHub. */
   const handleRefresh = useCallback(async () => {
-    dlog("PRDetail:refresh", `called, already=${refreshingRef.current}`);
     if (refreshingRef.current) return;
     // If we already know owner/repo/number (from a previous fetch or store),
     // use the fast path. Otherwise fall back to fetching by node ID.
@@ -720,9 +704,7 @@ export function PRDetailPage() {
   // NOTE: Wrapped in setTimeout(0) to defer the fetch out of React's commit
   // phase, preventing nested-update count overflow (error #185).
   useEffect(() => {
-    dlog("PRDetail:effect", `mount fetchedPR=${!!fetchedPR} nodeId=${nodeId?.slice(0,10)}`);
     if (!fetchedPR) {
-      dlog("PRDetail:effect", "scheduling deferred handleRefresh");
       const id = setTimeout(() => handleRefresh(), 0);
       return () => clearTimeout(id);
     }
@@ -770,12 +752,17 @@ export function PRDetailPage() {
       len = 1;
       idx = 0;
     }
-    dlog("PRDetail:effect", `vimSync tab=${activeTab} len=${len} idx=${idx} (deferred)`);
     const id = setTimeout(() => {
       const vs = useVimStore.getState();
-      dlog("PRDetail:vimSync", `fire: curLen=${vs.listLength} curIdx=${vs.selectedIndex} -> len=${len} idx=${idx}`);
-      if (vs.listLength !== len) vs.setListLength(len);
-      if (vs.selectedIndex !== idx) vs.setSelectedIndex(idx);
+      // Batch both mutations into a single set() to avoid two separate
+      // useSyncExternalStore tearing checks — each one counts as a nested
+      // update during React's commit phase and contributes to error #185.
+      const patch: Record<string, unknown> = {};
+      if (vs.listLength !== len) patch.listLength = len;
+      if (vs.selectedIndex !== idx) patch.selectedIndex = idx;
+      if (Object.keys(patch).length > 0) {
+        useVimStore.setState(patch);
+      }
     }, 0);
     return () => clearTimeout(id);
   }, [activeTab, checkRuns, comments, commits, prFiles, tourData]);
@@ -1868,5 +1855,5 @@ export function PRDetailPage() {
       </div>
     </div>
   );
-}
+});
 
