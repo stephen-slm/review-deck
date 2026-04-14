@@ -610,9 +610,20 @@ export function PRTable({
       buckets.get(key)!.push(row);
     }
 
+    // Sort PRs within each repo bucket by updatedAt descending, and sort
+    // the repo groups themselves so the most recently updated repo is first.
+    const sortedBuckets = [...buckets.entries()]
+      .map(([key, rows]) => {
+        rows.sort((a, b) =>
+          new Date(b.original.updatedAt).getTime() - new Date(a.original.updatedAt).getTime());
+        return [key, rows] as const;
+      })
+      .sort(([, a], [, b]) =>
+        new Date(b[0].original.updatedAt).getTime() - new Date(a[0].original.updatedAt).getTime());
+
     const result: typeof orderedRows = [];
     const separators = new Map<number, string>();
-    for (const [repoKey, rows] of buckets) {
+    for (const [repoKey, rows] of sortedBuckets) {
       separators.set(result.length, repoKey);
       result.push(...rows);
     }
