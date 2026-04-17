@@ -44,6 +44,11 @@ function tourToMarkdown(tour: CodeTourData, repoOwner?: string, repoName?: strin
   lines.push(`## 🗺️ Code Tour: ${tour.title}`);
   lines.push("");
 
+  if (tour.summary) {
+    lines.push(tour.summary);
+    lines.push("");
+  }
+
   const canLink = !!repoOwner && !!repoName && !!commitSha;
 
   for (let i = 0; i < tour.steps.length; i++) {
@@ -540,6 +545,15 @@ export function CodeTourPanel({
           </button>
         </div>
       </div>
+
+      {/* Summary */}
+      {tour.summary && (
+        <div className="prose dark:prose-invert prose-sm max-w-none font-sans text-[14px] rounded-lg border border-border bg-card p-4 prose-p:text-muted-foreground prose-strong:text-foreground prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs prose-code:text-foreground">
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={mdComponents}>
+            {tour.summary}
+          </ReactMarkdown>
+        </div>
+      )}
 
       {/* All steps */}
       {tour.steps.map((step, idx) => (
