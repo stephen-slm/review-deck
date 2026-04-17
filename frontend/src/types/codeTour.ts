@@ -9,5 +9,6 @@ export interface CodeTourStep {
 
 export interface CodeTourData {
   title: string;
+  summary?: string;
   steps: CodeTourStep[];
 }
