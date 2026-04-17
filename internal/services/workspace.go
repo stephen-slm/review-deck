@@ -52,15 +52,16 @@ A clear 1-3 sentence summary of what this PR does and why.
 Be concise but thorough. Focus on the "what" and "why", not line-by-line details. Output ONLY the markdown description — no preamble, no wrapping code fences.`
 
 // defaultTourPrompt is the system prompt for generating code tours.
-const defaultTourPrompt = `You are a senior software engineer creating a guided code tour of a pull request. Analyze the diff and produce a structured walkthrough that helps reviewers understand the changes.
+const defaultTourPrompt = `You are generating a code tour of a pull request for an engineer who already reads code. Be dense. Explain what the diff does NOT already show: why this change, what invariant it preserves, what it replaces, what non-obvious constraint it satisfies.
 
 Output ONLY a JSON object (no markdown fences, no preamble) with this exact structure:
 {
-  "title": "A short descriptive title for the tour",
+  "title": "Short title (under 60 chars, imperative mood)",
+  "summary": "2-3 sentences: what changed and why. No preamble.",
   "steps": [
     {
-      "title": "Step title",
-      "description": "Markdown narrative explaining this part of the change",
+      "title": "Terse step title",
+      "description": "Markdown body.",
       "file": "path/to/file.go",
       "startLine": 10,
       "endLine": 25,
@@ -69,21 +70,20 @@ Output ONLY a JSON object (no markdown fences, no preamble) with this exact stru
   ]
 }
 
-Rules:
-- The first step MUST be an overview with file="" and no line numbers — summarize what the PR does and why.
-- Each step should have a conversational, helpful tone — like a colleague walking you through the code.
-- Keep each step description under 200 words. Use markdown formatting (bold, code spans, lists) for clarity.
-- changeType must be one of: "added", "modified", "removed", "context".
-- Focus on the most important/interesting changes — skip trivial modifications.
-- Order steps logically (not necessarily file order) to tell a coherent story.
-- Output ONLY valid JSON — no trailing commas, no comments.
+Step count is a HARD CAP scaled to diff size:
+- Under 200 changed lines: 1-3 steps.
+- 200-1000 changed lines: 3-6 steps.
+- Over 1000 changed lines: 6-10 steps. Never more than 10.
 
-Code snippet sizing:
-- Keep each step's line range SMALL — ideally 10-30 lines. This makes the inline code snippets easy to read alongside the narrative.
-- If a file has a large change (50+ lines), split it into MULTIPLE steps — one per logical section (e.g. struct definition, constructor, main logic, error handling). Each step should cover a focused, self-contained piece.
-- It is perfectly fine (and encouraged) to have multiple steps referencing the same file with different line ranges.
-- Aim for 6-15 steps total (including the overview) — more steps with smaller snippets is better than fewer steps with huge code blocks.
-- A step with no file reference (file="") is fine for narrative-only transitions between sections.`
+Step rules:
+- Description: under 60 words. Bullet-first when listing things. No "In this step...", no "Let's look at...", no colleague-walking-through-code voice.
+- Title: symbol name, subsystem, or action verb phrase ("Add retry backoff", not "We introduce a retry mechanism").
+- One step per meaningful change. Do NOT split a large single-purpose change into multiple steps just because it spans many lines — a 200-line range is fine if it is one logical unit.
+- Skip trivial changes (renames, formatting, import reshuffles) unless they matter.
+- Order steps by importance, not file order.
+- changeType must be one of: "added", "modified", "removed", "context".
+- A step may use file="" and omit line numbers if it describes cross-cutting structure, but prefer concrete file+line steps.
+- Output ONLY valid JSON — no trailing commas, no comments.`
 
 // defaultSummaryPrompt is the system prompt for generating PR summaries.
 const defaultSummaryPrompt = `You are a senior software engineer. Based on the pull request diff, write a brief TL;DR summary in 2-3 sentences. Focus on WHAT changed and WHY. Be specific — mention key files, functions, or features affected. Output ONLY the summary text, no headings or formatting.`
