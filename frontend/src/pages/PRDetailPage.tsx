@@ -1614,10 +1614,12 @@ export const PRDetailPage = memo(function PRDetailPage() {
               repo={pr.repoName}
               headRef={pr.headRef}
               prNodeId={pr.nodeId}
+              prNumber={pr.number}
               headRefOid={pr.headRefOid}
               reviewThreads={comments?.reviewThreads}
               onToggleResolved={handleToggleResolved}
               onCommentAdded={refreshComments}
+              onDescriptionUpdated={handleRefresh}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
             />

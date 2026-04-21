@@ -3,6 +3,8 @@
 import {services} from '../models';
 import {context} from '../models';
 
+export function AppendCodeTourToDescription(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
+
 export function ApplyPRDescription(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;
 
 export function ApplyPRTitle(arg1:string,arg2:string,arg3:number,arg4:string):Promise<void>;

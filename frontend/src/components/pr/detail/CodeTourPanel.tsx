@@ -8,6 +8,7 @@ import {
   UnfoldVertical,
   Send,
   Check,
+  FileText,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -26,6 +27,7 @@ import { langFromFilename, highlightLine } from "@/lib/highlighter";
 import type { CodeTourData } from "@/types/codeTour";
 import type { github } from "../../../../wailsjs/go/models";
 import { GetFileContent, AddPRComment } from "../../../../wailsjs/go/services/PullRequestService";
+import { AppendCodeTourToDescription } from "../../../../wailsjs/go/services/WorkspaceService";
 import { InlineThreadDisplay, AddCommentButton, CommentForm } from "../InlineComment";
 
 /** Build a GitHub blob URL that renders as an embedded code snippet in comments. */
@@ -369,10 +371,12 @@ export function CodeTourPanel({
   repo,
   headRef,
   prNodeId,
+  prNumber,
   headRefOid,
   reviewThreads,
   onToggleResolved,
   onCommentAdded,
+  onDescriptionUpdated,
   onStart,
   onCancel,
 }: {
@@ -388,15 +392,20 @@ export function CodeTourPanel({
   repo?: string;
   headRef?: string;
   prNodeId?: string;
+  prNumber?: number;
   headRefOid?: string;
   reviewThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
   onCommentAdded?: () => void;
+  onDescriptionUpdated?: () => void;
   onStart: () => void;
   onCancel: () => void;
 }) {
   const [posting, setPosting] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [updatingDesc, setUpdatingDesc] = useState(false);
+  const [descUpdated, setDescUpdated] = useState(false);
+  const [descError, setDescError] = useState<string | null>(null);
 
   const handlePostToPR = useCallback(async () => {
     if (!tour || !prNodeId) return;
@@ -412,6 +421,23 @@ export function CodeTourPanel({
       setPosting(false);
     }
   }, [tour, prNodeId, owner, repo, headRefOid]);
+
+  const handleUpdateDescription = useCallback(async () => {
+    if (!tour || !owner || !repo || !prNumber) return;
+    setUpdatingDesc(true);
+    setDescError(null);
+    try {
+      const md = tourToMarkdown(tour, owner, repo, headRefOid);
+      await AppendCodeTourToDescription(owner, repo, prNumber, md);
+      setDescUpdated(true);
+      setTimeout(() => setDescUpdated(false), 3000);
+      onDescriptionUpdated?.();
+    } catch (err) {
+      setDescError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setUpdatingDesc(false);
+    }
+  }, [tour, owner, repo, prNumber, headRefOid, onDescriptionUpdated]);
 
   if (!hasLocalPath) {
     return (
@@ -543,8 +569,28 @@ export function CodeTourPanel({
             )}
             {posted ? "Posted" : "Post to PR"}
           </button>
+          <button
+            onClick={handleUpdateDescription}
+            disabled={updatingDesc || descUpdated || !prNumber}
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            title="Append this code tour to the PR description (replaces any previous tour block)"
+          >
+            {updatingDesc ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : descUpdated ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <FileText className="h-3.5 w-3.5" />
+            )}
+            {descUpdated ? "Updated" : "Update description"}
+          </button>
         </div>
       </div>
+      {descError && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+          Failed to update description: {descError}
+        </div>
+      )}
 
       {/* Summary */}
       {tour.summary && (

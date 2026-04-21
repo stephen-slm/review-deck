@@ -1061,6 +1061,101 @@ func (s *WorkspaceService) CancelCodeTour() {
 	}
 }
 
+// Tracking markers delimiting the code-tour block inside a PR description.
+// A stable pair of HTML comments lets us replace the block on re-runs instead
+// of growing the description indefinitely.
+const (
+	codeTourBlockStart = "<!-- review-deck:code-tour-start -->"
+	codeTourBlockEnd   = "<!-- review-deck:code-tour-end -->"
+)
+
+// mergeCodeTourIntoBody returns a new PR body with the tour block either
+// replacing an existing tracked block or appended to the end.
+func mergeCodeTourIntoBody(currentBody, tourMarkdown string) string {
+	block := codeTourBlockStart + "\n" + strings.TrimSpace(tourMarkdown) + "\n" + codeTourBlockEnd
+
+	startIdx := strings.Index(currentBody, codeTourBlockStart)
+	endIdx := strings.Index(currentBody, codeTourBlockEnd)
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		before := strings.TrimRight(currentBody[:startIdx], " \t\n")
+		after := strings.TrimLeft(currentBody[endIdx+len(codeTourBlockEnd):], " \t\n")
+		parts := make([]string, 0, 3)
+		if before != "" {
+			parts = append(parts, before)
+		}
+		parts = append(parts, block)
+		if after != "" {
+			parts = append(parts, after)
+		}
+		return strings.Join(parts, "\n\n")
+	}
+
+	trimmed := strings.TrimRight(currentBody, " \t\n")
+	if trimmed == "" {
+		return block
+	}
+	return trimmed + "\n\n" + block
+}
+
+// AppendCodeTourToDescription adds (or replaces) a code-tour block in the PR
+// description using tracking HTML comments, then pushes the updated body back
+// to GitHub. Re-running replaces the previous block instead of appending a
+// new one.
+func (s *WorkspaceService) AppendCodeTourToDescription(repoOwner, repoName string, prNumber int, tourMarkdown string) error {
+	if strings.TrimSpace(tourMarkdown) == "" {
+		return errors.New("tour markdown is empty")
+	}
+	if !gitutil.IsGhInstalled() {
+		return errors.New("the GitHub CLI (gh) is not installed")
+	}
+
+	repo, err := s.db.GetTrackedRepoByOwnerName(repoOwner, repoName)
+	if err != nil {
+		return fmt.Errorf("repository %s/%s is not tracked locally", repoOwner, repoName)
+	}
+
+	ghRepo := repoOwner + "/" + repoName
+	ghEnv := s.ghEnv()
+
+	viewCmd := exec.Command("gh", "pr", "view", strconv.Itoa(prNumber), "--json", "body", "--repo", ghRepo)
+	viewCmd.Dir = repo.LocalPath
+	viewCmd.Env = ghEnv
+	var viewStderr bytes.Buffer
+	viewCmd.Stderr = &viewStderr
+	viewOut, err := viewCmd.Output()
+	if err != nil {
+		errMsg := strings.TrimSpace(viewStderr.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return fmt.Errorf("failed to fetch PR description: %s", errMsg)
+	}
+
+	var parsed struct {
+		Body string `json:"body"`
+	}
+	if err := json.Unmarshal(viewOut, &parsed); err != nil {
+		return fmt.Errorf("failed to parse PR description: %w", err)
+	}
+
+	newBody := mergeCodeTourIntoBody(parsed.Body, tourMarkdown)
+
+	editCmd := exec.Command("gh", "pr", "edit", strconv.Itoa(prNumber), "--body", newBody, "--repo", ghRepo)
+	editCmd.Dir = repo.LocalPath
+	editCmd.Env = ghEnv
+	var editStderr bytes.Buffer
+	editCmd.Stderr = &editStderr
+	if err := editCmd.Run(); err != nil {
+		errMsg := strings.TrimSpace(editStderr.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		return fmt.Errorf("failed to update PR description: %s", errMsg)
+	}
+
+	return nil
+}
+
 // ---------- AI PR Summary ----------
 
 // GetAISummary returns a cached AI summary for the given PR, or nil.
