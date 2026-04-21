@@ -30,7 +30,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread, GetFilesSinceCommit } from "../../wailsjs/go/services/PullRequestService";
-import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, DeleteCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
+import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
 import { mdComponents } from "@/lib/markdownComponents";
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
@@ -172,6 +172,7 @@ export const PRDetailPage = memo(function PRDetailPage() {
   const [tourGenerating, setTourGenerating] = useState(false);
   const [tourData, setTourData] = useState<CodeTourData | null>(null);
   const [tourMeta, setTourMeta] = useState<{ cost: number; duration: number }>({ cost: 0, duration: 0 });
+  const [tourCommentNodeId, setTourCommentNodeId] = useState<string>("");
   const [tourError, setTourError] = useState<string | null>(null);
 
   // AI summary state
@@ -230,7 +231,10 @@ export const PRDetailPage = memo(function PRDetailPage() {
           const parsed = JSON.parse(cached.tour) as CodeTourData;
           setTourData(parsed);
           setTourMeta({ cost: cached.cost ?? 0, duration: (cached.duration ?? 0) });
+          setTourCommentNodeId(cached.comment_node_id ?? "");
         } catch {}
+      } else {
+        setTourCommentNodeId("");
       }
     }).catch(() => {});
   }, [pr?.nodeId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -315,12 +319,13 @@ export const PRDetailPage = memo(function PRDetailPage() {
       setTourData(null);
       setTourError(null);
     });
-    const offResult = EventsOn("tour:result", (data: { tour: string; cost: number; duration: number }) => {
+    const offResult = EventsOn("tour:result", (data: { tour: string; cost: number; duration: number; comment_node_id?: string }) => {
       setTourGenerating(false);
       try {
         const parsed = JSON.parse(data.tour) as CodeTourData;
         setTourData(parsed);
         setTourMeta({ cost: data.cost ?? 0, duration: (data.duration ?? 0) / 1000 });
+        setTourCommentNodeId(data.comment_node_id ?? "");
       } catch {
         setTourError("Failed to parse tour response");
       }
@@ -526,7 +531,10 @@ export const PRDetailPage = memo(function PRDetailPage() {
   const handleStartTour = useCallback(async () => {
     if (!pr || tourGenerating) return;
     try {
-      await DeleteCodeTour(pr.nodeId);
+      // Don't DeleteCodeTour here — the upsert in SaveCodeTour replaces the
+      // tour content while preserving the tracked PR comment node ID so a
+      // regenerated tour can update the existing comment instead of posting
+      // a fresh one.
       setTourData(null);
       await StartCodeTour(pr.repoOwner, pr.repoName, pr.number, pr.nodeId);
     } catch (err) {
@@ -1616,10 +1624,12 @@ export const PRDetailPage = memo(function PRDetailPage() {
               prNodeId={pr.nodeId}
               prNumber={pr.number}
               headRefOid={pr.headRefOid}
+              tourCommentNodeId={tourCommentNodeId}
               reviewThreads={comments?.reviewThreads}
               onToggleResolved={handleToggleResolved}
               onCommentAdded={refreshComments}
               onDescriptionUpdated={handleRefresh}
+              onTourCommentPosted={setTourCommentNodeId}
               onStart={handleStartTour}
               onCancel={handleCancelTour}
             />

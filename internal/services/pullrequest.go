@@ -482,6 +482,23 @@ func (s *PullRequestService) AddPRComment(prNodeID string, body string) (string,
 	return commentID, nil
 }
 
+// UpdatePRComment edits the body of an existing PR comment by node ID.
+func (s *PullRequestService) UpdatePRComment(commentID string, body string) error {
+	if s.client == nil {
+		return ErrNotAuthenticated
+	}
+	if commentID == "" {
+		return fmt.Errorf("comment ID is required")
+	}
+	if body == "" {
+		return fmt.Errorf("comment body is required")
+	}
+	if err := s.client.UpdateComment(context.Background(), commentID, body); err != nil {
+		return fmt.Errorf("update PR comment: %w", err)
+	}
+	return nil
+}
+
 // ReplyToThread adds a reply comment to an existing review thread.
 func (s *PullRequestService) ReplyToThread(threadID string, body string) (string, error) {
 	if s.client == nil {

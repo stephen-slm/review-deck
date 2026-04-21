@@ -99,3 +99,5 @@ export function SyncOrgMembersIfStale(arg1:string,arg2:time.Duration):Promise<vo
 export function SyncTeamsForOrg(arg1:string):Promise<void>;
 
 export function UnresolveThread(arg1:string):Promise<void>;
+
+export function UpdatePRComment(arg1:string,arg2:string):Promise<void>;

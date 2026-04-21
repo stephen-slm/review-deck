@@ -143,10 +143,11 @@ type AISummaryResult struct {
 
 // CodeTourResult is the JSON-friendly result returned to the frontend.
 type CodeTourResult struct {
-	Tour      string  `json:"tour"`
-	Cost      float64 `json:"cost"`
-	Duration  float64 `json:"duration"`
-	CreatedAt string  `json:"created_at"`
+	Tour          string  `json:"tour"`
+	Cost          float64 `json:"cost"`
+	Duration      float64 `json:"duration"`
+	CommentNodeID string  `json:"comment_node_id"`
+	CreatedAt     string  `json:"created_at"`
 }
 
 // extractClaudeError pulls a human-readable message from the Claude CLI's
@@ -941,10 +942,11 @@ func (s *WorkspaceService) GetCodeTour(prNodeID string) (*CodeTourResult, error)
 		return nil, nil
 	}
 	return &CodeTourResult{
-		Tour:      ct.Tour,
-		Cost:      ct.Cost,
-		Duration:  float64(ct.DurationMs) / 1000.0,
-		CreatedAt: ct.CreatedAt.Format(time.RFC3339),
+		Tour:          ct.Tour,
+		Cost:          ct.Cost,
+		Duration:      float64(ct.DurationMs) / 1000.0,
+		CommentNodeID: ct.TourCommentNodeID,
+		CreatedAt:     ct.CreatedAt.Format(time.RFC3339),
 	}, nil
 }
 
@@ -1034,21 +1036,37 @@ func (s *WorkspaceService) StartCodeTour(repoOwner, repoName string, prNumber in
 			return
 		}
 
-		// Save result to DB for caching.
+		// Save result to DB for caching. SaveCodeTour preserves any previously
+		// stored PR comment node ID so re-posting can update the same comment.
+		var preservedCommentID string
 		if prNodeID != "" {
 			_ = db.SaveCodeTour(prNodeID, repoOwner, repoName, prNumber, tourText, cost, durationMs)
+			if saved, _ := db.GetCodeTour(prNodeID); saved != nil {
+				preservedCommentID = saved.TourCommentNodeID
+			}
 		}
 
 		now := time.Now().UTC().Format(time.RFC3339)
 		wailsRuntime.EventsEmit(appCtx, "tour:result", map[string]any{
-			"tour":       tourText,
-			"cost":       cost,
-			"duration":   durationMs,
-			"created_at": now,
+			"tour":            tourText,
+			"cost":            cost,
+			"duration":        durationMs,
+			"comment_node_id": preservedCommentID,
+			"created_at":      now,
 		})
 	}()
 
 	return nil
+}
+
+// SetCodeTourCommentID records the PR comment node ID for a cached code tour.
+// Called by the frontend after posting a tour as a comment so that subsequent
+// posts update the existing comment instead of creating a new one.
+func (s *WorkspaceService) SetCodeTourCommentID(prNodeID, commentID string) error {
+	if prNodeID == "" {
+		return errors.New("pr node ID is required")
+	}
+	return s.db.SetCodeTourCommentID(prNodeID, commentID)
 }
 
 // CancelCodeTour cancels a running code tour generation.

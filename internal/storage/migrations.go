@@ -258,6 +258,10 @@ var migrations = []string{
 
 	// Migration 16: Add commit_oid to reviews for "diff since last review" feature.
 	`ALTER TABLE reviews ADD COLUMN commit_oid TEXT NOT NULL DEFAULT '';`,
+
+	// Migration 17: Track PR comment node ID for posted code tours so re-posting
+	// updates the existing comment instead of creating a new one.
+	`ALTER TABLE code_tours ADD COLUMN tour_comment_node_id TEXT NOT NULL DEFAULT '';`,
 }
 
 // Migrate runs all pending migrations.

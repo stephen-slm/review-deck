@@ -345,6 +345,27 @@ func (c *Client) AddComment(ctx context.Context, subjectNodeID string, body stri
 	return mutation.AddComment.CommentEdge.Node.ID, nil
 }
 
+// UpdateComment edits the body of an existing issue/PR comment by node ID.
+func (c *Client) UpdateComment(ctx context.Context, commentID string, body string) error {
+	var mutation struct {
+		UpdateIssueComment struct {
+			IssueComment struct {
+				ID string `graphql:"id"`
+			} `graphql:"issueComment"`
+		} `graphql:"updateIssueComment(input: $input)"`
+	}
+
+	input := githubv4.UpdateIssueCommentInput{
+		ID:   githubv4.ID(commentID),
+		Body: githubv4.String(body),
+	}
+
+	if err := c.graphql.Mutate(ctx, &mutation, input, nil); err != nil {
+		return fmt.Errorf("update comment: %w", err)
+	}
+	return nil
+}
+
 // ReplyToThread adds a reply comment to an existing review thread.
 func (c *Client) ReplyToThread(ctx context.Context, threadID string, body string) (string, error) {
 	var mutation struct {

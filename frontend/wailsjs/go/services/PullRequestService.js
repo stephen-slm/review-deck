@@ -193,3 +193,7 @@ export function SyncTeamsForOrg(arg1) {
 export function UnresolveThread(arg1) {
   return window['go']['services']['PullRequestService']['UnresolveThread'](arg1);
 }
+
+export function UpdatePRComment(arg1, arg2) {
+  return window['go']['services']['PullRequestService']['UpdatePRComment'](arg1, arg2);
+}

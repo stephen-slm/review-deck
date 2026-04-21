@@ -26,8 +26,8 @@ import type { DiffLine } from "@/lib/diffUtils";
 import { langFromFilename, highlightLine } from "@/lib/highlighter";
 import type { CodeTourData } from "@/types/codeTour";
 import type { github } from "../../../../wailsjs/go/models";
-import { GetFileContent, AddPRComment } from "../../../../wailsjs/go/services/PullRequestService";
-import { AppendCodeTourToDescription } from "../../../../wailsjs/go/services/WorkspaceService";
+import { GetFileContent, AddPRComment, UpdatePRComment } from "../../../../wailsjs/go/services/PullRequestService";
+import { AppendCodeTourToDescription, SetCodeTourCommentID } from "../../../../wailsjs/go/services/WorkspaceService";
 import { InlineThreadDisplay, AddCommentButton, CommentForm } from "../InlineComment";
 
 /** Build a GitHub blob URL that renders as an embedded code snippet in comments. */
@@ -373,10 +373,12 @@ export function CodeTourPanel({
   prNodeId,
   prNumber,
   headRefOid,
+  tourCommentNodeId,
   reviewThreads,
   onToggleResolved,
   onCommentAdded,
   onDescriptionUpdated,
+  onTourCommentPosted,
   onStart,
   onCancel,
 }: {
@@ -394,33 +396,48 @@ export function CodeTourPanel({
   prNodeId?: string;
   prNumber?: number;
   headRefOid?: string;
+  tourCommentNodeId?: string;
   reviewThreads?: github.ReviewThread[];
   onToggleResolved?: (threadId: string, resolved: boolean) => void;
   onCommentAdded?: () => void;
   onDescriptionUpdated?: () => void;
+  onTourCommentPosted?: (commentNodeId: string) => void;
   onStart: () => void;
   onCancel: () => void;
 }) {
   const [posting, setPosting] = useState(false);
   const [posted, setPosted] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
   const [updatingDesc, setUpdatingDesc] = useState(false);
   const [descUpdated, setDescUpdated] = useState(false);
   const [descError, setDescError] = useState<string | null>(null);
 
+  const hasExistingComment = !!tourCommentNodeId;
+
   const handlePostToPR = useCallback(async () => {
     if (!tour || !prNodeId) return;
     setPosting(true);
+    setPostError(null);
     try {
       const md = tourToMarkdown(tour, owner, repo, headRefOid);
-      await AddPRComment(prNodeId, md);
+      if (tourCommentNodeId) {
+        await UpdatePRComment(tourCommentNodeId, md);
+        onTourCommentPosted?.(tourCommentNodeId);
+      } else {
+        const newCommentId = await AddPRComment(prNodeId, md);
+        if (newCommentId) {
+          try { await SetCodeTourCommentID(prNodeId, newCommentId); } catch {}
+          onTourCommentPosted?.(newCommentId);
+        }
+      }
       setPosted(true);
       setTimeout(() => setPosted(false), 3000);
-    } catch {
-      // User can retry
+    } catch (err) {
+      setPostError(err instanceof Error ? err.message : String(err));
     } finally {
       setPosting(false);
     }
-  }, [tour, prNodeId, owner, repo, headRefOid]);
+  }, [tour, prNodeId, owner, repo, headRefOid, tourCommentNodeId, onTourCommentPosted]);
 
   const handleUpdateDescription = useCallback(async () => {
     if (!tour || !owner || !repo || !prNumber) return;
@@ -558,7 +575,7 @@ export function CodeTourPanel({
             onClick={handlePostToPR}
             disabled={posting || posted}
             className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
-            title="Post this code tour as a comment on the PR"
+            title={hasExistingComment ? "Update the existing code-tour comment on the PR" : "Post this code tour as a comment on the PR"}
           >
             {posting ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -567,7 +584,7 @@ export function CodeTourPanel({
             ) : (
               <Send className="h-3.5 w-3.5" />
             )}
-            {posted ? "Posted" : "Post to PR"}
+            {posted ? (hasExistingComment ? "Updated" : "Posted") : (hasExistingComment ? "Update comment" : "Post to PR")}
           </button>
           <button
             onClick={handleUpdateDescription}
@@ -586,6 +603,11 @@ export function CodeTourPanel({
           </button>
         </div>
       </div>
+      {postError && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
+          Failed to post to PR: {postError}
+        </div>
+      )}
       {descError && (
         <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-300">
           Failed to update description: {descError}

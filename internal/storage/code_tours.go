@@ -7,18 +7,21 @@ import (
 
 // CodeTour represents a cached AI-generated code tour for a pull request.
 type CodeTour struct {
-	ID         int
-	PRNodeID   string
-	RepoOwner  string
-	RepoName   string
-	PRNumber   int
-	Tour       string // JSON string
-	Cost       float64
-	DurationMs int
-	CreatedAt  time.Time
+	ID                int
+	PRNodeID          string
+	RepoOwner         string
+	RepoName          string
+	PRNumber          int
+	Tour              string // JSON string
+	Cost              float64
+	DurationMs        int
+	TourCommentNodeID string // GraphQL node ID of the PR comment hosting this tour, if any
+	CreatedAt         time.Time
 }
 
-// SaveCodeTour upserts a code tour result.
+// SaveCodeTour upserts a code tour result. The tour_comment_node_id column is
+// intentionally preserved across regenerations so re-posting can update the
+// existing PR comment instead of creating a new one.
 func (db *DB) SaveCodeTour(prNodeID, repoOwner, repoName string, prNumber int, tour string, cost float64, durationMs int) error {
 	_, err := db.conn.Exec(`
 		INSERT INTO code_tours (pr_node_id, repo_owner, repo_name, pr_number, tour, cost, duration_ms)
@@ -35,13 +38,13 @@ func (db *DB) SaveCodeTour(prNodeID, repoOwner, repoName string, prNumber int, t
 // GetCodeTour retrieves a cached code tour if it exists and is less than 7 days old.
 func (db *DB) GetCodeTour(prNodeID string) (*CodeTour, error) {
 	row := db.conn.QueryRow(`
-		SELECT id, pr_node_id, repo_owner, repo_name, pr_number, tour, cost, duration_ms, created_at
+		SELECT id, pr_node_id, repo_owner, repo_name, pr_number, tour, cost, duration_ms, tour_comment_node_id, created_at
 		FROM code_tours
 		WHERE pr_node_id = ? AND created_at > datetime('now', '-7 days')
 	`, prNodeID)
 
 	var ct CodeTour
-	err := row.Scan(&ct.ID, &ct.PRNodeID, &ct.RepoOwner, &ct.RepoName, &ct.PRNumber, &ct.Tour, &ct.Cost, &ct.DurationMs, &ct.CreatedAt)
+	err := row.Scan(&ct.ID, &ct.PRNodeID, &ct.RepoOwner, &ct.RepoName, &ct.PRNumber, &ct.Tour, &ct.Cost, &ct.DurationMs, &ct.TourCommentNodeID, &ct.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -49,6 +52,13 @@ func (db *DB) GetCodeTour(prNodeID string) (*CodeTour, error) {
 		return nil, err
 	}
 	return &ct, nil
+}
+
+// SetCodeTourCommentID records the PR comment node ID associated with a cached
+// code tour. Used so subsequent posts update the existing comment.
+func (db *DB) SetCodeTourCommentID(prNodeID, commentID string) error {
+	_, err := db.conn.Exec(`UPDATE code_tours SET tour_comment_node_id = ? WHERE pr_node_id = ?`, commentID, prNodeID)
+	return err
 }
 
 // DeleteCodeTour removes a cached code tour for a PR.

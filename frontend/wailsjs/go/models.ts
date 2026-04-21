@@ -631,17 +631,19 @@ export namespace services {
 	    tour: string;
 	    cost: number;
 	    duration: number;
+	    comment_node_id: string;
 	    created_at: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CodeTourResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tour = source["tour"];
 	        this.cost = source["cost"];
 	        this.duration = source["duration"];
+	        this.comment_node_id = source["comment_node_id"];
 	        this.created_at = source["created_at"];
 	    }
 	}

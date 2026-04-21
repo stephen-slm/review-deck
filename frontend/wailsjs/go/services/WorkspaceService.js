@@ -86,6 +86,10 @@ export function OpenTerminal(arg1, arg2) {
   return window['go']['services']['WorkspaceService']['OpenTerminal'](arg1, arg2);
 }
 
+export function SetCodeTourCommentID(arg1, arg2) {
+  return window['go']['services']['WorkspaceService']['SetCodeTourCommentID'](arg1, arg2);
+}
+
 export function SetContext(arg1) {
   return window['go']['services']['WorkspaceService']['SetContext'](arg1);
 }
