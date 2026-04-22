@@ -220,10 +220,7 @@ export function PRTable({
         const pr = getRows()[index];
         if (pr) navigate(`/pr/${pr.nodeId}`);
       },
-      onOpenExternal: (index: number) => {
-        const pr = getRows()[index];
-        if (pr) BrowserOpenURL(pr.url);
-      },
+      onOpenExternal: handleOpenExternalSelection,
       onRefresh: onRefresh || null,
       onNextPage: pagination.hasNextPage ? () => onPageChange("next") : null,
       onPrevPage: pagination.currentPage > 1 ? () => onPageChange("prev") : null,
@@ -296,6 +293,27 @@ export function PRTable({
     // Exit visual mode and clear picks after copying.
     vim.exitVisualMode();
   }, [flash]);
+
+  /** Open handler for the 'o' keybinding — opens visual range + picked rows (or single cursor row) in the browser. */
+  const handleOpenExternalSelection = useCallback((fallbackIndex: number) => {
+    const vim = useVimStore.getState();
+    const rows = tableRowsRef.current;
+
+    const indices = vim.getAllSelectedIndices();
+
+    let prsToOpen: github.PullRequest[];
+    if (indices.length > 0) {
+      prsToOpen = indices.map((i) => rows[i]).filter(Boolean);
+    } else if (fallbackIndex >= 0 && rows[fallbackIndex]) {
+      prsToOpen = [rows[fallbackIndex]];
+    } else {
+      return;
+    }
+
+    for (const pr of prsToOpen) BrowserOpenURL(pr.url);
+
+    if (indices.length > 0) vim.exitVisualMode();
+  }, []);
 
   const columns = useMemo(() => {
     const authorCol = columnHelper.accessor("author", {
