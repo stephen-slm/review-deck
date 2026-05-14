@@ -42,7 +42,7 @@ interface SettingsState {
   hideDraftPRs: boolean;
   /** Usernames whose comments (issue comments & review threads) are filtered out on the PR detail page. */
   filteredCommentUsers: string[];
-  /** Usernames whose reviews are filtered out on the PR detail page (Reviews section, Reviewers sidebar). */
+  /** Usernames whose reviews are filtered out on the PR detail page and whose PRs are hidden from the Reviews page. */
   filteredReviewUsers: string[];
   theme: ThemeChoice;
   cacheTTLMinutes: number;
