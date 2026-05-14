@@ -45,7 +45,7 @@ function stalenessColor(date: string | Date | number): string {
   return "text-muted-foreground";
 }
 
-const PAGE_SIZE_OPTIONS = [10, 15, 20, 25] as const;
+const PAGE_SIZE_OPTIONS = [10, 25, 35, 50] as const;
 
 interface PRTableProps {
   data: github.PullRequest[];
@@ -127,6 +127,7 @@ export function PRTable({
   const navigate = useNavigate();
   const globalHideStacked = useSettingsStore((s) => s.hideStackedPRs);
   const globalHideDrafts = useSettingsStore((s) => s.hideDraftPRs);
+  const filterBots = useSettingsStore((s) => s.filterBots);
   const [sorting, setSorting] = useState<SortingState>([]);
   const globalFilter = usePRStore((s) => s.searchFilter);
   const setGlobalFilter = usePRStore((s) => s.setSearchFilter);
@@ -146,9 +147,12 @@ export function PRTable({
   const visualAnchor = useVimStore((s) => s.visualAnchor);
   const pickedIndices = useVimStore((s) => s.pickedIndices);
 
-  // Filter out stacked PRs, draft PRs, and hidden PRs.
+  // Filter out stacked PRs, draft PRs, bot PRs, and hidden PRs.
   const filteredData = useMemo(() => {
     let result = data;
+    if (filterBots) {
+      result = result.filter((pr) => !pr.author.endsWith("[bot]"));
+    }
     if (hideStacked) {
       result = result.filter((pr) => DEFAULT_BRANCHES.has(pr.baseRef));
     }
@@ -164,7 +168,7 @@ export function PRTable({
       );
     }
     return result;
-  }, [data, hideStacked, hideDrafts, hiddenPRs, hideApproved, viewerLogin]);
+  }, [data, filterBots, hideStacked, hideDrafts, hiddenPRs, hideApproved, viewerLogin]);
 
   // Detect stacked PRs (baseRef is not a default branch).
   const stackedPRs = useMemo(() => {
@@ -179,7 +183,7 @@ export function PRTable({
 
   // Auto-fill: when filtering reduces visible rows below page size and the
   // server has more pages, request additional items to fill the table.
-  const anyFilterActive = hideStacked || hideDrafts || hideApproved || (hiddenPRs && hiddenPRs.size > 0);
+  const anyFilterActive = filterBots || hideStacked || hideDrafts || hideApproved || (hiddenPRs && hiddenPRs.size > 0);
   useEffect(() => {
     if (
       anyFilterActive &&
@@ -339,13 +343,20 @@ export function PRTable({
       columnHelper.accessor("number", {
         header: "#",
         cell: (info) => {
-          const baseRef = stackedPRs.get(info.row.original.nodeId);
+          const pr = info.row.original;
+          const baseRef = stackedPRs.get(pr.nodeId);
+          const hasMyReview = viewerLogin && pr.reviews?.some((r) => r.author === viewerLogin);
           return (
             <span className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
               #{info.getValue()}
               {baseRef && (
                 <span title={`Stacked on ${baseRef}`}>
                   <Layers className="h-3 w-3 shrink-0 text-purple-500" />
+                </span>
+              )}
+              {hasMyReview && (
+                <span title="Reviewed by me">
+                  <CheckCircle2 className="h-3 w-3 shrink-0 text-green-500" />
                 </span>
               )}
             </span>

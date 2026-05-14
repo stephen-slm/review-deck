@@ -9,7 +9,6 @@ import { SendNotification } from "../../wailsjs/go/main/App";
 import { useToast } from "@/components/ui/Toast";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { dlog } from "@/lib/debugLog";
-import { useNotificationStore } from "@/stores/notificationStore";
 
 interface PollResult {
   myPRs: unknown[] | null;
@@ -200,10 +199,6 @@ export function usePollerEvents() {
           }
         }
 
-        // Refresh notification store so inbox badge and list stay current.
-        if (notifications.length > 0) {
-          useNotificationStore.getState().refreshUnreadCount();
-        }
       }, 0);
     };
 

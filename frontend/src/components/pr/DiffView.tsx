@@ -351,6 +351,7 @@ function FileDiff({ file, isExpanded, onToggle, isSelected, onOpenInGoLand, owne
                               filePath={file.filename}
                               line={newLineNum}
                               onClose={() => setCommentLine(null)}
+                              onSubmitted={onCommentAdded}
                             />
                           </td>
                         </tr>

@@ -88,12 +88,6 @@ function getHintGroupsForPath(pathname: string): HintGroup[] {
       { title: "Global", hints: GLOBAL_HINTS },
     ];
   }
-  if (pathname === "/reviewed") {
-    return [
-      { title: "List Navigation", hints: LIST_HINTS },
-      { title: "Global", hints: GLOBAL_HINTS },
-    ];
-  }
   if (pathname === "/settings" || pathname === "/global-settings") {
     return [
       { title: "Settings", hints: SETTINGS_HINTS },

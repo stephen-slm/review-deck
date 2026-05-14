@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { github } from "../../../wailsjs/go/models";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime";
-import { AddPRReviewComment } from "../../../wailsjs/go/services/PullRequestService";
+import { SubmitBatchReview } from "../../../wailsjs/go/services/PullRequestService";
 import { ResolveThread, UnresolveThread, ReplyToThread } from "../../../wailsjs/go/services/PullRequestService";
 import { TemplateDropdown } from "./TemplateDropdown";
 import { useDraftReviewStore } from "@/stores/draftReviewStore";
@@ -235,7 +235,7 @@ export function CommentForm({
     if (!body.trim()) return;
     setSubmitting(true);
     try {
-      await AddPRReviewComment(prNodeId, body.trim(), filePath, line);
+      await SubmitBatchReview(prNodeId, "", "COMMENT", [{ path: filePath, line, body: body.trim() }]);
       onSubmitted?.();
       onClose();
     } catch {

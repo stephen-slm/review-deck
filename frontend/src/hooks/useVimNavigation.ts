@@ -8,7 +8,6 @@ import { dlog } from "@/lib/debugLog";
 const TAB_ROUTES = [
   "/my-prs",
   "/review-requests",
-  "/reviewed",
   "/flagged",
   "/settings",
 ];

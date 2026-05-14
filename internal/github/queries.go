@@ -319,7 +319,7 @@ func (c *Client) GetReviewedByUser(ctx context.Context, org, user string, since 
 // ---- Paginated variants (used by frontend) ----
 
 // botExclusions is appended to search queries when bot filtering is enabled.
-const botExclusions = " -author:app/dependabot -author:app/renovate -author:app/github-actions -author:app/snyk-bot"
+const botExclusions = " -author:app/dependabot -author:dependabot[bot] -author:app/renovate -author:renovate[bot] -author:app/github-actions -author:github-actions[bot] -author:app/snyk-bot -author:snyk-bot"
 
 func buildQuery(base string, filterBots bool, excludedRepos []string) string {
 	q := base

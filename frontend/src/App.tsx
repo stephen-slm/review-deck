@@ -7,10 +7,8 @@ import { ReviewRequestsPage } from "./pages/ReviewRequestsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { GlobalSettingsPage } from "./pages/GlobalSettingsPage";
 import { FlaggedPRsPage } from "./pages/FlaggedPRsPage";
-import { ReviewedByMePage } from "./pages/ReviewedByMePage";
 import { PRDetailPage } from "./pages/PRDetailPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
-import { InboxPage } from "./pages/InboxPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { CommandPalette } from "./components/layout/CommandPalette";
@@ -86,9 +84,8 @@ function AppContent() {
               path="/review-requests"
               element={<ReviewRequestsPage />}
             />
-            <Route path="/reviewed" element={<ReviewedByMePage />} />
+            <Route path="/reviewed" element={<Navigate to="/review-requests" replace />} />
             <Route path="/flagged" element={<FlaggedPRsPage />} />
-            <Route path="/inbox" element={<InboxPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/global-settings" element={<GlobalSettingsPage />} />
             <Route path="/pr/:nodeId" element={<ErrorBoundary label="PR Detail"><PRDetailPage /></ErrorBoundary>} />

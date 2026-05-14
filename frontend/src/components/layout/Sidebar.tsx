@@ -3,13 +3,11 @@ import { NavLink } from "react-router-dom";
 import {
   GitPullRequest,
   Eye,
-  CheckCheck,
   AlertTriangle,
   Settings,
   ChevronDown,
   Plus,
   FolderGit2,
-  Inbox,
 } from "lucide-react";
 import { WindowToggleMaximise } from "../../../wailsjs/runtime/runtime";
 import { cn } from "@/lib/utils";
@@ -18,26 +16,23 @@ import { usePRStore } from "@/stores/prStore";
 import { useRepoStore } from "@/stores/repoStore";
 import { setEscapeAction } from "@/stores/vimStore";
 import { useFlagStore } from "@/stores/flagStore";
-import { useNotificationStore } from "@/stores/notificationStore";
 
 interface NavItem {
   to: string;
   label: string;
   icon: typeof GitPullRequest;
-  badgeKey?: "myPRs" | "reviewRequests" | "reviewedByMe" | "flagged" | "inbox";
+  badgeKey?: "myPRs" | "reviews" | "flagged";
 }
 
 const navItems: NavItem[] = [
   { to: "/my-prs", label: "My PRs", icon: GitPullRequest, badgeKey: "myPRs" },
   {
     to: "/review-requests",
-    label: "Review Requests",
+    label: "Reviews",
     icon: Eye,
-    badgeKey: "reviewRequests",
+    badgeKey: "reviews",
   },
-  { to: "/reviewed", label: "Reviewed by Me", icon: CheckCheck, badgeKey: "reviewedByMe" },
   { to: "/flagged", label: "Flagged", icon: AlertTriangle, badgeKey: "flagged" },
-  { to: "/inbox", label: "Inbox", icon: Inbox, badgeKey: "inbox" },
   { to: "/settings", label: "Repo Settings", icon: Settings },
 ];
 
@@ -51,7 +46,6 @@ export function Sidebar() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const myPRsCount = usePRStore((s) => s.pages.myPRs.totalCount || s.pages.myPRs.items.length);
-  const reviewRequestsCount = usePRStore((s) => s.pages.reviewRequests.totalCount || s.pages.reviewRequests.items.length);
   const reviewRequestItems = usePRStore((s) => s.pages.reviewRequests.items);
   const reviewedByMeItems = usePRStore((s) => s.pages.reviewedByMe.items);
   const repos = useRepoStore((s) => s.repos);
@@ -64,8 +58,6 @@ export function Sidebar() {
 
   const isFlagged = useFlagStore((s) => s.isFlagged);
   const flagRules = useFlagStore((s) => s.rules);
-  const inboxUnread = useNotificationStore((s) => s.unreadCount);
-
   const flaggedCount = useMemo(() => {
     const seen = new Set<string>();
     const merged = [...reviewRequestItems, ...(reviewedByMeItems || [])];
@@ -78,18 +70,26 @@ export function Sidebar() {
     return count;
   }, [reviewRequestItems, reviewedByMeItems, isFlagged, flagRules]);
 
-  const reviewedByMeCount = useMemo(() => {
-    const items = reviewedByMeItems || [];
-    if (!user?.login) return items.length;
-    return items.filter((pr) => pr.author !== user.login).length;
-  }, [reviewedByMeItems, user?.login]);
+  const reviewsCount = useMemo(() => {
+    const seen = new Set<string>();
+    let count = 0;
+    for (const pr of reviewRequestItems) {
+      if (!seen.has(pr.nodeId)) { seen.add(pr.nodeId); count++; }
+    }
+    const login = user?.login;
+    for (const pr of (reviewedByMeItems || [])) {
+      if (seen.has(pr.nodeId)) continue;
+      if (login && pr.author === login) continue;
+      seen.add(pr.nodeId);
+      count++;
+    }
+    return count;
+  }, [reviewRequestItems, reviewedByMeItems, user?.login]);
 
   const badgeCounts: Record<string, number> = {
     myPRs: myPRsCount,
-    reviewRequests: reviewRequestsCount,
-    reviewedByMe: reviewedByMeCount,
+    reviews: reviewsCount,
     flagged: flaggedCount,
-    inbox: inboxUnread,
   };
 
   useEffect(() => {
@@ -97,7 +97,6 @@ export function Sidebar() {
     const { loadRepos, loadSelectedRepo } = useRepoStore.getState();
     checkAuth();
     loadRepos().then(() => loadSelectedRepo());
-    useNotificationStore.getState().refreshUnreadCount();
   }, []);
 
   // Reset highlight when dropdown opens/closes.
@@ -197,7 +196,7 @@ export function Sidebar() {
           <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <span className="flex-1 truncate text-left">
             {selectedRepo
-              ? `${selectedRepo.repoOwner}/${selectedRepo.repoName}`
+              ? selectedRepo.repoName
               : repos.length > 0
                 ? "Select a repo"
                 : "No repos added"}
@@ -225,7 +224,7 @@ export function Sidebar() {
                 <FolderGit2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    {repo.repoOwner}/{repo.repoName}
+                    {repo.repoName}
                   </p>
                 </div>
               </button>
@@ -265,11 +264,9 @@ export function Sidebar() {
                     "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                     item.badgeKey === "flagged"
                       ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
-                      : item.badgeKey === "reviewRequests"
+                      : item.badgeKey === "reviews"
                         ? "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400"
-                        : item.badgeKey === "inbox"
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400"
-                          : "bg-secondary text-secondary-foreground"
+                        : "bg-secondary text-secondary-foreground"
                   )}
                 >
                   {count}

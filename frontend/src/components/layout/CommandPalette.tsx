@@ -72,7 +72,7 @@ const isMac = typeof navigator !== "undefined" && navigator.platform.includes("M
 const modKey = isMac ? "\u2318" : "Ctrl+";
 
 /** List page routes where PRTable filter toggles make sense. */
-const LIST_ROUTES = ["/my-prs", "/review-requests", "/reviewed", "/flagged"];
+const LIST_ROUTES = ["/my-prs", "/review-requests", "/flagged"];
 
 /** Collect and deduplicate PRs across all store categories. */
 function collectAllPRs(): github.PullRequest[] {
@@ -124,10 +124,9 @@ function buildCommands(
   // ---- Navigation ----
   const navItems: { label: string; path: string; shortcut: string }[] = [
     { label: "Go to My PRs", path: "/my-prs", shortcut: `${modKey}1` },
-    { label: "Go to Review Requests", path: "/review-requests", shortcut: `${modKey}2` },
-    { label: "Go to Reviewed by Me", path: "/reviewed", shortcut: `${modKey}3` },
-    { label: "Go to Flagged PRs", path: "/flagged", shortcut: `${modKey}4` },
-    { label: "Go to Repo Settings", path: "/settings", shortcut: `${modKey}5` },
+    { label: "Go to Reviews", path: "/review-requests", shortcut: `${modKey}2` },
+    { label: "Go to Flagged PRs", path: "/flagged", shortcut: `${modKey}3` },
+    { label: "Go to Repo Settings", path: "/settings", shortcut: `${modKey}4` },
     { label: "Go to Global Settings", path: "/global-settings", shortcut: "" },
   ];
 

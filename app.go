@@ -33,8 +33,7 @@ type App struct {
 	settingsService     *services.SettingsService
 	repoService         *services.RepoService
 	workspaceService    *services.WorkspaceService
-	notificationService *services.NotificationService
-	poller              *services.Poller
+	poller *services.Poller
 }
 
 // NewApp creates a new App. Initializes the database and services
@@ -60,7 +59,6 @@ func NewApp() *App {
 	settingsService := services.NewSettingsService(db)
 	repoService := services.NewRepoService(db)
 	workspaceService := services.NewWorkspaceService(db)
-	notificationService := services.NewNotificationService(db)
 	poller := services.NewPoller(db, 5*time.Minute)
 
 	// Register consumers so login/logout propagates the client.
@@ -75,8 +73,7 @@ func NewApp() *App {
 		settingsService:     settingsService,
 		repoService:         repoService,
 		workspaceService:    workspaceService,
-		notificationService: notificationService,
-		poller:              poller,
+		poller: poller,
 	}
 
 	// If we have a stored token, initialize the GitHub client.
