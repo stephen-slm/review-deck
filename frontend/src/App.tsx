@@ -12,6 +12,7 @@ import { OnboardingPage } from "./pages/OnboardingPage";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ShortcutHintBar } from "./components/layout/ShortcutHintBar";
 import { CommandPalette } from "./components/layout/CommandPalette";
+import { DebugPanel } from "./components/layout/DebugPanel";
 import { usePollerEvents } from "./hooks/usePollerEvents";
 import { useVimNavigation } from "./hooks/useVimNavigation";
 import { useWindowFocus } from "./hooks/useWindowFocus";
@@ -40,6 +41,7 @@ function AppContent() {
     useSettingsStore.getState().loadPRSizeThresholds();
     useSettingsStore.getState().loadReviewTemplates();
     useSettingsStore.getState().loadShowAllRepos();
+    useSettingsStore.getState().loadPRPageSize();
     // Load repos and persisted selection — repo-scoped settings are loaded
     // by the selectedRepo effect below once the selection is known.
     useRepoStore.getState().loadRepos().then(() => {
@@ -93,6 +95,7 @@ function AppContent() {
         </div>
         <ShortcutHintBar />
         <CommandPalette />
+        <DebugPanel />
         {/* Persistent hint indicator */}
         <div className="flex shrink-0 items-center justify-between border-t border-border px-3 py-1">
           <span className="font-mono text-[10px] text-muted-foreground/40">{__COMMIT_HASH__}</span>

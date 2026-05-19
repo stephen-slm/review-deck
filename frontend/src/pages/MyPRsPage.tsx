@@ -12,6 +12,8 @@ import {
   GetMyPRsAllReposPage,
   GetMyRecentMergedAllReposPage,
 } from "../../wailsjs/go/services/PullRequestService";
+import { SetSetting } from "../../wailsjs/go/services/SettingsService";
+import { dlog } from "@/lib/debugLog";
 
 type Tab = "open" | "merged";
 
@@ -30,7 +32,11 @@ export function MyPRsPage() {
     appendNextPage,
   } = usePRStore();
 
-  const [activeTab, setActiveTab] = useState<Tab>("open");
+  const [activeTab, setActiveTabLocal] = useState<Tab>("open");
+  const setActiveTab = useCallback((tab: Tab) => {
+    setActiveTabLocal(tab);
+    SetSetting("my_prs_active_tab", tab).catch(() => {});
+  }, []);
 
   const pgOpen = pages.myPRs;
   const pgMerged = pages.myRecentMerged;
@@ -45,27 +51,49 @@ export function MyPRsPage() {
 
   const fetchOpenRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (showAllRepos) return GetMyPRsAllReposPage(pageSize, cursor);
-      return GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
+      const mode = showAllRepos ? "allRepos" : `${owner}/${repo}`;
+      dlog("myPRs:fetchOpenRaw", `mode=${mode} pageSize=${pageSize} cursor="${cursor}"`);
+      try {
+        const result = showAllRepos
+          ? await GetMyPRsAllReposPage(pageSize, cursor)
+          : await GetMyPRsForRepoPage(owner, repo, pageSize, cursor);
+        dlog("myPRs:fetchOpenRaw", `OK prs=${(result.pullRequests||[]).length} total=${result.pageInfo.totalCount} hasNext=${result.pageInfo.hasNextPage}`);
+        return result;
+      } catch (err) {
+        dlog("myPRs:fetchOpenRaw", `ERROR: ${err}`);
+        throw err;
+      }
     },
     [owner, repo, showAllRepos],
   );
 
   const fetchMergedRaw = useCallback(
     async (pageSize: number, cursor: string) => {
-      if (showAllRepos) return GetMyRecentMergedAllReposPage(14, pageSize, cursor);
-      return GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
+      const mode = showAllRepos ? "allRepos" : `${owner}/${repo}`;
+      dlog("myPRs:fetchMergedRaw", `mode=${mode} pageSize=${pageSize} cursor="${cursor}"`);
+      try {
+        const result = showAllRepos
+          ? await GetMyRecentMergedAllReposPage(14, pageSize, cursor)
+          : await GetMyRecentMergedForRepoPage(owner, repo, 14, pageSize, cursor);
+        dlog("myPRs:fetchMergedRaw", `OK prs=${(result.pullRequests||[]).length} total=${result.pageInfo.totalCount}`);
+        return result;
+      } catch (err) {
+        dlog("myPRs:fetchMergedRaw", `ERROR: ${err}`);
+        throw err;
+      }
     },
     [owner, repo, showAllRepos],
   );
 
   const fetchOpenPage = useCallback(
     async (pageSize: number, cursor: string) => {
+      dlog("myPRs:fetchOpenPage", `canFetch=${canFetch} pageSize=${pageSize} cursor="${cursor}"`);
       if (!canFetch) return;
       const page = await fetchOpenRaw(pageSize, cursor);
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
       const now = Date.now();
+      dlog("myPRs:fetchOpenPage", `storing ${prs.length} PRs, totalCount=${info.totalCount}`);
       usePRStore.setState((s) => ({
         pages: {
           ...s.pages,
@@ -91,11 +119,13 @@ export function MyPRsPage() {
 
   const fetchMergedPage = useCallback(
     async (pageSize: number, cursor: string) => {
+      dlog("myPRs:fetchMergedPage", `canFetch=${canFetch} pageSize=${pageSize} cursor="${cursor}"`);
       if (!canFetch) return;
       const page = await fetchMergedRaw(pageSize, cursor);
       const prs = page.pullRequests || [];
       const info = page.pageInfo;
       const now = Date.now();
+      dlog("myPRs:fetchMergedPage", `storing ${prs.length} PRs, totalCount=${info.totalCount}`);
       usePRStore.setState((s) => ({
         pages: {
           ...s.pages,
@@ -257,21 +287,33 @@ export function MyPRsPage() {
 
   // Fetch data when repo changes or tab switches
   useEffect(() => {
-    if (!isAuthenticated || !canFetch) return;
+    dlog("myPRs:effect", `isAuth=${isAuthenticated} canFetch=${canFetch} owner=${owner} repo=${repo} tab=${activeTab} showAllRepos=${showAllRepos}`);
+    if (!isAuthenticated || !canFetch) {
+      dlog("myPRs:effect", `SKIP: isAuthenticated=${isAuthenticated} canFetch=${canFetch}`);
+      return;
+    }
     if (activeTab === "open") {
+      const { lastFetchedAt, cacheTTLMs } = usePRStore.getState();
+      const age = Date.now() - lastFetchedAt.myPRs;
+      dlog("myPRs:effect", `fetchIfStale myPRs: lastFetched=${lastFetchedAt.myPRs} age=${age}ms ttl=${cacheTTLMs}ms stale=${age >= cacheTTLMs}`);
       usePRStore.getState().fetchIfStale("myPRs", async () => {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: true } }));
         await fetchOpenPage(usePRStore.getState().pages.myPRs.pageSize, "");
-      }).catch(() =>
-        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } })),
-      );
+      }).catch((err) => {
+        dlog("myPRs:effect", `fetchIfStale myPRs CATCH: ${err}`);
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myPRs: false } }));
+      });
     } else {
+      const { lastFetchedAt, cacheTTLMs } = usePRStore.getState();
+      const age = Date.now() - lastFetchedAt.myRecentMerged;
+      dlog("myPRs:effect", `fetchIfStale myRecentMerged: lastFetched=${lastFetchedAt.myRecentMerged} age=${age}ms ttl=${cacheTTLMs}ms stale=${age >= cacheTTLMs}`);
       usePRStore.getState().fetchIfStale("myRecentMerged", async () => {
         usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: true } }));
         await fetchMergedPage(usePRStore.getState().pages.myRecentMerged.pageSize, "");
-      }).catch(() =>
-        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } })),
-      );
+      }).catch((err) => {
+        dlog("myPRs:effect", `fetchIfStale myRecentMerged CATCH: ${err}`);
+        usePRStore.setState((s) => ({ isLoading: { ...s.isLoading, myRecentMerged: false } }));
+      });
     }
   }, [isAuthenticated, canFetch, owner, repo, activeTab, fetchOpenPage, fetchMergedPage, showAllRepos]);
 

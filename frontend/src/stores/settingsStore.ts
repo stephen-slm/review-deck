@@ -152,6 +152,11 @@ interface SettingsState {
   showAllRepos: boolean;
   loadShowAllRepos: () => Promise<void>;
   setShowAllRepos: (enabled: boolean) => Promise<void>;
+
+  /** Number of PRs to request per page from GitHub's API. */
+  prPageSize: number;
+  loadPRPageSize: () => Promise<void>;
+  setPRPageSize: (size: number) => Promise<void>;
 }
 
 /** Return the repo-scoped setting key, e.g. `repo:acme/my-app:filter_bots`. */
@@ -200,6 +205,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   prSizeThresholds: DEFAULT_PR_SIZE_THRESHOLDS,
   reviewTemplates: [],
   showAllRepos: false,
+  prPageSize: 25,
   isLoading: false,
 
   loadOrgs: async () => {
@@ -748,5 +754,25 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         myPRs: 0, myRecentMerged: 0, reviewRequests: 0, reviewedByMe: 0,
       },
     }));
+  },
+
+  loadPRPageSize: async () => {
+    try {
+      const val = await GetSetting("pr_page_size");
+      const size = parseInt(val, 10);
+      if (!isNaN(size) && size >= 5 && size <= 100) {
+        set({ prPageSize: size });
+        usePRStore.getState().setGlobalPageSize(size);
+      }
+    } catch {
+      // Setting doesn't exist yet — use default.
+    }
+  },
+
+  setPRPageSize: async (size: number) => {
+    const clamped = Math.max(5, Math.min(100, Math.round(size)));
+    await SetSetting("pr_page_size", String(clamped));
+    set({ prPageSize: clamped });
+    usePRStore.getState().setGlobalPageSize(clamped);
   },
 }));

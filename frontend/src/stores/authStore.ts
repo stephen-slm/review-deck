@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { Login, Logout, IsAuthenticated, GetUser } from "../../wailsjs/go/services/AuthService";
 import { StartPoller, StopPoller } from "../../wailsjs/go/main/App";
 import { github } from "../../wailsjs/go/models";
+import { dlog } from "@/lib/debugLog";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -22,29 +23,36 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
 
   checkAuth: async () => {
+    dlog("auth:checkAuth", "starting");
     set({ isLoading: true, error: null });
     try {
       const authed = await IsAuthenticated();
+      dlog("auth:checkAuth", `IsAuthenticated=${authed}`);
       if (authed) {
         const user = await GetUser();
+        dlog("auth:checkAuth", `user=${user?.login ?? "(null)"}`);
         set({ isAuthenticated: true, user, isLoading: false });
       } else {
+        dlog("auth:checkAuth", "not authenticated");
         set({ isAuthenticated: false, user: null, isLoading: false });
       }
-    } catch {
+    } catch (err) {
+      dlog("auth:checkAuth", `ERROR: ${err}`);
       set({ isAuthenticated: false, user: null, isLoading: false });
     }
   },
 
   login: async (token: string) => {
+    dlog("auth:login", "starting");
     set({ isLoading: true, error: null });
     try {
       const user = await Login(token);
+      dlog("auth:login", `OK user=${user?.login ?? "(null)"}`);
       set({ isAuthenticated: true, user, isLoading: false, error: null });
-      // Start background polling after successful login.
       StartPoller().catch(console.error);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      dlog("auth:login", `ERROR: ${message}`);
       set({ isAuthenticated: false, user: null, isLoading: false, error: message });
       throw err;
     }

@@ -107,6 +107,8 @@ export interface VimState {
   showHints: boolean;
   /** Whether the command palette is visible. */
   commandPaletteOpen: boolean;
+  /** Whether the debug panel is visible. */
+  debugPanelOpen: boolean;
 
   /** Whether visual (multi-select) mode is active. */
   visualMode: boolean;
@@ -122,6 +124,7 @@ export interface VimState {
   resetSelection: () => void;
   toggleHints: () => void;
   toggleCommandPalette: () => void;
+  toggleDebugPanel: () => void;
   toggleVisualMode: () => void;
   exitVisualMode: () => void;
   /** Get the range of indices currently selected in visual mode. */
@@ -139,6 +142,7 @@ export const useVimStore = create<VimState>((set, get) => ({
   listLength: 0,
   showHints: false,
   commandPaletteOpen: false,
+  debugPanelOpen: false,
   visualMode: false,
   visualAnchor: -1,
   pickedIndices: new Set<number>(),
@@ -189,6 +193,7 @@ export const useVimStore = create<VimState>((set, get) => ({
 
   toggleHints: () => set((s) => ({ showHints: !s.showHints })),
   toggleCommandPalette: () => set((s) => ({ commandPaletteOpen: !s.commandPaletteOpen })),
+  toggleDebugPanel: () => set((s) => ({ debugPanelOpen: !s.debugPanelOpen })),
 
   toggleVisualMode: () => {
     const { visualMode, selectedIndex, listLength } = get();

@@ -18,13 +18,10 @@ import { PRSizeBadge } from "./PRSizeBadge";
 import { ReviewStatusBadge } from "./ReviewStatusBadge";
 import { ChecksStatusIcon } from "./ChecksStatusIcon";
 
-import { formatSinglePR, formatPRs, copyToClipboard, type CopyGrouping } from "@/lib/clipboard";
+import { formatSinglePR, formatPRs, copyToClipboard, DEFAULT_BRANCHES, type CopyGrouping } from "@/lib/clipboard";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
 import { usePRStore, type PageDirection, type PaginationState } from "@/stores/prStore";
-
-/** Common default branch names — PRs targeting these are NOT considered stacked. */
-const DEFAULT_BRANCHES = new Set(["main", "master", "develop", "development"]);
 
 /** Estimate review time based on PR complexity (lines changed + file count). */
 function estimateReviewTime(pr: github.PullRequest): string {
@@ -263,11 +260,11 @@ export function PRTable({
   const handleCopyAll = useCallback(
     async (grouping: CopyGrouping) => {
       setCopyMenuOpen(false);
-      const text = formatPRs(filteredData, grouping);
+      const text = formatPRs(filteredData, grouping, data);
       const ok = await copyToClipboard(text);
       if (ok) flash("__all__");
     },
-    [filteredData, flash],
+    [filteredData, data, flash],
   );
 
   /** Copy handler for the 'c' keybinding — copies visual range + picked rows (or single cursor row), grouped by repo. */
@@ -290,13 +287,13 @@ export function PRTable({
 
     if (prsToCopy.length === 0) return;
 
-    const text = formatPRs(prsToCopy, "repo");
+    const text = formatPRs(prsToCopy, "repo", data);
     const ok = await copyToClipboard(text);
     if (ok) flash("__all__");
 
     // Exit visual mode and clear picks after copying.
     vim.exitVisualMode();
-  }, [flash]);
+  }, [data, flash]);
 
   /** Open handler for the 'o' keybinding — opens visual range + picked rows (or single cursor row) in the browser. */
   const handleOpenExternalSelection = useCallback((fallbackIndex: number) => {

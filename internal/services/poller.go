@@ -213,6 +213,21 @@ func (p *Poller) poll(ctx context.Context) {
 		return
 	}
 
+	// When the user has selected a single repo (showAllRepos is off),
+	// only poll that repo to avoid unnecessary API calls.
+	if showAll, _ := p.db.GetSetting("show_all_repos"); showAll != "true" {
+		if idStr, _ := p.db.GetSetting("selected_repo_id"); idStr != "" {
+			if id, err := strconv.Atoi(idStr); err == nil && id > 0 {
+				for _, r := range repos {
+					if r.ID == id {
+						repos = []storage.TrackedRepo{r}
+						break
+					}
+				}
+			}
+		}
+	}
+
 	// Use cached viewer login; fetch once per client lifetime.
 	p.mu.Lock()
 	login := p.viewerLogin
@@ -243,6 +258,8 @@ func (p *Poller) poll(ctx context.Context) {
 	filterBots := filterBotsEnabled(p.db)
 	reviewSince := time.Now().AddDate(0, 0, -reviewMaxAgeDays(p.db))
 	mergedSince := time.Now().AddDate(0, 0, -14)
+	activeTab, _ := p.db.GetSetting("my_prs_active_tab")
+	pollMerged := activeTab == "merged"
 
 	for _, repo := range repos {
 		owner := repo.RepoOwner
@@ -284,16 +301,18 @@ func (p *Poller) poll(ctx context.Context) {
 			return
 		}
 
-		if prs, err := client.GetMyRecentMergedPRsForRepo(ctx, owner, name, login, mergedSince, filterBots); err == nil {
-			result.RecentMerged = append(result.RecentMerged, prs...)
-			_ = p.db.UpsertPullRequests(prs)
-		} else if isRateLimited(err) {
-			log.Printf("poller: rate limited, stopping this cycle")
-			return
-		}
+		if pollMerged {
+			if prs, err := client.GetMyRecentMergedPRsForRepo(ctx, owner, name, login, mergedSince, filterBots); err == nil {
+				result.RecentMerged = append(result.RecentMerged, prs...)
+				_ = p.db.UpsertPullRequests(prs)
+			} else if isRateLimited(err) {
+				log.Printf("poller: rate limited, stopping this cycle")
+				return
+			}
 
-		if !sleep(ctx, requestDelay) {
-			return
+			if !sleep(ctx, requestDelay) {
+				return
+			}
 		}
 	}
 

@@ -23,7 +23,7 @@ const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000;
 const PAGE_CACHE_TTL_MS = 2 * 60 * 1000;
 
 /** Default number of items per page */
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 25;
 
 export type CacheKey = "myPRs" | "myRecentMerged" | "reviewRequests" | "teamReviewRequests" | "reviewedByMe";
 
@@ -136,6 +136,9 @@ interface PRState {
   loadCacheTimestamps: () => Promise<void>;
   setCacheTTL: (ms: number) => void;
   clearError: () => void;
+
+  /** Update the page size for all categories and reset pages. */
+  setGlobalPageSize: (size: number) => void;
 
   /** Reset all pages and cache timestamps. Called when the selected repo changes. */
   resetPages: () => void;
@@ -609,6 +612,20 @@ export const usePRStore = create<PRState>((set, get) => ({
 
   setCacheTTL: (ms: number) => set({ cacheTTLMs: ms }),
   clearError: () => set({ error: null }),
+
+  setGlobalPageSize: (size: number) => {
+    set({
+      pages: {
+        myPRs: emptyPagination(size),
+        myRecentMerged: emptyPagination(size),
+        reviewRequests: emptyPagination(size),
+        teamReviewRequests: emptyPagination(size),
+        reviewedByMe: emptyPagination(size),
+      },
+      lastFetchedAt: { ...defaultLastFetched },
+      error: null,
+    });
+  },
 
   resetPages: () => {
     set({

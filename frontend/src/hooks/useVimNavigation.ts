@@ -119,6 +119,11 @@ export function useVimNavigation() {
         store().toggleHints();
       }),
 
+      // ---- Global: Toggle debug panel ----
+      "`": vim(() => {
+        store().toggleDebugPanel();
+      }),
+
       // ---- List navigation / scroll: j/k ----
       "j": vim(() => {
         const { onMoveDown } = getActions();

@@ -76,6 +76,9 @@ func NewApp() *App {
 		poller: poller,
 	}
 
+	// Register app as a consumer so it can install the log hook on new clients.
+	authService.RegisterConsumer(app)
+
 	// If we have a stored token, initialize the GitHub client.
 	token, _ := db.GetSetting("github_token")
 	if token != "" {
@@ -87,6 +90,25 @@ func NewApp() *App {
 	}
 
 	return app
+}
+
+// SetClient implements ClientConsumer — installs the debug log hook on new GitHub clients.
+func (a *App) SetClient(client *gh.Client) {
+	a.ghClient = client
+	if client != nil {
+		client.SetLogFunc(a.emitDebugLog)
+	}
+}
+
+// emitDebugLog sends a debug log entry to the frontend via a Wails event.
+func (a *App) emitDebugLog(tag, detail string) {
+	if a.ctx == nil {
+		return
+	}
+	wailsRuntime.EventsEmit(a.ctx, "debug:log", map[string]string{
+		"tag":    tag,
+		"detail": detail,
+	})
 }
 
 // startup is called when the app starts and the window is being created.

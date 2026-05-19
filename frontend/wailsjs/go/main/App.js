@@ -10,6 +10,10 @@ export function SendNotification(arg1, arg2) {
   return window['go']['main']['App']['SendNotification'](arg1, arg2);
 }
 
+export function SetClient(arg1) {
+  return window['go']['main']['App']['SetClient'](arg1);
+}
+
 export function SetPollInterval(arg1) {
   return window['go']['main']['App']['SetPollInterval'](arg1);
 }

@@ -23,7 +23,7 @@ const globalTabs: TabDef[] = [
 
 export function GlobalSettingsPage() {
   const { isAuthenticated, user, error, login, logout, clearError } = useAuthStore();
-  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, aiMaxTurns, loadAiMaxTurns, setAiMaxTurns, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds, showAllRepos, loadShowAllRepos, setShowAllRepos } = useSettingsStore();
+  const { theme, loadTheme, setTheme, cacheTTLMinutes, loadCacheTTL, setCacheTTL, pollIntervalMinutes, loadPollInterval, setPollInterval, prRefreshIntervalSeconds, loadPRRefreshInterval, setPRRefreshInterval, aiReviewPrompt, loadAiReviewPrompt, setAiReviewPrompt, aiMaxCost, loadAiMaxCost, setAiMaxCost, aiDescriptionPrompt, loadAiDescriptionPrompt, setAiDescriptionPrompt, aiDescriptionMaxCost, loadAiDescriptionMaxCost, setAiDescriptionMaxCost, aiTitlePrompt, loadAiTitlePrompt, setAiTitlePrompt, aiMaxTurns, loadAiMaxTurns, setAiMaxTurns, prSizeThresholds, loadPRSizeThresholds, setPRSizeThresholds, showAllRepos, loadShowAllRepos, setShowAllRepos, prPageSize, loadPRPageSize, setPRPageSize } = useSettingsStore();
   const { repos, selectedRepoId, selectRepo, addRepo, removeRepo, loadRepos, isLoading: repoLoading } = useRepoStore();
 
   const [activeTab, setActiveTab] = useState<GlobalTab>("general");
@@ -44,8 +44,9 @@ export function GlobalSettingsPage() {
     loadAiMaxTurns();
     loadPRSizeThresholds();
     loadShowAllRepos();
+    loadPRPageSize();
     loadRepos();
-  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadAiMaxTurns, loadPRSizeThresholds, loadShowAllRepos, loadRepos]);
+  }, [loadTheme, loadCacheTTL, loadPollInterval, loadPRRefreshInterval, loadAiReviewPrompt, loadAiMaxCost, loadAiDescriptionPrompt, loadAiDescriptionMaxCost, loadAiTitlePrompt, loadAiMaxTurns, loadPRSizeThresholds, loadShowAllRepos, loadPRPageSize, loadRepos]);
 
   // Register vim keybindings: j/k scroll, h/l and 1-3 switch tabs.
   useEffect(() => {
@@ -295,7 +296,7 @@ export function GlobalSettingsPage() {
                 <h3 className="text-lg font-semibold">Pull Requests</h3>
               </div>
 
-              <div className="rounded-lg border border-border bg-card p-3">
+              <div className="rounded-lg border border-border bg-card p-3 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-foreground">
@@ -320,6 +321,32 @@ export function GlobalSettingsPage() {
                       }`}
                     />
                   </button>
+                </div>
+
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Page size
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Number of pull requests to fetch per page from GitHub. Lower values
+                      reduce the chance of API timeouts on large organisations.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min={5}
+                      max={100}
+                      value={prPageSize}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        if (!isNaN(val)) setPRPageSize(val);
+                      }}
+                      className="w-16 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <span className="text-sm text-muted-foreground">PRs</span>
+                  </div>
                 </div>
               </div>
             </section>

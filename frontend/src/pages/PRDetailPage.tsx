@@ -32,6 +32,7 @@ import { BrowserOpenURL, EventsOn } from "../../wailsjs/runtime/runtime";
 import { GetPRCheckRuns, GetPRComments, GetPRCommits, GetPRFiles, GetSinglePR, GetSinglePRByNodeID, ResolveThread, UnresolveThread, GetFilesSinceCommit } from "../../wailsjs/go/services/PullRequestService";
 import { CheckToolAvailability, CheckoutPR, OpenTerminal as OpenTerminalInRepo, StartAIReview, CancelAIReview, GetCurrentBranch, GetAIReview, DeleteAIReview, StartGenerateDescription, CancelGenerateDescription, ApplyPRDescription, StartGenerateTitle, CancelGenerateTitle, ApplyPRTitle, StartCodeTour, CancelCodeTour, GetCodeTour, StartAISummary, CancelAISummary, GetAISummary } from "../../wailsjs/go/services/WorkspaceService";
 import { copyToClipboard, formatSinglePR } from "../lib/clipboard";
+import { usePRStore } from "@/stores/prStore";
 import { mdComponents } from "@/lib/markdownComponents";
 import { useVimStore, registerActions, clearActions } from "@/stores/vimStore";
 import { useAuthStore } from "@/stores/authStore";
@@ -806,7 +807,14 @@ export const PRDetailPage = memo(function PRDetailPage() {
       onRequestChanges: () => requestChangesRef.current?.(),
       onCopy: async () => {
         if (!pr) return;
-        const ok = await copyToClipboard(formatSinglePR(pr));
+        const p = usePRStore.getState().pages;
+        const contextPRs = [
+          ...p.myPRs.items,
+          ...p.reviewRequests.items,
+          ...p.teamReviewRequests.items,
+          ...p.reviewedByMe.items,
+        ];
+        const ok = await copyToClipboard(formatSinglePR(pr, contextPRs));
         if (ok) addToast("Copied PR to clipboard", "success");
       },
     };

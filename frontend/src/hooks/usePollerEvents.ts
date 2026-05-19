@@ -202,11 +202,17 @@ export function usePollerEvents() {
       }, 0);
     };
 
+    const handleDebugLog = (entry: { tag: string; detail: string }) => {
+      dlog(entry.tag, entry.detail);
+    };
+
     EventsOn("poller:update", handleUpdate);
     EventsOn("poller:notifications", handleNotifications);
+    EventsOn("debug:log", handleDebugLog);
     return () => {
       EventsOff("poller:update");
       EventsOff("poller:notifications");
+      EventsOff("debug:log");
     };
   }, [addToast, navigate]);
 }
